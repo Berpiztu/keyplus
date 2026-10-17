@@ -75,14 +75,14 @@ public sealed class KeyPanel
     /// A key's label, in sp at the usual size: as large as fits in the key, up
     /// to the largest, down to the smallest for a long label in a narrow key.
     /// </summary>
-    private const int LargestLabelSize = 24;
+    private const int LargestLabelSize = 18;
 
     /// <summary>The largest label, in sp at the usual size, of a key that types no character: Ctrl, Alt, Entrar and the like.</summary>
     private const int OtherLabelSize = 16;
     private const int SmallestLabelSize = 8;
 
     /// <summary>The share of it a secondary legend takes: the shifted character above, the Alt Gr one at the right.</summary>
-    private const float SecondaryLabelShare = 0.8f;
+    private const float SecondaryLabelShare = 0.7f;
 
     // Opaque, the keys well apart from the ground: the window looks the same
     // over a white screen as over a black one.
@@ -362,12 +362,11 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// A row's height: fixed, following the keys' size and labels larger than
-    /// usual alone (a label needs the room to grow into), so no legend
+    /// A row's height: fixed, following the keys' size alone, so no legend
     /// (two lines, or one with Fn, Shift or Alt Gr held) changes the
     /// keyboard's height, and the side column's keys stand level with the rows.
     /// </summary>
-    private int RowHeight => Dp(56 * scale * Math.Max(1f, labelScale));
+    private int RowHeight => Dp(56 * scale);
 
     /// <param name="side">Keys in a column at the right, one beside each row.</param>
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)

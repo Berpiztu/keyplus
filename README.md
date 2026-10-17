@@ -70,8 +70,8 @@ floating keyboard too; with no keyboard open it is out of sight.
   kept.
 - **A−** and **A+** in the title bar make the labels of the keys that type
   characters (letters, digits, symbols) smaller or larger, a tenth at a
-  press, and the size is kept; the rows grow with larger labels, to give
-  them room. Ctrl, Alt, Enter and the like stay as they are. **A↺** brings them, and the keys a corner made larger or smaller,
+  press, and the size is kept; the keys keep theirs. Ctrl, Alt, Enter and
+  the like stay as they are. **A↺** brings them, and the keys a corner made larger or smaller,
   back to their usual size; the window keeps its place and width. Each key shows its
   shifted character above its plain one, both in the middle, and its Alt Gr
   one small in its bottom right corner, as Windows' touch keyboard does. A label is never larger than its
