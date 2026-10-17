@@ -114,7 +114,11 @@ public sealed class KeyPlusService : AccessibilityService
         GravityFlags gravity;
         if (placed.Floating)
         {
-            width = panel.Folded ? ViewGroup.LayoutParams.WrapContent : Math.Min(placed.Width, display.Width());
+            // No width yet when the icon was the first thing dragged: the
+            // display's, until a grip gives it one.
+            width = panel.Folded ? ViewGroup.LayoutParams.WrapContent
+                : placed.Width > 0 ? Math.Min(placed.Width, display.Width())
+                : display.Width();
             x = Math.Clamp(placed.X, 0, Math.Max(0, display.Width() - (panel.Folded ? panel.Root.Width : width)));
             y = Math.Clamp(placed.Y, 0, Math.Max(0, display.Height() - panel.Root.Height));
             gravity = GravityFlags.Top | GravityFlags.Left;
@@ -199,7 +203,8 @@ public sealed class KeyPlusService : AccessibilityService
 
     /// <summary>
     /// At a drag's start, floats the panel where it stands now and notes where
-    /// that is; the placement to change, or none without a panel in sight.
+    /// that is; the placement to change, or none without a panel in sight. The
+    /// width is the open window's: dragging the icon keeps the one it had.
     /// </summary>
     private PanelPlacement? StartFloating(KeyPanel.Drag drag)
     {
@@ -218,7 +223,10 @@ public sealed class KeyPlusService : AccessibilityService
             placed.Floating = true;
             placed.X = dragStart.X;
             placed.Y = dragStart.Y;
-            placed.Width = dragStart.Width;
+            if (!overlay.Panel.Folded)
+            {
+                placed.Width = dragStart.Width;
+            }
         }
 
         return placed;
