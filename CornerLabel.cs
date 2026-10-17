@@ -8,7 +8,8 @@ namespace Berpiztu.KeyPlus;
 /// A key's Alt Gr character, drawn small in its bottom right corner over the
 /// key, as Windows' touch keyboard draws it: apart from the key's own label,
 /// so it neither moves the label off the middle nor takes room the label
-/// could grow into. Its size follows the label's, whatever that fitted to.
+/// could grow into. Its size follows the label's, whatever that fitted to,
+/// larger for a small glyph.
 /// </summary>
 public sealed class CornerLabel(TextView key, float share, int inset) : Drawable
 {
@@ -25,7 +26,7 @@ public sealed class CornerLabel(TextView key, float share, int inset) : Drawable
         }
 
         paint.Color = new Color(key.CurrentTextColor);
-        paint.TextSize = key.TextSize * share;
+        paint.TextSize = key.TextSize * share * PanelKeys.GlyphFactor(Text);
         var bounds = Bounds;
         canvas.DrawText(Text, bounds.Right - inset, bounds.Bottom - inset - paint.Descent(), paint);
     }

@@ -230,6 +230,20 @@ public static class PanelKeys
     public static bool IsDead(string text) => Accents.ContainsKey(text);
 
     /// <summary>
+    /// The characters that are small glyphs in their room, and how much larger
+    /// a label draws each to be read: quotes, points, dashes and accents twice
+    /// as large, brackets and braces half as large again.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, float> SmallGlyphs =
+        new[] { "\"", "·", "=", "?", "¿", "'", "`", "^", "+", "*", "´", "¨", ";", ",", ".", ":", "-", "_", "\\", "|", "@", "~", "¬" }
+            .Select(glyph => (glyph, factor: 2f))
+            .Concat(new[] { "[", "]", "{", "}" }.Select(glyph => (glyph, factor: 1.5f)))
+            .ToDictionary(pair => pair.glyph, pair => pair.factor);
+
+    /// <summary>How much larger a label draws a character: more than 1 for a small glyph.</summary>
+    public static float GlyphFactor(string? text) => text is not null && SmallGlyphs.TryGetValue(text, out var factor) ? factor : 1f;
+
+    /// <summary>
     /// The text a dead key's accent and the next character make: the accented
     /// letter, the accent alone before a space, or both as they are.
     /// </summary>

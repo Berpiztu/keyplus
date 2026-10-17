@@ -591,7 +591,9 @@ public sealed class KeyPanel
         if ((held & (Held.AltGr | Held.Shift)) != Held.None)
         {
             var typed = key.TextFor(held);
-            return new Java.Lang.String(typed is null or " " ? key.Label == key.Text ? "" : key.Label : typed);
+            var only = new SpannableStringBuilder();
+            AppendLine(only, typed is null or " " ? key.Label == key.Text ? "" : key.Label : typed, secondary: false);
+            return only;
         }
 
         var legend = new SpannableStringBuilder();
@@ -604,7 +606,7 @@ public sealed class KeyPanel
         return legend;
     }
 
-    /// <summary>Adds a line to a legend, a secondary one smaller.</summary>
+    /// <summary>Adds a line to a legend, a secondary one smaller, a small glyph larger.</summary>
     private static void AppendLine(SpannableStringBuilder legend, string text, bool secondary)
     {
         if (legend.Length() > 0)
@@ -617,6 +619,11 @@ public sealed class KeyPanel
         if (secondary)
         {
             legend.SetSpan(new RelativeSizeSpan(SecondaryLabelShare), start, legend.Length(), SpanTypes.ExclusiveExclusive);
+        }
+
+        if (PanelKeys.GlyphFactor(text) is var factor and > 1f)
+        {
+            legend.SetSpan(new BigGlyphSpan(factor), start, legend.Length(), SpanTypes.ExclusiveExclusive);
         }
     }
 
