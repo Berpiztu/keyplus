@@ -57,6 +57,12 @@ floating keyboard too; with no keyboard open it is out of sight.
   Every modifier goes out as a hardware keyboard sends it, pressed before the
   key and let go after it, since some editors select only when Shift itself
   went down.
+- **Two rows.** **▭** in the title bar makes the keys small: no title bar
+  and no shortcuts' row, the terminal's two rows as Termux has them, the
+  arrows a cross, PgUp and PgDn narrow, Alt beside PgDn, and ⌫ wider, which
+  is Supr with Shift held. Hold **PgUp** a moment to open the full window
+  again (PgUp does not repeat there). Whether it is two rows is kept for each screen, with its own place
+  and size ([doc/compact-keys.md](doc/compact-keys.md)).
 - **Keys repeat while held**, as a keyboard's do: every key acts on the
   touch, and one that types or sends a key goes on doing it while held. Not
   Ctrl, Alt, Shift, Alt Gr, Fn or ⊞, nor Ctrl+A, Ctrl+C, Ctrl+V and ImpPnt,

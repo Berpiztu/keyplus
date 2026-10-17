@@ -56,6 +56,7 @@ public sealed class KeyPanel
 
     private const string FoldedPreference = "folded";
     private const string WholeKeyboardPreference = "wholeKeyboard";
+    private const string CompactPreference = "compact";
     private const string LabelScalePreference = "labelScale";
 
     /// <summary>How much A− and A+ change the labels' size at a press, and how far.</summary>
@@ -121,6 +122,7 @@ public sealed class KeyPanel
     private readonly List<(PanelKey Key, KeyLegends Legends, TextView View)> characterKeys = [];
 
     /// <summary>The keys that type no character but read another label with Fn held: the arrows.</summary>
+    /// <summary>The keys that type no character but read another label with Fn or Shift held: the arrows, ⌫.</summary>
     private readonly List<(PanelKey Key, TextView View)> fnKeys = [];
 
     /// <summary>The keys that type no character, whose one label is sized as the legends are, and how much larger it is drawn.</summary>
@@ -139,6 +141,10 @@ public sealed class KeyPanel
     private readonly LinearLayout strip;
     private readonly LinearLayout terminal;
     private readonly LinearLayout wholeKeyboard;
+
+    /// <summary>Keys made small: two rows, no title bar.</summary>
+    private readonly LinearLayout compact;
+    private readonly TextView makeSmall;
     private readonly TextView tab;
     private readonly LinearLayout titleBar;
     private readonly LinearLayout closeBar;
@@ -191,6 +197,7 @@ public sealed class KeyPanel
             UsualSizeRequested?.Invoke();
         }));
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
+        makeSmall = TitleButton("▭", "Two rows: the keys made small, with no title bar; hold PgUp to open them again", () => SetCompact(true));
 
         titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         AddToTitleBar(Grip("◤", Corner.TopLeft), 24);
@@ -198,6 +205,7 @@ public sealed class KeyPanel
         AddToTitleBar(smaller, 36);
         AddToTitleBar(larger, 36);
         AddToTitleBar(usual, 36);
+        AddToTitleBar(makeSmall, 36);
         AddToTitleBar(switchKeys, 44);
         AddToTitleBar(dock, 36);
         AddToTitleBar(minimize, 36);
@@ -242,8 +250,10 @@ public sealed class KeyPanel
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         terminal = Rows(PanelKeys.Terminal);
         wholeKeyboard = Rows(PanelKeys.Spanish, PanelKeys.SpanishSide);
+        compact = Rows(PanelKeys.Compact);
         strip.AddView(terminal);
         strip.AddView(wholeKeyboard);
+        strip.AddView(compact);
 
         // Between the keys, a long press moves or resizes the window as on a key.
         HoldToMove(strip);
@@ -259,7 +269,7 @@ public sealed class KeyPanel
         root.AddView(strip);
         root.AddView(tab);
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
-        ShowWholeKeyboard(preferences.GetBoolean(WholeKeyboardPreference, false));
+        ShowMode(preferences.GetBoolean(WholeKeyboardPreference, false), preferences.GetBoolean(CompactPreference, false));
         ApplySizes();
         ShowHeld();
     }
@@ -317,7 +327,10 @@ public sealed class KeyPanel
     public event Action? ModeChanged;
 
     /// <summary>The mode the window is in: the strip's keys or the whole keyboard (<see cref="PanelPlacement.KeysMode"/>, <see cref="PanelPlacement.WholeKeyboardMode"/>).</summary>
-    public string Mode => wholeKeyboard.Visibility == ViewStates.Visible ? PanelPlacement.WholeKeyboardMode : PanelPlacement.KeysMode;
+    public string Mode =>
+        wholeKeyboard.Visibility == ViewStates.Visible ? PanelPlacement.WholeKeyboardMode
+        : compact.Visibility == ViewStates.Visible ? PanelPlacement.CompactMode
+        : PanelPlacement.KeysMode;
 
     /// <summary>Whether the window floats, which is when ⤓ can dock it.</summary>
     public bool Floating
@@ -396,8 +409,10 @@ public sealed class KeyPanel
     {
         asked = yes;
         question.Text = text ?? "";
-        titleBar.Visibility = text is null ? ViewStates.Visible : ViewStates.Gone;
-        closeBar.Visibility = text is null ? ViewStates.Gone : ViewStates.Visible;
+        // Made small, the window has no title bar, nor any question in its place.
+        var small = compact.Visibility == ViewStates.Visible;
+        titleBar.Visibility = text is null && !small ? ViewStates.Visible : ViewStates.Gone;
+        closeBar.Visibility = text is not null && !small ? ViewStates.Visible : ViewStates.Gone;
     }
 
     private void SetFolded(bool folded)
@@ -409,16 +424,29 @@ public sealed class KeyPanel
 
     private void SetWholeKeyboard(bool whole)
     {
-        ShowWholeKeyboard(whole);
+        ShowMode(whole, small: false);
         preferences.Edit()!.PutBoolean(WholeKeyboardPreference, whole)!.Apply();
         ModeChanged?.Invoke();
     }
 
-    private void ShowWholeKeyboard(bool whole)
+    /// <summary>Keys made small (two rows, no title bar), or opened again in full, kept, and the mode's place and size taken.</summary>
+    private void SetCompact(bool small)
+    {
+        ShowMode(whole: false, small);
+        preferences.Edit()!.PutBoolean(CompactPreference, small)!.Apply();
+        ModeChanged?.Invoke();
+    }
+
+    /// <summary>The whole keyboard, Keys made small, or Keys in full, with the title bar where it has one.</summary>
+    private void ShowMode(bool whole, bool small)
     {
         StopRepeat();
-        terminal.Visibility = whole ? ViewStates.Gone : ViewStates.Visible;
+        small &= !whole;
+        terminal.Visibility = !whole && !small ? ViewStates.Visible : ViewStates.Gone;
         wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
+        compact.Visibility = small ? ViewStates.Visible : ViewStates.Gone;
+        makeSmall.Visibility = whole ? ViewStates.Gone : ViewStates.Visible;
+        Ask(null, null);
 
         // Each mode keeps its own labels' size, as it keeps its own place
         // and keys' size; where it has none yet, the one kept before.
@@ -521,7 +549,7 @@ public sealed class KeyPanel
             view = KeyView(key.Label);
             view.SetPadding(Dp(KeyPaddingDp), Dp(KeyPaddingDp), Dp(KeyPaddingDp), Dp(KeyPaddingDp));
             labelKeys.Add((view, PanelKeys.GlyphFactor(key.Label), key.Label));
-            if (key.FnLabel is not null)
+            if (key.FnLabel is not null || key.ShiftLabel is not null)
             {
                 fnKeys.Add((key, view));
             }
@@ -534,7 +562,11 @@ public sealed class KeyPanel
 
         // Every key acts on the touch, and one that types or sends repeats
         // while held, as a keyboard's does (PanelKey.RepeatsWhenHeld); the
-        // window is moved from its title bar.
+        // window is moved from its title bar. A key that opens the full
+        // window (PgUp in two rows) acts on its release instead: held still a
+        // moment, it opens the window, and sends nothing.
+        Java.Lang.Runnable? opening = null;
+        var opened = false;
         view.Touch += (_, e) =>
         {
             e.Handled = true;
@@ -543,12 +575,37 @@ public sealed class KeyPanel
                 case MotionEventActions.Down:
                     view.Pressed = true;
                     view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
-                    Press(key);
+                    if (key.OpensFull)
+                    {
+                        opened = false;
+                        opening = new Java.Lang.Runnable(() =>
+                        {
+                            opened = true;
+                            view.PerformHapticFeedback(FeedbackConstants.LongPress);
+                            SetCompact(false);
+                        });
+                        handler.PostDelayed(opening, LongPressMs);
+                    }
+                    else
+                    {
+                        Press(key);
+                    }
+
                     break;
                 case MotionEventActions.Up:
                 case MotionEventActions.Cancel:
                     view.Pressed = false;
                     StopRepeat();
+                    if (opening is not null)
+                    {
+                        handler.RemoveCallbacks(opening);
+                        opening = null;
+                        if (!opened && e.Event.ActionMasked == MotionEventActions.Up)
+                        {
+                            Press(key);
+                        }
+                    }
+
                     break;
             }
         };
@@ -702,14 +759,18 @@ public sealed class KeyPanel
             return;
         }
 
-        var code = held.HasFlag(Held.Fn) && key.FnCode is { } fnCode ? fnCode : key.Code;
+        // With Shift held, a key that is another then (⌫ Supr) sends that one, without Shift.
+        var shifted = held.HasFlag(Held.Shift) && key.ShiftCode is not null;
+        var code = held.HasFlag(Held.Fn) && key.FnCode is { } fnCode ? fnCode
+            : shifted ? key.ShiftCode!.Value
+            : key.Code;
         if (code == key.Code && key.IsCharacter && ((held & KeyModifiers) == Held.None || key.Code == Keycode.Unknown))
         {
             TypeCharacter(key);
             return;
         }
 
-        var meta = PanelKeys.MetaOf(held | key.With);
+        var meta = PanelKeys.MetaOf((shifted ? held & ~Held.Shift : held) | key.With);
         send(code, meta);
         SetHeld(held & (Held.Shift | Held.CapsLock | Held.Fn));
         if (key.RepeatsWhenHeld)
@@ -790,7 +851,9 @@ public sealed class KeyPanel
 
         foreach (var (key, view) in fnKeys)
         {
-            view.Text = held.HasFlag(Held.Fn) ? key.FnLabel : key.Label;
+            view.Text = held.HasFlag(Held.Fn) && key.FnLabel is { } fnLabel ? fnLabel
+                : held.HasFlag(Held.Shift) && key.ShiftLabel is { } shiftLabel ? shiftLabel
+                : key.Label;
         }
     }
 

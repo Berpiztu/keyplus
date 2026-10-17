@@ -6,9 +6,10 @@ namespace Berpiztu.KeyPlus;
 /// Where the panel stands on one screen (<see cref="KeyPlusPreferences.ForScreen"/>),
 /// kept across restarts: docked right above the keyboard and in sight only
 /// while one is open, or floating where the user left it, in sight all the
-/// time. Keys and ABC (<see cref="Mode"/>) each keep their own: docked or
-/// floating, place, width and keys' size, so each opens as it was left. The
-/// icon keeps one place for the screen, whichever of the two it stands for.
+/// time, one for the screen whatever the mode. Keys, its two rows and ABC
+/// (<see cref="Mode"/>) each keep their own place, width and keys' size, so
+/// each opens as it was left. The icon keeps one place for the screen,
+/// whichever of them it stands for.
 /// </summary>
 public sealed class PanelPlacement(ISharedPreferences preferences)
 {
@@ -27,7 +28,13 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     public const string KeysMode = "keys";
     public const string WholeKeyboardMode = "abc";
 
+    /// <summary>Keys made small: two rows and no title bar (doc/compact-keys.md).</summary>
+    public const string CompactMode = "compact";
+
     private const string FloatingKey = "floating";
+
+    /// <summary>Whether the window floats, one for the screen whatever its mode: docked in three rows, it stays docked in two.</summary>
+    private const string WindowFloatingKey = "windowFloating";
     private const string XKey = "x";
     private const string YKey = "y";
     private const string WidthKey = "width";
@@ -41,11 +48,14 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// <summary>The mode whose layout the placement stands for now.</summary>
     public string Mode { get; set; } = KeysMode;
 
-    public bool Floating
-    {
-        get => Current.Floating;
-        set => Current.Floating = value;
-    }
+    /// <summary>
+    /// Whether the window floats, in sight all the time, or is docked and
+    /// shows only while a keyboard is open: one for the screen, kept whether
+    /// it is the full Keys, two rows or ABC. Where none is kept yet, the
+    /// full Keys' own, as it was kept before.
+    /// </summary>
+    public bool Floating { get; set; } = preferences.GetBoolean(WindowFloatingKey,
+        preferences.GetBoolean(Keyed(KeysMode, FloatingKey), preferences.GetBoolean(FloatingKey, false)));
 
     /// <summary>The floating panel's left edge, in pixels from the display's.</summary>
     public int X
@@ -101,11 +111,10 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
     public void Save()
     {
-        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!;
+        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!.PutBoolean(WindowFloatingKey, Floating)!;
         foreach (var (mode, layout) in layouts)
         {
             editor = editor
-                .PutBoolean(Keyed(mode, FloatingKey), layout.Floating)!
                 .PutInt(Keyed(mode, XKey), layout.X)!
                 .PutInt(Keyed(mode, YKey), layout.Y)!
                 .PutInt(Keyed(mode, WidthKey), layout.Width)!
@@ -124,8 +133,6 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// </summary>
     private sealed class Layout
     {
-        public bool Floating { get; set; }
-
         public int X { get; set; }
 
         public int Y { get; set; }
@@ -136,7 +143,6 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
         public static Layout Read(ISharedPreferences preferences, string mode) => new()
         {
-            Floating = preferences.GetBoolean(Keyed(mode, FloatingKey), preferences.GetBoolean(FloatingKey, false)),
             X = preferences.GetInt(Keyed(mode, XKey), preferences.GetInt(XKey, 0)),
             Y = preferences.GetInt(Keyed(mode, YKey), preferences.GetInt(YKey, 0)),
             Width = preferences.GetInt(Keyed(mode, WidthKey), preferences.GetInt(WidthKey, 0)),

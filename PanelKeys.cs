@@ -28,7 +28,10 @@ public enum Held
 /// with AltGr; it types it as text, so it types what the layout says whatever
 /// the editor's own keyboard layout, and sends its key (Code) only with Ctrl
 /// or Alt held. A key may be another with Fn held (FnLabel, FnCode): F1 for
-/// the 1, Home for the left arrow.
+/// the 1, Home for the left arrow; or with Shift held (ShiftLabel,
+/// ShiftCode), sent without Shift: Supr for ⌫. A key that OpensFull, held
+/// still a moment, opens the full Keys window from the two rows instead of
+/// repeating: PgUp.
 /// </summary>
 public sealed record PanelKey(
     string Label,
@@ -41,7 +44,10 @@ public sealed record PanelKey(
     string? ShiftText = null,
     string? AltGrText = null,
     string? FnLabel = null,
-    Keycode? FnCode = null)
+    Keycode? FnCode = null,
+    string? ShiftLabel = null,
+    Keycode? ShiftCode = null,
+    bool OpensFull = false)
 {
     public bool IsModifier => Modifier != Held.None;
 
@@ -51,7 +57,7 @@ public sealed record PanelKey(
     /// should happen once (Ctrl+A, Ctrl+C, Ctrl+V, the screen capture) unless
     /// it says it repeats (Ctrl+Z, Ctrl+Y).
     /// </summary>
-    public bool RepeatsWhenHeld => Repeats || (!IsModifier && With == Held.None);
+    public bool RepeatsWhenHeld => !OpensFull && (Repeats || (!IsModifier && With == Held.None));
 
     public bool IsCharacter => Text is not null;
 
@@ -119,6 +125,39 @@ public static class PanelKeys
             new("→", Keycode.DpadRight, Repeats: true),
             new("PgDn", Keycode.PageDown, Repeats: true),
             new("⏎", Keycode.Enter),
+        ],
+        ]),
+    ];
+
+    /// <summary>
+    /// The two rows, Keys made small (doc/compact-keys.md): the terminal's
+    /// rows as Termux has them, the arrows a cross, with no / ; PgUp and PgDn
+    /// narrow, Alt narrow beside PgDn, and the room PgUp leaves to ⌫, which
+    /// is Supr with Shift held. Held still a moment, PgUp opens the full
+    /// window, its title bar and three rows: away from the corners, whose
+    /// grips resize the window.
+    /// </summary>
+    public static readonly IReadOnlyList<KeyBlock> Compact =
+    [
+        new([
+        [
+            new("Esc", Keycode.Escape),
+            new("Shift", Keycode.ShiftLeft, Held.Shift),
+            new("Home", Keycode.MoveHome, Weight: 1.25f),
+            new("↑", Keycode.DpadUp, Repeats: true),
+            new("End", Keycode.MoveEnd),
+            new("PgUp", Keycode.PageUp, Weight: 0.5f, OpensFull: true),
+            new("⌫", Keycode.Del, Repeats: true, Weight: 1.75f, ShiftLabel: "Supr", ShiftCode: Keycode.ForwardDel),
+        ],
+        [
+            new("Tab", Keycode.Tab),
+            new("Ctrl", Keycode.CtrlLeft, Held.Ctrl),
+            new("←", Keycode.DpadLeft, Repeats: true, Weight: 1.25f),
+            new("↓", Keycode.DpadDown, Repeats: true),
+            new("→", Keycode.DpadRight, Repeats: true),
+            new("PgDn", Keycode.PageDown, Repeats: true, Weight: 0.5f),
+            new("Alt", Keycode.AltLeft, Held.Alt, Weight: 0.5f),
+            new("⏎", Keycode.Enter, Weight: 1.25f),
         ],
         ]),
     ];
