@@ -49,6 +49,9 @@ public sealed record PanelKey(
 
     public bool IsLetter => Text is { Length: 1 } && char.IsLetter(Text[0]);
 
+    /// <summary>Whether the key shows three legends: its shifted character, its plain one and its Alt Gr one.</summary>
+    public bool HasThreeLegends => !IsLetter && ShiftText is not null && ShiftText != Text && AltGrText is not null;
+
     /// <summary>The text the key types with the modifiers held; none where the layout has nothing.</summary>
     public string? TextFor(Held held)
     {

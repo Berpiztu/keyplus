@@ -89,6 +89,9 @@ public sealed class KeyPanel
     /// <summary>The share of it a secondary legend takes: the shifted character above, the Alt Gr one at the right.</summary>
     private const float SecondaryLabelShare = 0.7f;
 
+    /// <summary>The share of the room left of its legend a key with three legends gives up.</summary>
+    private const float ThreeLegendsLeftRoomGivenUp = 0.5f;
+
     // Opaque, the keys well apart from the ground: the window looks the same
     // over a white screen as over a black one.
     private static readonly Color PanelColor = Color.Argb(0xFF, 0x12, 0x12, 0x12);
@@ -477,12 +480,7 @@ public sealed class KeyPanel
             // have, so the legends grow as far as they can; a margin inside
             // the key's edges, which the corner's Alt Gr character keeps too.
             view.SetIncludeFontPadding(false);
-
-            // A key with three legends (shifted, plain, Alt Gr in the corner)
-            // has its middle a little to the left, so the two above one
-            // another stand a little apart from the corner's.
-            var three = key is { IsLetter: false, ShiftText: not null, AltGrText: not null } && key.ShiftText != key.Text;
-            view.SetPadding(Dp(three ? 4 : 6), Dp(3), Dp(three ? 10 : 6), Dp(3));
+            view.SetPadding(Dp(6), Dp(3), Dp(6), Dp(3));
         }
 
         // A key that repeats acts on the touch, and repeats while held; any
@@ -720,6 +718,11 @@ public sealed class KeyPanel
                 var plain = (held & (Held.AltGr | Held.Shift)) == Held.None && !(held.HasFlag(Held.Fn) && key.FnLabel is not null);
                 corner.Text = plain ? key.AltGrText : null;
                 corner.InvalidateSelf();
+
+                // Three legends: the two above one another give up half the
+                // room left of them, to stand apart from the corner's.
+                ((KeyLabel)view).LeftRoomGivenUp = plain && key.HasThreeLegends ? ThreeLegendsLeftRoomGivenUp : 0f;
+                view.Invalidate();
             }
         }
     }
@@ -728,7 +731,7 @@ public sealed class KeyPanel
     /// What a key reads, much as Windows' touch keyboard labels it: with Fn
     /// held the key it becomes; with Alt Gr or Shift held only what it types
     /// now, nothing where it types nothing; else the character it types with
-    /// its shifted one small above it, both in the middle, a little to the left
+    /// its shifted one small above it, both in the middle, closer to the left
     /// when the key also has an Alt Gr character, its <see cref="CornerLabel"/>.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
@@ -859,9 +862,9 @@ public sealed class KeyPanel
         };
     }
 
-    private TextView KeyView(string label)
+    private KeyLabel KeyView(string label)
     {
-        var view = new TextView(context)
+        var view = new KeyLabel(context)
         {
             Text = label,
             Gravity = GravityFlags.Center,

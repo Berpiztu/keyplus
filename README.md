@@ -81,7 +81,8 @@ floating keyboard too; with no keyboard open it is out of sight.
   back to their usual size; the window keeps its place and width. Each key shows its
   shifted character above its plain one, both in the middle, and its Alt Gr
   one small in its bottom right corner, as Windows' touch keyboard does; a
-  key with all three has the two a little to the left.
+  key with all three has the two closer to its left, by half the room
+  there.
   Characters that are small glyphs are drawn larger, on lines that keep
   their height: " · = ? ¿ ' ` ^ + * ´ ¨ ; , . : - _ \ | ~ ¬ twice as large,
   [ ] { } and the arrows half as large again, @ a quarter. A label is never larger than its key: past
