@@ -20,9 +20,11 @@ namespace Berpiztu.KeyPlus;
 /// editors as well as terminals. The panel's window never takes the focus,
 /// or the keyboard would close at every key.
 /// The keyboard may be on any display: Samsung DeX, a desktop on a second
-/// screen, is a display of its own. The panel opens on the keyboard's display,
-/// as wide as the keyboard and right above it, so it follows a floating
-/// keyboard as well as one across the bottom.
+/// screen, is a display of its own. Docked, the panel opens on the keyboard's
+/// display, as wide as the keyboard and right above it, so it follows a
+/// floating keyboard as well as one across the bottom, and is out of sight
+/// while no keyboard is open. Floating (<see cref="PanelPlacement"/>), it
+/// stands where the user dragged it, at the width they gave it, all the time.
 /// </summary>
 [Service(Name = "com.berpiztu.keyplus.KeyPlusService", Label = "@string/service_label",
     Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
@@ -39,10 +41,15 @@ public sealed class KeyPlusService : AccessibilityService
     private readonly record struct Keyboard(int DisplayId, Rect Bounds);
 
     private Overlay? overlay;
+    private PanelPlacement? placed;
+
+    /// <summary>Where the panel's window and size stood when a drag on ✥ or ⇲ started.</summary>
+    private (int X, int Y, int Width, int Height, float Scale) dragStart;
 
     protected override void OnServiceConnected()
     {
         base.OnServiceConnected();
+        placed = new PanelPlacement(GetSharedPreferences("keyplus", Android.Content.FileCreationMode.Private)!);
         Place();
     }
 
@@ -66,19 +73,31 @@ public sealed class KeyPlusService : AccessibilityService
         base.OnDestroy();
     }
 
-    /// <summary>Puts the panel right above the keyboard, as wide as it or as a tab at its right, or out of sight while no keyboard is open.</summary>
+    /// <summary>
+    /// Puts the panel where it stands: docked, right above the keyboard, as wide
+    /// as it or as a tab at its right, or out of sight while no keyboard is
+    /// open; floating, where the user left it, on the keyboard's display, or on
+    /// the one it is on while no keyboard is open.
+    /// </summary>
     private void Place()
     {
-        if (FindKeyboard() is not { } keyboard)
+        if (placed is null)
+        {
+            return;
+        }
+
+        var keyboard = FindKeyboard();
+        if (keyboard is null && !placed.Floating)
         {
             Hide();
             return;
         }
 
-        if (overlay?.DisplayId != keyboard.DisplayId)
+        var displayId = keyboard?.DisplayId ?? overlay?.DisplayId ?? FocusedDisplayId() ?? Display.DefaultDisplay;
+        if (overlay?.DisplayId != displayId)
         {
             Close();
-            overlay = Open(keyboard.DisplayId);
+            overlay = Open(displayId);
             if (overlay is null)
             {
                 return;
@@ -87,11 +106,23 @@ public sealed class KeyPlusService : AccessibilityService
 
         var (_, windowManager, panel, placement) = overlay;
         var display = windowManager.MaximumWindowMetrics.Bounds;
-        var bounds = keyboard.Bounds;
-        var y = display.Bottom - bounds.Top;
-        var x = panel.Folded ? display.Right - bounds.Right : bounds.Left - display.Left;
-        var width = panel.Folded ? ViewGroup.LayoutParams.WrapContent : bounds.Width();
-        var gravity = GravityFlags.Bottom | (panel.Folded ? GravityFlags.Right : GravityFlags.Left);
+        int x, y, width;
+        GravityFlags gravity;
+        if (placed.Floating)
+        {
+            width = panel.Folded ? ViewGroup.LayoutParams.WrapContent : Math.Min(placed.Width, display.Width());
+            x = Math.Clamp(placed.X, 0, Math.Max(0, display.Width() - (panel.Folded ? panel.Root.Width : width)));
+            y = Math.Clamp(placed.Y, 0, Math.Max(0, display.Height() - panel.Root.Height));
+            gravity = GravityFlags.Top | GravityFlags.Left;
+        }
+        else
+        {
+            var bounds = keyboard!.Value.Bounds;
+            y = display.Bottom - bounds.Top;
+            x = panel.Folded ? display.Right - bounds.Right : bounds.Left - display.Left;
+            width = panel.Folded ? ViewGroup.LayoutParams.WrapContent : bounds.Width();
+            gravity = GravityFlags.Bottom | (panel.Folded ? GravityFlags.Right : GravityFlags.Left);
+        }
 
         // The panel's own window changing is a windows change too: placing it
         // again where it already is would only call this once more.
@@ -101,13 +132,92 @@ public sealed class KeyPlusService : AccessibilityService
             return;
         }
 
-        Log.Info(LogTag, $"Keyboard on display {keyboard.DisplayId} at {bounds.ToShortString()}, display {display.ToShortString()}");
+        Log.Info(LogTag, $"Panel on display {displayId} at {x},{y} width {width}, {(placed.Floating ? "floating" : $"above the keyboard at {keyboard!.Value.Bounds.ToShortString()}")}");
         placement.X = x;
         placement.Y = y;
         placement.Width = width;
         placement.Gravity = gravity;
         panel.Root.Visibility = ViewStates.Visible;
         windowManager.UpdateViewLayout(panel.Root, placement);
+    }
+
+    /// <summary>✥ dragged: the panel floats, and follows the finger.</summary>
+    private void OnMoving(KeyPanel.Drag drag, float dx, float dy)
+    {
+        if (StartFloating(drag) is not { } floating)
+        {
+            return;
+        }
+
+        floating.X = dragStart.X + (int)dx;
+        floating.Y = dragStart.Y + (int)dy;
+        Dragged(drag, floating);
+    }
+
+    /// <summary>⇲ dragged: the panel floats; across it gets wider or narrower, down its keys bigger or smaller.</summary>
+    private void OnResizing(KeyPanel.Drag drag, float dx, float dy)
+    {
+        if (StartFloating(drag) is not { } floating || overlay is null)
+        {
+            return;
+        }
+
+        var minWidth = (int)(160 * Resources!.DisplayMetrics!.Density);
+        floating.Width = Math.Max(minWidth, dragStart.Width + (int)dx);
+        floating.Scale = Math.Clamp(
+            dragStart.Scale * (dragStart.Height + dy) / Math.Max(1, dragStart.Height),
+            PanelPlacement.MinScale,
+            PanelPlacement.MaxScale);
+        overlay.Panel.Scale = floating.Scale;
+        Dragged(drag, floating);
+    }
+
+    /// <summary>✥ tapped: the panel docks above the keyboard again.</summary>
+    private void OnDockRequested()
+    {
+        if (placed is { Floating: true })
+        {
+            placed.Floating = false;
+            placed.Save();
+            Place();
+        }
+    }
+
+    /// <summary>
+    /// At a drag's start, floats the panel where it stands now and notes where
+    /// that is; the placement to change, or none without a panel in sight.
+    /// </summary>
+    private PanelPlacement? StartFloating(KeyPanel.Drag drag)
+    {
+        if (placed is null || overlay is null)
+        {
+            return null;
+        }
+
+        if (drag == KeyPanel.Drag.Start)
+        {
+            var root = overlay.Panel.Root;
+            var location = new int[2];
+            root.GetLocationOnScreen(location);
+            var display = overlay.WindowManager.MaximumWindowMetrics.Bounds;
+            dragStart = (location[0] - display.Left, location[1] - display.Top, root.Width, root.Height, overlay.Panel.Scale);
+            placed.Floating = true;
+            placed.X = dragStart.X;
+            placed.Y = dragStart.Y;
+            placed.Width = dragStart.Width;
+        }
+
+        return placed;
+    }
+
+    /// <summary>Places the panel as dragged so far, and keeps where it stands once the drag ends.</summary>
+    private void Dragged(KeyPanel.Drag drag, PanelPlacement floating)
+    {
+        Place();
+        if (drag == KeyPanel.Drag.End)
+        {
+            floating.Save();
+        }
     }
 
     /// <summary>
@@ -140,6 +250,22 @@ public sealed class KeyPlusService : AccessibilityService
         return found;
     }
 
+    /// <summary>The display whose window has the focus, where a floating panel opens while no keyboard is.</summary>
+    private int? FocusedDisplayId()
+    {
+        var displays = WindowsOnAllDisplays;
+        for (var i = 0; i < (displays?.Size() ?? 0); i++)
+        {
+            IList<AccessibilityWindowInfo> windows = JavaList<AccessibilityWindowInfo>.FromJniHandle(displays!.ValueAt(i)!.Handle, JniHandleOwnership.DoNotTransfer) ?? [];
+            if (windows.Any(window => window.IsFocused))
+            {
+                return displays.KeyAt(i);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Opens the panel's window on a display, out of sight until placed.</summary>
     private Overlay? Open(int displayId)
     {
@@ -151,8 +277,11 @@ public sealed class KeyPlusService : AccessibilityService
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        var panel = new KeyPanel(context, SendKey);
+        var panel = new KeyPanel(context, SendKey) { Scale = placed?.Scale ?? 1f };
         panel.FoldedChanged += Place;
+        panel.Moving += OnMoving;
+        panel.Resizing += OnResizing;
+        panel.DockRequested += OnDockRequested;
         var placement = new WindowManagerLayoutParams(
             ViewGroup.LayoutParams.MatchParent,
             ViewGroup.LayoutParams.WrapContent,

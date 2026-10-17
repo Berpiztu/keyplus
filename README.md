@@ -21,7 +21,8 @@ floating keyboard too; with no keyboard open it is out of sight.
 | File | What it holds |
 | --- | --- |
 | [PanelKeys.cs](PanelKeys.cs) | The layout (Termux's two rows of seven) and the meta state of held modifiers |
-| [KeyPanel.cs](KeyPanel.cs) | The strip's views: holding Ctrl, Alt and Shift, repeat, folding into a tab |
+| [KeyPanel.cs](KeyPanel.cs) | The strip's views: holding Ctrl, Alt and Shift, repeat, its controls (move, resize, fold) |
+| [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
 | [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
 | [MainActivity.cs](MainActivity.cs) | The app's one screen: what it does, whether it is on, the way to Settings |
@@ -36,7 +37,13 @@ floating keyboard too; with no keyboard open it is out of sight.
   it back with Backspace and sends the key with Ctrl or Alt instead.
 - **Shift** stays on until pressed again, so Shift and the arrows select.
 - **The arrows and pages** repeat while held.
-- **▾** folds the strip into a small tab at the right; the tab unfolds it.
+- **Docked or floating.** The strip starts docked: right above the keyboard,
+  as wide as it, in sight only while a keyboard is open. Drag **✥** and it
+  floats where you leave it, in sight all the time, keyboard or not, for the
+  places that lack only the arrows. Drag **⇲** to resize it: across for its
+  width, down for the size of its keys. A tap on **✥** docks it again. Where
+  it stands and its size are kept.
+- **▾** folds the strip into a small tab; the tab unfolds it.
 
 ## Build and install
 
