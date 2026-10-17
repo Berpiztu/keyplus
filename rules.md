@@ -7,19 +7,23 @@ NO IMAGINAR, COMPROBAR
 L TIEMPO ES ORO, EL METODO PRUEBA O FALLO PROHIBIDO,
 
 
-mira el desperdicio de marqnes y hueco vacios y etiquetas con tamaño tan pequeño que casi ni se ven. el espacko en blanco  es el 75% del tamaño de l tecla.
+mira el desperdicio de marqnes y hueco vacios . prioridad q se vean bien las etiquetas
 
 PIENSA BIEN, LLEVAMOS 20 BUILDS DE 30 con esto
+LOS TAMAÑOS DE LAS  LEYENDAS SE MIDEN , No está permitido IMAGINAR O fiarse de la vista
 
-quieo un espaio para etiquetas el 75% y 25% para margenes y huecos
+a , Vamos a pensar que hay como una tabla de 3x3, primera 0:0 ", 1:1 2 2:2 @ 
+caso 2 etiquetas 0:0 =  1:1 0
+bien?.
+caso 1 1:1 g
 
-iguales con espacio, falta de espacio i es vertical primeo mover " a l izqierda par que no choque vericlmente on l 2, si no se puede ir reduciendo el "
+
 
 las teclas tienen repeticion
 para mover haz la barra titulo mas alta y pulsacion laga mueve
 
 
-C:\IA\berpiztu\keyplus\dist\Screenshot_20261017_035259_Package installer.jpg las de 3 estn bien, ls de 2 muy grandes, las de 2 psamos a 50% y  al darle a shift o altgr, tienen q tener l tamaño de una eiqueta
+
 
 
 - **No co-authorship.** Commits and pull requests carry no Co-Authored-By

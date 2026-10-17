@@ -6,8 +6,9 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// Where KeyPlus keeps what it remembers. Whether it was closed is one thing
 /// for the whole phone; the window's layout (size, place, Keys or ABC, docked
-/// or floating, minimized) is kept apart for the phone's own screen and for
-/// Samsung DeX, a display of its own, so each keeps the layout made for it.
+/// or floating, minimized, the icon's place) is kept apart for each screen —
+/// the phone held upright, the phone on its side, and Samsung DeX, a display
+/// of its own — so each opens as it was left there.
 /// </summary>
 public static class KeyPlusPreferences
 {
@@ -16,53 +17,92 @@ public static class KeyPlusPreferences
 
     private const string PhoneName = "keyplus";
     private const string DexName = "keyplus.dex";
+    private const string PortraitName = "keyplus.portrait";
+    private const string LandscapeName = "keyplus.landscape";
     private const string LayoutsSplitKey = "layoutsSplit";
+    private const string ScreensSplitKey = "screensSplit";
 
-    /// <summary>What holds for the whole phone; also the phone screen's layout, as it was before DeX had its own.</summary>
+    /// <summary>The screens a layout is kept for.</summary>
+    public enum Screen
+    {
+        Portrait,
+        Landscape,
+        Dex,
+    }
+
+    /// <summary>What holds for the whole phone.</summary>
     public static ISharedPreferences Global(Context context) =>
         context.GetSharedPreferences(PhoneName, FileCreationMode.Private)!;
 
-    /// <summary>The layout of the display the window is on: the phone's own screen, or DeX.</summary>
-    public static ISharedPreferences ForDisplay(Context context, int displayId) =>
-        displayId == Display.DefaultDisplay ? Global(context) : context.GetSharedPreferences(DexName, FileCreationMode.Private)!;
+    /// <summary>The screen a display is now: DeX for any but the phone's own, else the phone's own the way it is held.</summary>
+    public static Screen ScreenOf(Context context, int displayId) =>
+        displayId != Display.DefaultDisplay ? Screen.Dex
+        : context.Resources!.Configuration!.Orientation == Android.Content.Res.Orientation.Landscape ? Screen.Landscape
+        : Screen.Portrait;
+
+    /// <summary>The layout kept for a screen.</summary>
+    public static ISharedPreferences ForScreen(Context context, Screen screen) =>
+        context.GetSharedPreferences(screen switch
+        {
+            Screen.Dex => DexName,
+            Screen.Landscape => LandscapeName,
+            _ => PortraitName,
+        }, FileCreationMode.Private)!;
 
     /// <summary>
-    /// Once, when DeX first gets a layout of its own: the layout kept until
-    /// then was made under DeX, so it moves to DeX's, and the phone's screen
-    /// starts afresh. Whether KeyPlus is closed stays where it is.
+    /// Once, when DeX first got a layout of its own: the layout kept until
+    /// then was made under DeX, so it moved to DeX's. Then once, when the
+    /// phone's screen got one for each way it is held: the phone's layout
+    /// goes to both, so neither starts afresh. Whether KeyPlus is closed
+    /// stays where it is.
     /// </summary>
     public static void SplitLayoutsOnce(Context context)
     {
         var global = Global(context);
-        if (global.GetBoolean(LayoutsSplitKey, false))
+        if (!global.GetBoolean(LayoutsSplitKey, false))
         {
-            return;
+            Move(global, [ForScreen(context, Screen.Dex)]);
+            global.Edit()!.PutBoolean(LayoutsSplitKey, true)!.Apply();
         }
 
-        var dex = context.GetSharedPreferences(DexName, FileCreationMode.Private)!.Edit()!;
-        var phone = global.Edit()!;
-        foreach (var (key, value) in global.All!)
+        if (!global.GetBoolean(ScreensSplitKey, false))
         {
-            if (key == HiddenKey)
+            Move(global, [ForScreen(context, Screen.Portrait), ForScreen(context, Screen.Landscape)]);
+            global.Edit()!.PutBoolean(ScreensSplitKey, true)!.Apply();
+        }
+    }
+
+    /// <summary>Every layout preference of the phone's own copied to these, and taken from the phone's.</summary>
+    private static void Move(ISharedPreferences from, IReadOnlyList<ISharedPreferences> to)
+    {
+        var editors = to.Select(preferences => preferences.Edit()!).ToList();
+        var left = from.Edit()!;
+        foreach (var (key, value) in from.All!)
+        {
+            if (key is HiddenKey or LayoutsSplitKey or ScreensSplitKey)
             {
                 continue;
             }
 
-            _ = value switch
+            foreach (var editor in editors)
             {
-                bool flag => dex.PutBoolean(key, flag),
-                int number => dex.PutInt(key, number),
-                float number => dex.PutFloat(key, number),
-                Java.Lang.Boolean flag => dex.PutBoolean(key, (bool)flag),
-                Java.Lang.Integer number => dex.PutInt(key, (int)number),
-                Java.Lang.Float number => dex.PutFloat(key, (float)number),
-                _ => dex,
-            };
-            phone.Remove(key);
+                _ = value switch
+                {
+                    bool flag => editor.PutBoolean(key, flag),
+                    int number => editor.PutInt(key, number),
+                    float number => editor.PutFloat(key, number),
+                    Java.Lang.Boolean flag => editor.PutBoolean(key, (bool)flag),
+                    Java.Lang.Integer number => editor.PutInt(key, (int)number),
+                    Java.Lang.Float number => editor.PutFloat(key, (float)number),
+                    _ => editor,
+                };
+            }
+
+            left.Remove(key);
         }
 
-        dex.Apply();
-        phone.PutBoolean(LayoutsSplitKey, true)!.Apply();
+        editors.ForEach(editor => editor.Apply());
+        left.Apply();
     }
 
     /// <summary>Whether KeyPlus was closed, nothing of it in sight until the app is opened again.</summary>

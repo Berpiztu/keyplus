@@ -39,9 +39,9 @@ public sealed class MainActivity : Activity
             "Keys turns it back. " +
             "Ctrl and Alt hold for the next key, one of the strip's or a letter typed on your keyboard: " +
             "Ctrl then \"s\" is Ctrl+S. Shift stays on until pressed again. " +
-            "The arrows and pages repeat while held.\n\n" +
-            "The keys are a small window above the keyboard while one is open. Drag its title bar " +
-            "to float it anywhere, in sight all the time, keyboard or not; drag a corner to resize it; " +
+            "Keys repeat while held, as a keyboard's do.\n\n" +
+            "The keys are a small window above the keyboard while one is open. Hold its title bar " +
+            "a moment to float it anywhere, in sight all the time, keyboard or not; drag a corner to resize it; " +
             "⤓ docks it above the keyboard again. – minimizes it into the ⌨ icon, always in sight, " +
             "which a tap opens again. ✕ closes KeyPlus, after asking; open this app to bring it back."));
 

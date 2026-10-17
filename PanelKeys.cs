@@ -45,12 +45,17 @@ public sealed record PanelKey(
 {
     public bool IsModifier => Modifier != Held.None;
 
+    /// <summary>
+    /// Whether the key repeats while held, as a keyboard's does: every key
+    /// that types or sends one, but not a modifier, nor a shortcut that
+    /// should happen once (Ctrl+A, Ctrl+C, Ctrl+V, the screen capture) unless
+    /// it says it repeats (Ctrl+Z, Ctrl+Y).
+    /// </summary>
+    public bool RepeatsWhenHeld => Repeats || (!IsModifier && With == Held.None);
+
     public bool IsCharacter => Text is not null;
 
     public bool IsLetter => Text is { Length: 1 } && char.IsLetter(Text[0]);
-
-    /// <summary>Whether the key shows three legends: its shifted character, its plain one and its Alt Gr one.</summary>
-    public bool HasThreeLegends => !IsLetter && ShiftText is not null && ShiftText != Text && AltGrText is not null;
 
     /// <summary>The text the key types with the modifiers held; none where the layout has nothing.</summary>
     public string? TextFor(Held held)
@@ -233,20 +238,13 @@ public static class PanelKeys
     public static bool IsDead(string text) => Accents.ContainsKey(text);
 
     /// <summary>
-    /// The characters that are small glyphs in their room, and how much larger
-    /// a label draws each to be read: quotes, points, dashes and accents twice
-    /// as large, brackets, braces and the arrows half as large again, @ a
-    /// quarter.
+    /// The labels drawn larger than the others to be read: the arrows, small
+    /// glyphs on keys of their own, three quarters larger. The legends of the
+    /// keys that type characters size their symbols by their ink instead
+    /// (<see cref="KeyLegends"/>).
     /// </summary>
     private static readonly IReadOnlyDictionary<string, float> SmallGlyphs =
-        new[] { "\"", "·", "=", "?", "¿", "'", "`", "^", "+", "*", "´", "¨", ";", ",", ".", ":", "-", "_", "\\", "|", "~", "¬" }
-            .Select(glyph => (glyph, factor: 2f))
-            .Concat(new[] { "[", "]", "{", "}" }.Select(glyph => (glyph, factor: 1.5f)))
-
-            // Wide already: twice as large, in the corner it covers the 2.
-            .Append((glyph: "@", factor: 1.25f))
-            .Concat(new[] { "←", "↑", "↓", "→" }.Select(glyph => (glyph, factor: 1.5f)))
-            .ToDictionary(pair => pair.glyph, pair => pair.factor);
+        new[] { "←", "↑", "↓", "→" }.ToDictionary(glyph => glyph, _ => 1.75f);
 
     /// <summary>How much larger a label draws a character: more than 1 for a small glyph.</summary>
     public static float GlyphFactor(string? text) => text is not null && SmallGlyphs.TryGetValue(text, out var factor) ? factor : 1f;

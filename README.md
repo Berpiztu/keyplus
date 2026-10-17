@@ -32,8 +32,7 @@ floating keyboard too; with no keyboard open it is out of sight.
 
 - **Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in
   the top row, beside **Del** (delete forward); **⌫** (Backspace) and **⏎**
-  (Enter) end the terminal's two rows. Ctrl+Z, Ctrl+Y, Del and ⌫ repeat
-  while held.
+  (Enter) end the terminal's two rows.
 - **ABC** in the title bar turns the window into a whole keyboard laid out
   as Windows' touch keyboard lays out Spain's (ISO, es-ES), each key labelled
   as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Bloq May, ´ ` ^ ¨
@@ -58,38 +57,40 @@ floating keyboard too; with no keyboard open it is out of sight.
   Every modifier goes out as a hardware keyboard sends it, pressed before the
   key and let go after it, since some editors select only when Shift itself
   went down.
-- **The arrows and pages** repeat while held.
-- **Long press to move or resize.** Hold a key, or the ground between the
-  keys, still for a moment: it buzzes, and the window follows your finger;
-  started near one of its corners, it resizes from there instead. Keys type
-  on release, so a held key types nothing. The keys that repeat while held
-  (the arrows, ⌫, Del, the pages, Ctrl+Z, Ctrl+Y) act on the touch and
-  repeat instead.
+- **Keys repeat while held**, as a keyboard's do: every key acts on the
+  touch, and one that types or sends a key goes on doing it while held. Not
+  Ctrl, Alt, Shift, Alt Gr, Fn or ⊞, nor Ctrl+A, Ctrl+C, Ctrl+V and ImpPnt,
+  which should happen once, nor the accents, which wait for a letter.
 - **A window, docked or floating.** The keys are a small window with a title
   bar. It starts docked: right above the keyboard, as wide as it, while a
   keyboard is open, and as the **⌨** icon at the bottom right while none is.
-  Drag the title bar and it floats where you
-  leave it, in sight all the time, keyboard or not, for the places that lack
-  only the arrows. Drag a corner (◤ ◥ ◣ ◢) to resize it: across for its
-  width, up or down for the size of its keys; the opposite corner stays put.
-  **⤓** in the title bar docks it again. Where it stands and its size are
-  kept.
-- **A−** and **A+** in the title bar make the labels of the keys that type
-  characters (letters, digits, symbols) smaller or larger, a tenth at a
-  press, and the size is kept; the keys keep theirs. Ctrl, Alt, Enter and
-  the like stay as they are. **A↺** brings them, and the keys a corner made larger or smaller,
-  back to their usual size; the window keeps its place and width. Each key shows its
-  shifted character above its plain one, both in the middle, and its Alt Gr
-  one small in its bottom right corner, as Windows' touch keyboard does; a
-  key with all three has them all closer to its left, by half the room
-  left of the two.
-  Characters that are small glyphs are drawn larger, on lines that keep
-  their height: " · = ? ¿ ' ` ^ + * ´ ¨ ; , . : - _ \ | ~ ¬ twice as large,
-  [ ] { } and the arrows half as large again, @ a quarter. A label is never larger than its key: past
-  that, a corner makes the keys, and so the labels, larger.
-- **Phone and DeX apart.** The window's size, place, labels' size, Keys or
-  ABC, docked or floating and minimized are kept apart for the phone's own
-  screen and for Samsung DeX, so each keeps what you made for it.
+  Hold the title bar still for a moment, anywhere on it, its buttons too: it
+  buzzes, and the window floats where you leave it, in sight all the time,
+  keyboard or not; a tap on a button does what the button is for. The
+  ground between the keys moves it the same way. Drag a corner (◤ ◥ ◣ ◢) to
+  resize it: across for its width, up or down for the size of its keys; the
+  opposite corner stays put. **⤓** in the title bar docks it again.
+- **The labels.** Each key is a table of three by three cells: its shifted
+  character in the top left, its plain one in the middle and its Alt Gr one
+  in the bottom right, so none covers another however narrow the key. The
+  one the key sends is white, the others grey; with Shift or Alt Gr held a
+  key shows only what it types then, in the middle. Every label is one
+  size, the largest at which every key in sight could hold three, so the
+  labels grow and shrink with the keys. A point, a comma, a dash or an
+  accent, which draw little ink, are drawn half as large again where their
+  key has room, and on a key of two of them (; over , and : over .) each
+  takes two rows. Words (Esc, Ctrl+A, Home…) share one size too and take at
+  most three quarters of their key; a long word in a narrow key is made
+  smaller alone. Nothing is ever cut.
+- **A−** and **A+** in the title bar make every label smaller or larger, a
+  tenth at a press. **A↺** brings the labels, and the keys a corner made
+  larger or smaller, back to their usual size; the window keeps its place
+  and width.
+- **Each screen its own.** The phone held upright, the phone on its side and
+  Samsung DeX each keep their own window: Keys or ABC, minimized or not, and
+  the icon's place; and within each, Keys and ABC each keep their own place,
+  width, keys' size, labels' size and whether they float. Turn the phone, or
+  switch between Keys and ABC, and the window is as you last left it there.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight, and always where you last left
   it, apart from the window's own place.
@@ -109,6 +110,8 @@ Needs the .NET 10 SDK with the `android` workload
 
 ```powershell
 dotnet build                 # Debug build
+.\debug.ps1 -Phone           # Debug build installed on the phone (cable or Wi-Fi) and opened
+.\debug.ps1 -Emulator        # the same on an emulator, started if none runs
 .\build-apk.ps1              # Release APK, copied to dist\KeyPlus-1.0.0.<build>.apk
 ```
 

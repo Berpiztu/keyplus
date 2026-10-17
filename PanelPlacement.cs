@@ -3,35 +3,77 @@ using Android.Content;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// Where the panel stands, kept across restarts: docked right above the
-/// keyboard and in sight only while one is open, or floating where the user
-/// left it, in sight all the time, for the places that lack only the arrows.
-/// The size of its keys holds in both. One display's layout
-/// (<see cref="KeyPlusPreferences.ForDisplay"/>).
+/// Where the panel stands on one screen (<see cref="KeyPlusPreferences.ForScreen"/>),
+/// kept across restarts: docked right above the keyboard and in sight only
+/// while one is open, or floating where the user left it, in sight all the
+/// time. Keys and ABC (<see cref="Mode"/>) each keep their own: docked or
+/// floating, place, width and keys' size, so each opens as it was left. The
+/// icon keeps one place for the screen, whichever of the two it stands for.
 /// </summary>
 public sealed class PanelPlacement(ISharedPreferences preferences)
 {
-    public const float MinScale = 0.6f;
-    public const float MaxScale = 2.5f;
+    /// <summary>
+    /// The keys' size is the user's to choose, as small or as large as a
+    /// corner takes it: these only keep a window there is something left of
+    /// to take hold of, and one that stays a window.
+    /// </summary>
+    public const float MinScale = 0.1f;
+    public const float MaxScale = 10f;
+
+    /// <summary>The least width a corner leaves the window, in dp: room for the bottom corners' two grips, to take it larger again.</summary>
+    public const int MinWidthDp = 48;
+
+    /// <summary>The two modes the window is in, the strip's keys and the whole keyboard.</summary>
+    public const string KeysMode = "keys";
+    public const string WholeKeyboardMode = "abc";
 
     private const string FloatingKey = "floating";
     private const string XKey = "x";
     private const string YKey = "y";
     private const string WidthKey = "width";
+    private const string ScaleKey = "scale";
     private const string IconXKey = "iconX";
     private const string IconYKey = "iconY";
-    private const string ScaleKey = "scale";
 
-    public bool Floating { get; set; } = preferences.GetBoolean(FloatingKey, false);
+    /// <summary>Each mode's layout, read the first time it is wanted.</summary>
+    private readonly Dictionary<string, Layout> layouts = [];
+
+    /// <summary>The mode whose layout the placement stands for now.</summary>
+    public string Mode { get; set; } = KeysMode;
+
+    public bool Floating
+    {
+        get => Current.Floating;
+        set => Current.Floating = value;
+    }
 
     /// <summary>The floating panel's left edge, in pixels from the display's.</summary>
-    public int X { get; set; } = preferences.GetInt(XKey, 0);
+    public int X
+    {
+        get => Current.X;
+        set => Current.X = value;
+    }
 
     /// <summary>The floating panel's top edge, in pixels from the display's.</summary>
-    public int Y { get; set; } = preferences.GetInt(YKey, 0);
+    public int Y
+    {
+        get => Current.Y;
+        set => Current.Y = value;
+    }
 
     /// <summary>The floating panel's width in pixels; 0 until the user gives it one.</summary>
-    public int Width { get; set; } = preferences.GetInt(WidthKey, 0);
+    public int Width
+    {
+        get => Current.Width;
+        set => Current.Width = value;
+    }
+
+    /// <summary>The keys' size, 1 for the usual one.</summary>
+    public float Scale
+    {
+        get => Current.Scale;
+        set => Current.Scale = value;
+    }
 
     /// <summary>
     /// Where the user left the icon, its left and top edges in pixels from the
@@ -43,16 +85,62 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
     public bool HasIconPlace => IconX >= 0 && IconY >= 0;
 
-    /// <summary>The keys' size, 1 for the usual one.</summary>
-    public float Scale { get; set; } = preferences.GetFloat(ScaleKey, 1f);
+    private Layout Current
+    {
+        get
+        {
+            if (!layouts.TryGetValue(Mode, out var layout))
+            {
+                layout = Layout.Read(preferences, Mode);
+                layouts[Mode] = layout;
+            }
 
-    public void Save() => preferences.Edit()!
-        .PutBoolean(FloatingKey, Floating)!
-        .PutInt(XKey, X)!
-        .PutInt(YKey, Y)!
-        .PutInt(WidthKey, Width)!
-        .PutInt(IconXKey, IconX)!
-        .PutInt(IconYKey, IconY)!
-        .PutFloat(ScaleKey, Scale)!
-        .Apply();
+            return layout;
+        }
+    }
+
+    public void Save()
+    {
+        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!;
+        foreach (var (mode, layout) in layouts)
+        {
+            editor = editor
+                .PutBoolean(Keyed(mode, FloatingKey), layout.Floating)!
+                .PutInt(Keyed(mode, XKey), layout.X)!
+                .PutInt(Keyed(mode, YKey), layout.Y)!
+                .PutInt(Keyed(mode, WidthKey), layout.Width)!
+                .PutFloat(Keyed(mode, ScaleKey), layout.Scale)!;
+        }
+
+        editor.Apply();
+    }
+
+    /// <summary>A mode's own preference: "keys.x", "abc.scale".</summary>
+    public static string Keyed(string mode, string key) => $"{mode}.{key}";
+
+    /// <summary>
+    /// One mode's layout. Read from the mode's own preferences, or, where it
+    /// has none yet, from the one layout kept before each mode had its own.
+    /// </summary>
+    private sealed class Layout
+    {
+        public bool Floating { get; set; }
+
+        public int X { get; set; }
+
+        public int Y { get; set; }
+
+        public int Width { get; set; }
+
+        public float Scale { get; set; }
+
+        public static Layout Read(ISharedPreferences preferences, string mode) => new()
+        {
+            Floating = preferences.GetBoolean(Keyed(mode, FloatingKey), preferences.GetBoolean(FloatingKey, false)),
+            X = preferences.GetInt(Keyed(mode, XKey), preferences.GetInt(XKey, 0)),
+            Y = preferences.GetInt(Keyed(mode, YKey), preferences.GetInt(YKey, 0)),
+            Width = preferences.GetInt(Keyed(mode, WidthKey), preferences.GetInt(WidthKey, 0)),
+            Scale = preferences.GetFloat(Keyed(mode, ScaleKey), preferences.GetFloat(ScaleKey, 1f)),
+        };
+    }
 }

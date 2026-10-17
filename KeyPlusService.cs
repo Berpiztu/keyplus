@@ -37,8 +37,8 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// <summary>The device id of key events no hardware sent (KeyCharacterMap.VIRTUAL_KEYBOARD).</summary>
     private const int VirtualKeyboardId = -1;
 
-    /// <summary>The panel in its window on one display.</summary>
-    private sealed record Overlay(int DisplayId, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement);
+    /// <summary>The panel in its window on one display, and the screen whose layout it has.</summary>
+    private sealed record Overlay(int DisplayId, KeyPlusPreferences.Screen Screen, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement);
 
     /// <summary>A keyboard's window and the display it is on.</summary>
     private readonly record struct Keyboard(int DisplayId, Rect Bounds);
@@ -46,8 +46,8 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     private Overlay? overlay;
     private PanelPlacement? placed;
 
-    /// <summary>The phone screen's layout (true) and DeX's (false).</summary>
-    private readonly Dictionary<bool, PanelPlacement> placements = [];
+    /// <summary>Each screen's layout: the phone upright, on its side, and DeX.</summary>
+    private readonly Dictionary<KeyPlusPreferences.Screen, PanelPlacement> placements = [];
 
     /// <summary>Where the panel's window and size stood when a drag on its title bar, icon or a grip started.</summary>
     private (int X, int Y, int Width, int Height, float Scale) dragStart;
@@ -60,6 +60,11 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         base.OnServiceConnected();
         KeyPlusPreferences.SplitLayoutsOnce(this);
         KeyPlusPreferences.Global(this).RegisterOnSharedPreferenceChangeListener(this);
+        lockReceiver = new LockReceiver(this);
+        var locking = new Android.Content.IntentFilter(Android.Content.Intent.ActionScreenOff);
+        locking.AddAction(Android.Content.Intent.ActionScreenOn);
+        locking.AddAction(Android.Content.Intent.ActionUserPresent);
+        RegisterReceiver(lockReceiver, locking, Android.Content.ReceiverFlags.NotExported);
         Place();
     }
 
@@ -86,9 +91,32 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     {
     }
 
+    /// <summary>Whether the phone is locked: KeyPlus is not shown on the lock screen.</summary>
+    private bool Locked() => GetSystemService(KeyguardService).JavaCast<KeyguardManager>()?.IsKeyguardLocked == true;
+
+    /// <summary>The screen going off or the phone unlocked: KeyPlus goes, or comes back.</summary>
+    private sealed class LockReceiver(KeyPlusService service) : Android.Content.BroadcastReceiver
+    {
+        public override void OnReceive(Android.Content.Context? context, Android.Content.Intent? intent) => service.Place();
+    }
+
+    private LockReceiver? lockReceiver;
+
+    /// <summary>The phone turned: the panel takes the layout kept for the way it is held now.</summary>
+    public override void OnConfigurationChanged(Android.Content.Res.Configuration? newConfig)
+    {
+        base.OnConfigurationChanged(newConfig!);
+        Place();
+    }
+
     public override void OnDestroy()
     {
         KeyPlusPreferences.Global(this).UnregisterOnSharedPreferenceChangeListener(this);
+        if (lockReceiver is not null)
+        {
+            UnregisterReceiver(lockReceiver);
+        }
+
         Close();
         base.OnDestroy();
     }
@@ -110,18 +138,32 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
         var keyboard = FindKeyboard();
         var displayId = keyboard?.DisplayId ?? overlay?.DisplayId ?? FocusedDisplayId() ?? Display.DefaultDisplay;
-        placed = PlacementFor(displayId);
-        if (overlay?.DisplayId != displayId)
+        var screen = KeyPlusPreferences.ScreenOf(this, displayId);
+        placed = PlacementFor(screen);
+        if (overlay?.DisplayId != displayId || overlay.Screen != screen)
         {
+            // Another display, or the phone turned: a window with that
+            // screen's layout, Keys or ABC, labels' size and all.
             Close();
-            overlay = Open(displayId);
+            overlay = Open(displayId, screen);
             if (overlay is null)
             {
                 return;
             }
+
+            placed.Mode = overlay.Panel.Mode;
+            overlay.Panel.Scale = placed.Scale;
         }
 
-        var (_, windowManager, panel, placement) = overlay;
+        if (Locked())
+        {
+            // Nothing of KeyPlus on the lock screen; back once the phone is unlocked.
+            overlay.Panel.StopRepeat();
+            overlay.Panel.Root.Visibility = ViewStates.Gone;
+            return;
+        }
+
+        var (_, _, windowManager, panel, placement) = overlay;
         panel.Floating = placed.Floating;
         panel.IconOnly = keyboard is null && !placed.Floating;
         var display = windowManager.MaximumWindowMetrics.Bounds;
@@ -140,8 +182,10 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             (x, y, width) = (margin, 6 * margin, ViewGroup.LayoutParams.WrapContent);
             gravity = GravityFlags.Bottom | GravityFlags.Right;
         }
-        else if (placed.Floating)
+        else if (placed.Floating || placed.Width > 0)
         {
+            // Floating, or docked where the user has placed it: there, as they
+            // left it; docked, only while a keyboard is open.
             // No width yet when the icon was the first thing dragged: the
             // display's, until a grip gives it one.
             width = panel.ShowsIcon ? ViewGroup.LayoutParams.WrapContent
@@ -168,7 +212,12 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return;
         }
 
-        Log.Info(LogTag, $"Panel on display {displayId} at {x},{y} width {width}, {(placed.Floating ? "floating" : $"above the keyboard at {keyboard!.Value.Bounds.ToShortString()}")}");
+        // Docked with no keyboard open, the panel is the icon alone: there is no keyboard to name.
+        var where = placed.Floating ? "floating"
+            : keyboard is null ? "as the icon, no keyboard open"
+            : placed.Width > 0 ? "docked where it was left"
+            : $"above the keyboard at {keyboard.Value.Bounds.ToShortString()}";
+        Log.Info(LogTag, $"Panel on display {displayId} at {x},{y} width {width}, {where}");
         placement.X = x;
         placement.Y = y;
         placement.Width = width;
@@ -177,7 +226,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         windowManager.UpdateViewLayout(panel.Root, placement);
     }
 
-    /// <summary>The title bar dragged: the panel floats, and follows the finger; the icon dragged moves the icon alone.</summary>
+    /// <summary>The title bar dragged: the panel follows the finger, docked or floating as it was; the icon dragged moves the icon alone.</summary>
     private void OnMoving(KeyPanel.Drag drag, float dx, float dy)
     {
         if (overlay?.Panel.ShowsIcon == true)
@@ -186,14 +235,14 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return;
         }
 
-        if (StartFloating(drag) is not { } floating)
+        if (StartPlacing(drag) is not { } moved)
         {
             return;
         }
 
-        floating.X = dragStart.X + (int)dx;
-        floating.Y = dragStart.Y + (int)dy;
-        Dragged(drag, floating);
+        moved.X = dragStart.X + (int)dx;
+        moved.Y = dragStart.Y + (int)dy;
+        Dragged(drag, moved);
     }
 
     /// <summary>The icon dragged: it alone follows the finger, and stays where it is left; the window keeps its own place.</summary>
@@ -218,20 +267,20 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>
-    /// A corner's grip dragged: the panel floats; across it gets wider or
-    /// narrower, up or down its keys bigger or smaller, and the opposite corner
-    /// stays where it is.
+    /// A corner's grip dragged: across the panel gets wider or narrower, up or
+    /// down its keys bigger or smaller, and the opposite corner stays where it
+    /// is; docked or floating as it was.
     /// </summary>
     private void OnResizing(KeyPanel.Corner corner, KeyPanel.Drag drag, float dx, float dy)
     {
-        if (StartFloating(drag) is not { } floating || overlay is null)
+        if (StartPlacing(drag) is not { } floating || overlay is null)
         {
             return;
         }
 
         var fromLeft = (corner & KeyPanel.Corner.Left) != 0;
         var fromTop = (corner & KeyPanel.Corner.Top) != 0;
-        var minWidth = (int)(160 * Resources!.DisplayMetrics!.Density);
+        var minWidth = (int)(PanelPlacement.MinWidthDp * Resources!.DisplayMetrics!.Density);
         var height = Math.Max(1, dragStart.Height);
         floating.Width = Math.Max(minWidth, dragStart.Width + (int)(fromLeft ? -dx : dx));
         floating.Scale = Math.Clamp(
@@ -245,7 +294,6 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         Dragged(drag, floating);
     }
 
-    /// <summary>⤓ pressed: the panel docks above the keyboard again.</summary>
     /// <summary>A↺ pressed: the keys go back to their usual size; the window keeps its place and width.</summary>
     private void OnUsualSizeRequested()
     {
@@ -260,21 +308,29 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         Place();
     }
 
+    /// <summary>
+    /// ⤓ pressed: docked, the panel shows only while a keyboard is open, or,
+    /// pressed again, floats, in sight all the time; where it stands and its
+    /// size stay as they are either way.
+    /// </summary>
     private void OnDockRequested()
     {
-        if (placed is { Floating: true })
+        if (placed is null)
         {
-            placed.Floating = false;
-            placed.Save();
-            Place();
+            return;
         }
+
+        placed.Floating = !placed.Floating;
+        placed.Save();
+        Place();
     }
 
     /// <summary>The icon tapped with no keyboard to dock above: the window opens floating where the icon is.</summary>
     private void OnOpenRequested()
     {
-        if (StartFloating(KeyPanel.Drag.Start) is { } floating && overlay is not null)
+        if (StartPlacing(KeyPanel.Drag.Start) is { } floating && overlay is not null)
         {
+            floating.Floating = true;
             floating.Save();
             overlay.Panel.Unfold();
         }
@@ -287,25 +343,38 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// </summary>
     private void OnCloseRequested() => KeyPlusPreferences.SetHidden(this, true);
 
-    /// <summary>The layout of a display, the phone's own screen's or DeX's, each read once and kept.</summary>
-    private PanelPlacement PlacementFor(int displayId)
+    /// <summary>The layout of a screen, each read once and kept.</summary>
+    private PanelPlacement PlacementFor(KeyPlusPreferences.Screen screen)
     {
-        var isPhone = displayId == Display.DefaultDisplay;
-        if (!placements.TryGetValue(isPhone, out var placement))
+        if (!placements.TryGetValue(screen, out var placement))
         {
-            placement = new PanelPlacement(KeyPlusPreferences.ForDisplay(this, displayId));
-            placements[isPhone] = placement;
+            placement = new PanelPlacement(KeyPlusPreferences.ForScreen(this, screen));
+            placements[screen] = placement;
         }
 
         return placement;
     }
 
+    /// <summary>ABC or Keys pressed: the window takes the other mode's place, width and keys' size.</summary>
+    private void OnModeChanged()
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        placed.Mode = overlay.Panel.Mode;
+        overlay.Panel.Scale = placed.Scale;
+        Place();
+    }
+
     /// <summary>
-    /// At a drag's start, floats the panel where it stands now and notes where
-    /// that is; the placement to change, or none without a panel in sight. The
-    /// width is the open window's: dragging the icon keeps the one it had.
+    /// At a drag's start, notes where the panel stands now, as its place from
+    /// then on, docked or floating as it is; the placement to change, or none
+    /// without a panel in sight. The width is the open window's: dragging the
+    /// icon keeps the one it had.
     /// </summary>
-    private PanelPlacement? StartFloating(KeyPanel.Drag drag)
+    private PanelPlacement? StartPlacing(KeyPanel.Drag drag)
     {
         if (placed is null || overlay is null)
         {
@@ -319,7 +388,6 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             root.GetLocationOnScreen(location);
             var display = overlay.WindowManager.MaximumWindowMetrics.Bounds;
             dragStart = (location[0] - display.Left, location[1] - display.Top, root.Width, root.Height, overlay.Panel.Scale);
-            placed.Floating = true;
             placed.X = dragStart.X;
             placed.Y = dragStart.Y;
             if (!overlay.Panel.ShowsIcon)
@@ -387,8 +455,8 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         return null;
     }
 
-    /// <summary>Opens the panel's window on a display, out of sight until placed.</summary>
-    private Overlay? Open(int displayId)
+    /// <summary>Opens the panel's window on a display, with a screen's layout, out of sight until placed.</summary>
+    private Overlay? Open(int displayId, KeyPlusPreferences.Screen screen)
     {
         var display = GetSystemService(DisplayService).JavaCast<DisplayManager>()?.GetDisplay(displayId);
         if (display is null)
@@ -398,12 +466,13 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        var panel = new KeyPanel(context, KeyPlusPreferences.ForDisplay(this, displayId), SendKey, TypeText) { Scale = placed?.Scale ?? 1f };
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), SendKey, TypeText);
         panel.FoldedChanged += Place;
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;
         panel.DockRequested += OnDockRequested;
         panel.UsualSizeRequested += OnUsualSizeRequested;
+        panel.ModeChanged += OnModeChanged;
         panel.OpenRequested += OnOpenRequested;
         panel.CloseRequested += OnCloseRequested;
         var placement = new WindowManagerLayoutParams(
@@ -419,8 +488,20 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             LayoutInDisplayCutoutMode = LayoutInDisplayCutoutMode.Always,
         };
         panel.Root.Visibility = ViewStates.Gone;
-        windowManager.AddView(panel.Root, placement);
-        return new Overlay(displayId, windowManager, panel, placement);
+        try
+        {
+            windowManager.AddView(panel.Root, placement);
+        }
+        catch (WindowManagerBadTokenException refused)
+        {
+            // The service's connection was being taken down as it came up
+            // (turned off and on at once): no window now; the next windows
+            // change, on the connection that stays, opens it.
+            Log.Warn(LogTag, $"No window on display {displayId}: {refused.Message}");
+            return null;
+        }
+
+        return new Overlay(displayId, screen, windowManager, panel, placement);
     }
 
     private void Close()
