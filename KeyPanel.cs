@@ -60,6 +60,12 @@ public sealed class KeyPanel
     private const int RepeatDelayMs = 400;
     private const int RepeatIntervalMs = 50;
 
+    /// <summary>A key's label, in sp at the usual size.</summary>
+    private const float LabelSize = 16f;
+
+    /// <summary>The share of it a secondary legend takes: the shifted character above, the Alt Gr one at the right.</summary>
+    private const float SecondaryLabelShare = 0.75f;
+
     // Opaque, the keys well apart from the ground: the window looks the same
     // over a white screen as over a black one.
     private static readonly Color PanelColor = Color.Argb(0xFF, 0x12, 0x12, 0x12);
@@ -233,7 +239,7 @@ public sealed class KeyPanel
             scale = value;
             foreach (var key in keys)
             {
-                key.SetTextSize(ComplexUnitType.Sp, 15 * scale);
+                key.SetTextSize(ComplexUnitType.Sp, LabelSize * scale);
             }
 
             foreach (var row in rowViews)
@@ -335,7 +341,7 @@ public sealed class KeyPanel
     /// (two lines, or one with Fn, Shift or Alt Gr held) changes the
     /// keyboard's height, and the side column's keys stand level with the rows.
     /// </summary>
-    private int RowHeight => Dp(46 * scale);
+    private int RowHeight => Dp(50 * scale);
 
     /// <param name="side">Keys in a column at the right, one beside each row.</param>
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)
@@ -561,7 +567,7 @@ public sealed class KeyPanel
     {
         var start = legend.Length();
         legend.Append(text);
-        legend.SetSpan(new RelativeSizeSpan(0.6f), start, legend.Length(), SpanTypes.ExclusiveExclusive);
+        legend.SetSpan(new RelativeSizeSpan(SecondaryLabelShare), start, legend.Length(), SpanTypes.ExclusiveExclusive);
     }
 
     private TextView TitleButton(string label, string description)
@@ -650,7 +656,7 @@ public sealed class KeyPanel
             Background = KeyBackground(KeyColor),
         };
         view.SetTextColor(Color.White);
-        view.SetTextSize(ComplexUnitType.Sp, 15);
+        view.SetTextSize(ComplexUnitType.Sp, LabelSize);
         view.SetSingleLine(true);
         view.SetPadding(0, 0, 0, 0);
         return view;
