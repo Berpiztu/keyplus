@@ -79,9 +79,9 @@ floating keyboard too; with no keyboard open it is out of sight.
   press, and the size is kept; the keys keep theirs. Ctrl, Alt, Enter and
   the like stay as they are. **A↺** brings them, and the keys a corner made larger or smaller,
   back to their usual size; the window keeps its place and width. Each key shows its
-  shifted character above its plain one, both in the middle, a little to the
-  left when it also has an Alt Gr one, which stands small in its bottom right
-  corner, as Windows' touch keyboard does.
+  shifted character above its plain one, both in the middle, and its Alt Gr
+  one small in its bottom right corner, as Windows' touch keyboard does; a
+  key with all three has the two a little to the left.
   Characters that are small glyphs are drawn larger, on lines that keep
   their height: " · = ? ¿ ' ` ^ + * ´ ¨ ; , . : - _ \ | ~ ¬ twice as large,
   [ ] { } and the arrows half as large again, @ a quarter. A label is never larger than its key: past

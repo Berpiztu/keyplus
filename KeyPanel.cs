@@ -477,10 +477,12 @@ public sealed class KeyPanel
             // have, so the legends grow as far as they can; a margin inside
             // the key's edges, which the corner's Alt Gr character keeps too.
             view.SetIncludeFontPadding(false);
-            // Beside an Alt Gr character in the corner, the legend's middle
-            // sits a little to the left, so the two stand a little apart.
-            var cornered = key.AltGrText is not null;
-            view.SetPadding(Dp(cornered ? 4 : 6), Dp(3), Dp(cornered ? 14 : 6), Dp(3));
+
+            // A key with three legends (shifted, plain, Alt Gr in the corner)
+            // has its middle a little to the left, so the two above one
+            // another stand a little apart from the corner's.
+            var three = key is { IsLetter: false, ShiftText: not null, AltGrText: not null } && key.ShiftText != key.Text;
+            view.SetPadding(Dp(three ? 4 : 6), Dp(3), Dp(three ? 10 : 6), Dp(3));
         }
 
         // A key that repeats acts on the touch, and repeats while held; any
@@ -727,7 +729,7 @@ public sealed class KeyPanel
     /// held the key it becomes; with Alt Gr or Shift held only what it types
     /// now, nothing where it types nothing; else the character it types with
     /// its shifted one small above it, both in the middle, a little to the left
-    /// when the key has an Alt Gr character, its <see cref="CornerLabel"/>.
+    /// when the key also has an Alt Gr character, its <see cref="CornerLabel"/>.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
     {
