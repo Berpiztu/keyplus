@@ -41,6 +41,7 @@ public static class PanelKeys
             new("Ctrl+V", Keycode.V, With: Held.Ctrl),
             new("Ctrl+Z", Keycode.Z, Repeats: true, With: Held.Ctrl),
             new("Ctrl+Y", Keycode.Y, Repeats: true, With: Held.Ctrl),
+            new("Del", Keycode.ForwardDel, Repeats: true),
         ],
         [
             new("Esc", Keycode.Escape),

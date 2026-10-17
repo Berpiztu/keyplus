@@ -358,6 +358,12 @@ public sealed class KeyPlusService : AccessibilityService
         return down is null ? null : (down.KeyCode, down.MetaState & MetaKeyStates.ShiftMask);
     }
 
+    /// <summary>
+    /// Sends a key as a hardware keyboard would: each modifier held is pressed
+    /// before it and let go after it. The meta state alone is not enough for
+    /// every editor: Android's own text fields, for one, select with Shift and
+    /// the arrows only when Shift itself went down.
+    /// </summary>
     private void SendKey(Keycode code, MetaKeyStates meta)
     {
         var connection = InputMethod?.CurrentInputConnection;
@@ -367,7 +373,31 @@ public sealed class KeyPlusService : AccessibilityService
         }
 
         var down = SystemClock.UptimeMillis();
-        connection.SendKeyEvent(new KeyEvent(down, down, KeyEventActions.Down, code, 0, meta));
-        connection.SendKeyEvent(new KeyEvent(down, SystemClock.UptimeMillis(), KeyEventActions.Up, code, 0, meta));
+        void Send(KeyEventActions action, Keycode key, MetaKeyStates state) =>
+            connection.SendKeyEvent(new KeyEvent(down, SystemClock.UptimeMillis(), action, key, 0, state));
+
+        var pressed = Modifiers.Where(modifier => meta.HasFlag(modifier.On)).ToList();
+        var state = MetaKeyStates.None;
+        foreach (var modifier in pressed)
+        {
+            state |= modifier.Meta;
+            Send(KeyEventActions.Down, modifier.Key, state);
+        }
+
+        Send(KeyEventActions.Down, code, meta);
+        Send(KeyEventActions.Up, code, meta);
+        foreach (var modifier in Enumerable.Reverse(pressed))
+        {
+            state &= ~modifier.Meta;
+            Send(KeyEventActions.Up, modifier.Key, state);
+        }
     }
+
+    /// <summary>The modifiers a key may be sent with: the meta flag that says so, the key pressed for it, and the meta state it adds.</summary>
+    private static readonly (MetaKeyStates On, Keycode Key, MetaKeyStates Meta)[] Modifiers =
+    [
+        (MetaKeyStates.CtrlOn, Keycode.CtrlLeft, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn),
+        (MetaKeyStates.AltOn, Keycode.AltLeft, MetaKeyStates.AltOn | MetaKeyStates.AltLeftOn),
+        (MetaKeyStates.ShiftOn, Keycode.ShiftLeft, MetaKeyStates.ShiftOn | MetaKeyStates.ShiftLeftOn),
+    ];
 }

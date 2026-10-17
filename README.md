@@ -30,7 +30,8 @@ floating keyboard too; with no keyboard open it is out of sight.
 ## Using it
 
 - **Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in the top
-  row; Ctrl+Z and Ctrl+Y repeat while held.
+  row, beside **Del** (delete forward); Ctrl+Z, Ctrl+Y and Del repeat while
+  held.
 - **Ctrl and Alt** hold for the next key: pressed once they stay filled, and
   are let go after the next key; pressed again they let go at once. The next
   key can be one of the strip's or a character typed on your own keyboard:
@@ -38,6 +39,9 @@ floating keyboard too; with no keyboard open it is out of sight.
   text, not keys, so KeyPlus sees the character arrive in the editor, takes
   it back with Backspace and sends the key with Ctrl or Alt instead.
 - **Shift** stays on until pressed again, so Shift and the arrows select.
+  Every modifier goes out as a hardware keyboard sends it, pressed before the
+  key and let go after it, since some editors select only when Shift itself
+  went down.
 - **The arrows and pages** repeat while held.
 - **Docked or floating.** The strip starts docked: right above the keyboard,
   as wide as it, in sight only while a keyboard is open. Drag **✥** and it
