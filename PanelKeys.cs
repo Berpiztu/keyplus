@@ -12,8 +12,12 @@ public enum Held
     Alt = 4,
 }
 
-/// <summary>A key on the panel: what it reads, the key it sends or the modifier it holds, and whether holding it repeats it.</summary>
-public sealed record PanelKey(string Label, Keycode Code, Held Modifier = Held.None, bool Repeats = false)
+/// <summary>
+/// A key on the panel: what it reads, the key it sends or the modifier it
+/// holds, whether holding it repeats it, and the modifiers it always sends
+/// with (With: Ctrl for a shortcut key such as Ctrl+C).
+/// </summary>
+public sealed record PanelKey(string Label, Keycode Code, Held Modifier = Held.None, bool Repeats = false, Held With = Held.None)
 {
     public bool IsModifier => Modifier != Held.None;
 }
@@ -25,10 +29,19 @@ public static class PanelKeys
     /// A terminal's keys as Termux lays them out: two rows of seven, the arrows
     /// as a cross with Home and End beside the up arrow and the pages at the
     /// right; Shift where Termux has the minus, which the phone's keyboard has
-    /// at hand, so Shift and the arrows select.
+    /// at hand, so Shift and the arrows select. Above them, the editing
+    /// shortcuts as keys of their own: Ctrl then a "c" typed on the phone's
+    /// keyboard cannot copy, because the "c" replaces the selection before it
+    /// is taken back.
     /// </summary>
     public static readonly IReadOnlyList<IReadOnlyList<PanelKey>> Terminal =
     [
+        [
+            new("Ctrl+C", Keycode.C, With: Held.Ctrl),
+            new("Ctrl+V", Keycode.V, With: Held.Ctrl),
+            new("Ctrl+Z", Keycode.Z, Repeats: true, With: Held.Ctrl),
+            new("Ctrl+Y", Keycode.Y, Repeats: true, With: Held.Ctrl),
+        ],
         [
             new("Esc", Keycode.Escape),
             new("/", Keycode.Slash),

@@ -226,7 +226,7 @@ public sealed class KeyPanel
             return;
         }
 
-        var meta = PanelKeys.MetaOf(held);
+        var meta = PanelKeys.MetaOf(held | key.With);
         send(key.Code, meta);
         SetHeld(held & Held.Shift);
         if (key.Repeats)

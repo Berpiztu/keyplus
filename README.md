@@ -20,7 +20,7 @@ floating keyboard too; with no keyboard open it is out of sight.
 
 | File | What it holds |
 | --- | --- |
-| [PanelKeys.cs](PanelKeys.cs) | The layout (Termux's two rows of seven) and the meta state of held modifiers |
+| [PanelKeys.cs](PanelKeys.cs) | The layout (the editing shortcuts, then Termux's two rows of seven) and the meta state of held modifiers |
 | [KeyPanel.cs](KeyPanel.cs) | The strip's views: holding Ctrl, Alt and Shift, repeat, its controls (move, resize, fold) |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
@@ -29,10 +29,12 @@ floating keyboard too; with no keyboard open it is out of sight.
 
 ## Using it
 
+- **Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in the top
+  row; Ctrl+Z and Ctrl+Y repeat while held.
 - **Ctrl and Alt** hold for the next key: pressed once they stay filled, and
   are let go after the next key; pressed again they let go at once. The next
   key can be one of the strip's or a character typed on your own keyboard:
-  Ctrl then "c" is Ctrl+C, Ctrl then "P" is Ctrl+Shift+P. Your keyboard types
+  Ctrl then "s" is Ctrl+S, Ctrl then "P" is Ctrl+Shift+P. Your keyboard types
   text, not keys, so KeyPlus sees the character arrive in the editor, takes
   it back with Backspace and sends the key with Ctrl or Alt instead.
 - **Shift** stays on until pressed again, so Shift and the arrows select.
@@ -79,6 +81,8 @@ Then on the phone:
   it back: in a terminal the program sees it and then a Backspace. And an
   editor that does not report its caret (Termux's terminal, for one) keeps
   the character as typed; use the strip's keys there, or Termux's own.
+  With text selected, the character typed replaces the selection before it
+  is taken back: that is why copying has a key of its own.
 - The browser may take a few shortcuts (Ctrl+T, Ctrl+W) before the page does.
 - Google Play reviews accessibility services closely; installed from the
   APK, nothing of that applies.
