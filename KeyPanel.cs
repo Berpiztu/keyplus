@@ -381,7 +381,8 @@ public sealed class KeyPanel
 
         var withSide = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         withSide.AddView(blocks, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 15.5f));
-        withSide.AddView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1.5f));
+        // As wide as one key of the rows, which weigh 15.5.
+        withSide.AddView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
         return withSide;
     }
 

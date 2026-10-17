@@ -121,8 +121,9 @@ public static class PanelKeys
     /// as tall as the two rows beside it, and the arrows as an inverted T at
     /// the bottom right, the up arrow between the minus and the right Shift.
     /// Fn, held until pressed again, makes the digits' row F1 to F12 and the
-    /// arrows Home, End, Page up and Page down. Every row weighs 15.5, so the
-    /// up arrow stands right above the down one. Each key's code is its place
+    /// arrows Home, End, Page up and Page down. The rows under the digits' weigh
+    /// 15.5, so the up arrow stands right above the down one; the digits' row
+    /// weighs a little more, for a wider Backspace. Each key's code is its place
     /// on a US keyboard, as a Spanish hardware keyboard sends it (ç where the
     /// backslash is), so Ctrl+ç reaches a remote machine set to Spanish.
     /// </summary>
@@ -137,7 +138,7 @@ public static class PanelKeys
             Function(Character("7", "/", null, Keycode.Num7), 7), Function(Character("8", "(", null, Keycode.Num8), 8),
             Function(Character("9", ")", null, Keycode.Num9), 9), Function(Character("0", "=", null, Keycode.Num0), 10),
             Function(Character("'", "?", null, Keycode.Minus), 11), Function(Character("¡", "¿", null, Keycode.Equals), 12),
-            new("⌫", Keycode.Del, Repeats: true, Weight: 1.5f),
+            new("⌫", Keycode.Del, Repeats: true, Weight: 2f),
         ],
         ]),
         new(
@@ -180,13 +181,13 @@ public static class PanelKeys
     /// </summary>
     public static readonly IReadOnlyList<PanelKey> SpanishSide =
     [
+        // Windows+Shift+S, the snipping tool, for Print Screen itself does
+        // not reach a remote desktop session.
+        new("ImpPnt", Keycode.S, With: Held.Windows | Held.Shift),
         new("Inicio", Keycode.MoveHome),
         new("Fin", Keycode.MoveEnd),
         new("RePág", Keycode.PageUp, Repeats: true),
         new("AvPág", Keycode.PageDown, Repeats: true),
-        // Windows+Shift+S, the snipping tool, for Print Screen itself does
-        // not reach a remote desktop session.
-        new("ImpPnt", Keycode.S, With: Held.Windows | Held.Shift),
     ];
 
     /// <summary>The letters each dead key puts its accent on, and the accented letter.</summary>
