@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- flagInputMethodEditor: the service gets an input connection to the
+     focused editor, beside the user's keyboard, to send keys through.
+     flagRetrieveInteractiveWindows (with canRetrieveWindowContent): the
+     service sees the windows on screen, to find the keyboard's and sit above
+     it; typeWindowsChanged says when it opens, closes or moves. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/service_description"
+    android:summary="@string/service_summary"
+    android:accessibilityEventTypes="typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagInputMethodEditor|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="50" />

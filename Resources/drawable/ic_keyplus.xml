@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A keyboard with a plus: a rounded body, two rows of keys and a space bar. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+  <path android:fillColor="#FF263238"
+        android:pathData="M10,0H38A10,10 0 0 1 48,10V38A10,10 0 0 1 38,48H10A10,10 0 0 1 0,38V10A10,10 0 0 1 10,0Z" />
+  <path android:fillColor="#FFFFFFFF"
+        android:pathData="M8,16h6v5h-6z M16,16h6v5h-6z M24,16h6v5h-6z M8,23h6v5h-6z M16,23h6v5h-6z M24,23h6v5h-6z M12,30h18v5h-18z" />
+  <path android:fillColor="#FF4FC3F7"
+        android:pathData="M36,16h3v6h6v3h-6v6h-3v-6h-6v-3h6z" />
+</vector>

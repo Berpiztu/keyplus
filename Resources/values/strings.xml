@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">KeyPlus</string>
+  <string name="service_label">KeyPlus keys</string>
+  <string name="service_summary">Esc, Tab, Ctrl, Alt, Shift and the arrows above any keyboard</string>
+  <string name="service_description">KeyPlus shows a strip of the keys a phone\'s keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End, Page up and Page down) above the keyboard that is open, and sends them to the field being typed in. It reads where the keyboard is on the screen and nothing else.</string>
+</resources>

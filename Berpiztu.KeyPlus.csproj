@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- KeyPlus: the keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift,
+       arrows, Home, End, pages) in a strip above whatever keyboard is open,
+       sent to the field being typed in. An accessibility service, not a
+       keyboard: Android 13 lets one write to the focused editor beside the
+       user's own keyboard, which is why the minimum is API 33. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>33.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Berpiztu.KeyPlus</RootNamespace>
+    <ApplicationId>com.berpiztu.keyplus</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <Authors>Berpiztu</Authors>
+    <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
+  </PropertyGroup>
+
+</Project>
