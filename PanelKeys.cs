@@ -123,10 +123,19 @@ public static class PanelKeys
     /// arrows Home, End, Page up and Page down. Every row weighs 15.5, so the
     /// up arrow stands right above the down one. Each key's code is its place
     /// on a US keyboard, as a Spanish hardware keyboard sends it (ç where the
-    /// backslash is), so Ctrl+ç reaches a remote machine set to Spanish.
+    /// backslash is), so Ctrl+ç reaches a remote machine set to Spanish. Above
+    /// it all, the keys a PC has beside it: Home, End, the pages and Print
+    /// Screen, in sight without Fn.
     /// </summary>
     public static readonly IReadOnlyList<KeyBlock> Spanish =
     [
+        new([
+        [
+            new("Inicio", Keycode.MoveHome), new("Fin", Keycode.MoveEnd),
+            new("RePág", Keycode.PageUp, Repeats: true), new("AvPág", Keycode.PageDown, Repeats: true),
+            new("ImpPnt", Keycode.Sysrq),
+        ],
+        ]),
         new([
         [
             new("Esc", Keycode.Escape), Character("º", "ª", "\\", Keycode.Grave),

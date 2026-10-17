@@ -38,7 +38,8 @@ floating keyboard too; with no keyboard open it is out of sight.
   as Windows' touch keyboard lays out Spain's (ISO, es-ES), each key labelled
   as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Bloq May, ´ ` ^ ¨
   as dead keys (´ then a is á, ¨ then u is ü), Entrar as tall as two rows,
-  and the arrows as an inverted T at the bottom right. **Fn** stays on until
+  the arrows as an inverted T at the bottom right, and Inicio, Fin, RePág,
+  AvPág and ImpPnt (Print Screen) along the top. **Fn** stays on until
   pressed again: it makes 1 to ¡ F1 to F12 and the arrows Inicio, Fin, RePág
   and AvPág. The keyboard types its characters as text, so it types what it
   shows whatever layout the editor expects; with Ctrl or Alt held its keys
