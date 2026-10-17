@@ -41,7 +41,8 @@ public sealed class MainActivity : Activity
             "The arrows and pages repeat while held.\n\n" +
             "The keys are a small window above the keyboard while one is open. Drag its title bar " +
             "to float it anywhere, in sight all the time, keyboard or not; drag a corner to resize it; " +
-            "⤓ docks it above the keyboard again. ✕ closes it into the ⌨ icon, which a tap opens again."));
+            "⤓ docks it above the keyboard again. – minimizes it into the ⌨ icon, always in sight, " +
+            "which a tap opens again. ✕ closes KeyPlus, after asking; turn it on here again to bring it back."));
 
         status = Text("");
         content.AddView(status);

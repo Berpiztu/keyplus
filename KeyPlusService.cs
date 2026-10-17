@@ -78,9 +78,10 @@ public sealed class KeyPlusService : AccessibilityService
 
     /// <summary>
     /// Puts the panel where it stands: docked, right above the keyboard, as wide
-    /// as it or as a tab at its right, or out of sight while no keyboard is
-    /// open; floating, where the user left it, on the keyboard's display, or on
-    /// the one it is on while no keyboard is open.
+    /// as it or as a tab at its right, or as the icon alone at the display's
+    /// bottom right while no keyboard is open, for the icon is always in sight;
+    /// floating, where the user left it, on the keyboard's display, or on the
+    /// one it is on while no keyboard is open.
     /// </summary>
     private void Place()
     {
@@ -90,11 +91,6 @@ public sealed class KeyPlusService : AccessibilityService
         }
 
         var keyboard = FindKeyboard();
-        if (keyboard is null && !placed.Floating)
-        {
-            Hide();
-            return;
-        }
 
         var displayId = keyboard?.DisplayId ?? overlay?.DisplayId ?? FocusedDisplayId() ?? Display.DefaultDisplay;
         if (overlay?.DisplayId != displayId)
@@ -109,17 +105,24 @@ public sealed class KeyPlusService : AccessibilityService
 
         var (_, windowManager, panel, placement) = overlay;
         panel.Floating = placed.Floating;
+        panel.IconOnly = keyboard is null && !placed.Floating;
         var display = windowManager.MaximumWindowMetrics.Bounds;
         int x, y, width;
         GravityFlags gravity;
-        if (placed.Floating)
+        if (panel.IconOnly)
+        {
+            var margin = (int)(16 * Resources!.DisplayMetrics!.Density);
+            (x, y, width) = (margin, 6 * margin, ViewGroup.LayoutParams.WrapContent);
+            gravity = GravityFlags.Bottom | GravityFlags.Right;
+        }
+        else if (placed.Floating)
         {
             // No width yet when the icon was the first thing dragged: the
             // display's, until a grip gives it one.
-            width = panel.Folded ? ViewGroup.LayoutParams.WrapContent
+            width = panel.ShowsIcon ? ViewGroup.LayoutParams.WrapContent
                 : placed.Width > 0 ? Math.Min(placed.Width, display.Width())
                 : display.Width();
-            x = Math.Clamp(placed.X, 0, Math.Max(0, display.Width() - (panel.Folded ? panel.Root.Width : width)));
+            x = Math.Clamp(placed.X, 0, Math.Max(0, display.Width() - (panel.ShowsIcon ? panel.Root.Width : width)));
             y = Math.Clamp(placed.Y, 0, Math.Max(0, display.Height() - panel.Root.Height));
             gravity = GravityFlags.Top | GravityFlags.Left;
         }
@@ -127,9 +130,9 @@ public sealed class KeyPlusService : AccessibilityService
         {
             var bounds = keyboard!.Value.Bounds;
             y = display.Bottom - bounds.Top;
-            x = panel.Folded ? display.Right - bounds.Right : bounds.Left - display.Left;
-            width = panel.Folded ? ViewGroup.LayoutParams.WrapContent : bounds.Width();
-            gravity = GravityFlags.Bottom | (panel.Folded ? GravityFlags.Right : GravityFlags.Left);
+            x = panel.ShowsIcon ? display.Right - bounds.Right : bounds.Left - display.Left;
+            width = panel.ShowsIcon ? ViewGroup.LayoutParams.WrapContent : bounds.Width();
+            gravity = GravityFlags.Bottom | (panel.ShowsIcon ? GravityFlags.Right : GravityFlags.Left);
         }
 
         // The panel's own window changing is a windows change too: placing it
@@ -201,6 +204,23 @@ public sealed class KeyPlusService : AccessibilityService
         }
     }
 
+    /// <summary>The icon tapped with no keyboard to dock above: the window opens floating where the icon is.</summary>
+    private void OnOpenRequested()
+    {
+        if (StartFloating(KeyPanel.Drag.Start) is { } floating && overlay is not null)
+        {
+            floating.Save();
+            overlay.Panel.Unfold();
+        }
+    }
+
+    /// <summary>The user said yes to closing KeyPlus: the service turns itself off, until turned on again in Settings.</summary>
+    private void OnCloseRequested()
+    {
+        Close();
+        DisableSelf();
+    }
+
     /// <summary>
     /// At a drag's start, floats the panel where it stands now and notes where
     /// that is; the placement to change, or none without a panel in sight. The
@@ -223,7 +243,7 @@ public sealed class KeyPlusService : AccessibilityService
             placed.Floating = true;
             placed.X = dragStart.X;
             placed.Y = dragStart.Y;
-            if (!overlay.Panel.Folded)
+            if (!overlay.Panel.ShowsIcon)
             {
                 placed.Width = dragStart.Width;
             }
@@ -304,6 +324,8 @@ public sealed class KeyPlusService : AccessibilityService
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;
         panel.DockRequested += OnDockRequested;
+        panel.OpenRequested += OnOpenRequested;
+        panel.CloseRequested += OnCloseRequested;
         var placement = new WindowManagerLayoutParams(
             ViewGroup.LayoutParams.MatchParent,
             ViewGroup.LayoutParams.WrapContent,
@@ -319,15 +341,6 @@ public sealed class KeyPlusService : AccessibilityService
         panel.Root.Visibility = ViewStates.Gone;
         windowManager.AddView(panel.Root, placement);
         return new Overlay(displayId, windowManager, panel, placement);
-    }
-
-    private void Hide()
-    {
-        if (overlay is not null)
-        {
-            overlay.Panel.StopRepeat();
-            overlay.Panel.Root.Visibility = ViewStates.Gone;
-        }
     }
 
     private void Close()

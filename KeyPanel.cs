@@ -15,8 +15,9 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// The keys, as a small window: a title bar that moves it, with ABC to turn
 /// it into a whole Spanish keyboard and Keys to turn it back, ⤓ to dock it
-/// above the keyboard again (while it floats) and ✕ to close it into the ⌨
-/// icon, which a tap opens again and a drag moves; the keys, the shortcuts'
+/// above the keyboard again (while it floats), – to minimize it into the ⌨
+/// icon, which a tap opens again and a drag moves, and ✕ to close KeyPlus,
+/// once the title bar has asked whether to; the keys, the shortcuts'
 /// row and the terminal's two or the whole keyboard; and a grip at each
 /// corner that resizes it, across for its width and up or down for its keys'
 /// size. Where the window stands is
@@ -79,6 +80,9 @@ public sealed class KeyPanel
     private readonly LinearLayout terminal;
     private readonly LinearLayout wholeKeyboard;
     private readonly TextView tab;
+    private readonly LinearLayout titleBar;
+    private readonly LinearLayout closeBar;
+    private bool iconOnly;
     private readonly TextView dock;
     private readonly TextView switchKeys;
     private Java.Lang.Runnable? repeat;
@@ -104,17 +108,33 @@ public sealed class KeyPanel
 
         dock = TitleButton("⤓", "Dock the keys above the keyboard");
         dock.Click += (_, _) => DockRequested?.Invoke();
-        var close = TitleButton("✕", "Close the keys into an icon");
-        close.Click += (_, _) => SetFolded(true);
+        var minimize = TitleButton("–", "Minimize the keys into an icon");
+        minimize.Click += (_, _) => SetFolded(true);
+        var close = TitleButton("✕", "Close KeyPlus");
+        close.Click += (_, _) => AskToClose(true);
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard");
         switchKeys.Click += (_, _) => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible);
 
-        var titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         titleBar.AddView(Grip("◤", Corner.TopLeft), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         titleBar.AddView(switchKeys, new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(dock, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
+        titleBar.AddView(minimize, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(close, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
+
+        var question = new TextView(context) { Text = "¿Quieres cerrar KeyPlus?", Gravity = GravityFlags.CenterVertical };
+        question.SetTextColor(Color.White);
+        question.SetTextSize(ComplexUnitType.Sp, 13);
+        question.SetPadding(Dp(8), 0, Dp(8), 0);
+        var yes = TitleButton("Sí", "Close KeyPlus");
+        yes.Click += (_, _) => CloseRequested?.Invoke();
+        var no = TitleButton("No", "Keep KeyPlus open");
+        no.Click += (_, _) => AskToClose(false);
+        closeBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+        closeBar.AddView(question, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        closeBar.AddView(yes, new LinearLayout.LayoutParams(Dp(48), ViewGroup.LayoutParams.MatchParent));
+        closeBar.AddView(no, new LinearLayout.LayoutParams(Dp(48), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(Grip("◥", Corner.TopRight), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
 
         var bottomBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
@@ -126,6 +146,7 @@ public sealed class KeyPanel
         strip.SetBackgroundColor(PanelColor);
         strip.SetPadding(Dp(2), 0, Dp(2), 0);
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(28)));
+        strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(28)));
         terminal = Rows(PanelKeys.Terminal);
         wholeKeyboard = Rows(PanelKeys.Spanish);
         strip.AddView(terminal);
@@ -135,7 +156,7 @@ public sealed class KeyPanel
         tab = KeyView("⌨");
         tab.ContentDescription = "Show the keys";
         tab.SetPadding(Dp(16), Dp(6), Dp(16), Dp(6));
-        Draggable(tab, (drag, dx, dy) => Moving?.Invoke(drag, dx, dy), () => SetFolded(false));
+        Draggable(tab, (drag, dx, dy) => Moving?.Invoke(drag, dx, dy), OnIconTapped);
 
         root = new FrameLayout(context);
         root.AddView(strip);
@@ -148,11 +169,39 @@ public sealed class KeyPanel
     /// <summary>The panel's view, for the window that shows it.</summary>
     public View Root => root;
 
-    /// <summary>Whether the panel is folded into its tab.</summary>
+    /// <summary>Whether the user minimized the window into its icon.</summary>
     public bool Folded { get; private set; }
 
-    /// <summary>The window was closed into its icon or opened again: it changes shape.</summary>
+    /// <summary>
+    /// Whether only the icon is shown, the window being docked with no
+    /// keyboard to stand above: the icon is always in sight.
+    /// </summary>
+    public bool IconOnly
+    {
+        get => iconOnly;
+        set
+        {
+            // Set on every windows change: showing it again would also take
+            // back the title bar's question whether to close.
+            if (iconOnly != value)
+            {
+                iconOnly = value;
+                ShowFolded(Folded);
+            }
+        }
+    }
+
+    /// <summary>Whether the icon is what is shown, minimized or for want of a keyboard.</summary>
+    public bool ShowsIcon => Folded || iconOnly;
+
+    /// <summary>The window was minimized into its icon or opened again: it changes shape.</summary>
     public event Action? FoldedChanged;
+
+    /// <summary>The icon was tapped while only the icon can be shown: the window opens floating where it is.</summary>
+    public event Action? OpenRequested;
+
+    /// <summary>The user said yes to closing KeyPlus.</summary>
+    public event Action? CloseRequested;
 
     /// <summary>The title bar or the icon is dragged, by so many pixels across and down since the drag started.</summary>
     public event Action<Drag, float, float>? Moving;
@@ -209,6 +258,28 @@ public sealed class KeyPanel
         }
     }
 
+    /// <summary>Opens the window out of its icon.</summary>
+    public void Unfold() => SetFolded(false);
+
+    private void OnIconTapped()
+    {
+        if (iconOnly)
+        {
+            OpenRequested?.Invoke();
+        }
+        else
+        {
+            SetFolded(false);
+        }
+    }
+
+    /// <summary>Shows the title bar's question whether to close KeyPlus, or the title bar again.</summary>
+    private void AskToClose(bool ask)
+    {
+        titleBar.Visibility = ask ? ViewStates.Gone : ViewStates.Visible;
+        closeBar.Visibility = ask ? ViewStates.Visible : ViewStates.Gone;
+    }
+
     private void SetFolded(bool folded)
     {
         ShowFolded(folded);
@@ -234,8 +305,9 @@ public sealed class KeyPanel
     {
         Folded = folded;
         StopRepeat();
-        strip.Visibility = folded ? ViewStates.Gone : ViewStates.Visible;
-        tab.Visibility = folded ? ViewStates.Visible : ViewStates.Gone;
+        AskToClose(false);
+        strip.Visibility = ShowsIcon ? ViewStates.Gone : ViewStates.Visible;
+        tab.Visibility = ShowsIcon ? ViewStates.Visible : ViewStates.Gone;
     }
 
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout)

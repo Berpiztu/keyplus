@@ -56,15 +56,19 @@ floating keyboard too; with no keyboard open it is out of sight.
   went down.
 - **The arrows and pages** repeat while held.
 - **A window, docked or floating.** The keys are a small window with a title
-  bar. It starts docked: right above the keyboard, as wide as it, in sight
-  only while a keyboard is open. Drag the title bar and it floats where you
+  bar. It starts docked: right above the keyboard, as wide as it, while a
+  keyboard is open, and as the **⌨** icon at the bottom right while none is.
+  Drag the title bar and it floats where you
   leave it, in sight all the time, keyboard or not, for the places that lack
   only the arrows. Drag a corner (◤ ◥ ◣ ◢) to resize it: across for its
   width, up or down for the size of its keys; the opposite corner stays put.
   **⤓** in the title bar docks it again. Where it stands and its size are
   kept.
-- **✕** closes the window into the **⌨** icon: a tap opens it again, a drag
-  moves it.
+- **–** minimizes the window into the **⌨** icon: a tap opens it again, a
+  drag moves it. The icon is always in sight.
+- **✕** closes KeyPlus, once you say yes to "¿Quieres cerrar KeyPlus?" in the
+  title bar: the service turns itself off. To bring it back, open KeyPlus and
+  turn it on again in the accessibility settings.
 
 ## Build and install
 
