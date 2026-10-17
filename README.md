@@ -71,7 +71,8 @@ floating keyboard too; with no keyboard open it is out of sight.
 - **A−** and **A+** in the title bar make the labels of the keys that type
   characters (letters, digits, symbols) smaller or larger, a tenth at a
   press, and the size is kept; Ctrl, Alt, Enter and the like stay as they
-  are. **A↺** brings them back to their usual size. A key with three
+  are. **A↺** brings them, and the keys a corner made larger or smaller,
+  back to their usual size; the window keeps its place and width. A key with three
   characters shows one a line: the shifted one at the left, the plain one in
   the middle, the Alt Gr one at the right. A label is never larger than its
   key: past that, a corner makes the keys, and so the labels, larger.

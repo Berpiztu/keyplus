@@ -15,8 +15,8 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// The keys, as a small window: a title bar that moves it, with ABC to turn
 /// it into a whole Spanish keyboard and Keys to turn it back, A− and A+ for
-/// smaller or larger labels on the keys that type characters and A↺ for their
-/// usual size, ⤓ to dock it
+/// smaller or larger labels on the keys that type characters and A↺ for the
+/// keys and labels at their usual size, ⤓ to dock it
 /// above the keyboard again (while it floats), – to minimize it into the ⌨
 /// icon, which a tap opens again and a drag moves, and ✕ to close KeyPlus,
 /// once the title bar has asked whether to; the keys, the shortcuts'
@@ -148,8 +148,12 @@ public sealed class KeyPanel
         smaller.Click += (_, _) => SetLabelScale(labelScale - LabelScaleStep);
         var larger = TitleButton("A+", "Larger labels");
         larger.Click += (_, _) => SetLabelScale(labelScale + LabelScaleStep);
-        var usual = TitleButton("A↺", "Labels at their usual size");
-        usual.Click += (_, _) => SetLabelScale(1f);
+        var usual = TitleButton("A↺", "Keys and labels at their usual size");
+        usual.Click += (_, _) =>
+        {
+            SetLabelScale(1f);
+            UsualSizeRequested?.Invoke();
+        };
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard");
         switchKeys.Click += (_, _) => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible);
 
@@ -252,6 +256,9 @@ public sealed class KeyPanel
 
     /// <summary>⤓ was pressed: the window goes back above the keyboard.</summary>
     public event Action? DockRequested;
+
+    /// <summary>A↺ was pressed: the keys go back to their usual size, as the labels have.</summary>
+    public event Action? UsualSizeRequested;
 
     /// <summary>Whether the window floats, which is when ⤓ can dock it.</summary>
     public bool Floating

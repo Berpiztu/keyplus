@@ -212,6 +212,20 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>⤓ pressed: the panel docks above the keyboard again.</summary>
+    /// <summary>A↺ pressed: the keys go back to their usual size; the window keeps its place and width.</summary>
+    private void OnUsualSizeRequested()
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        placed.Scale = 1f;
+        placed.Save();
+        overlay.Panel.Scale = 1f;
+        Place();
+    }
+
     private void OnDockRequested()
     {
         if (placed is { Floating: true })
@@ -342,6 +356,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;
         panel.DockRequested += OnDockRequested;
+        panel.UsualSizeRequested += OnUsualSizeRequested;
         panel.OpenRequested += OnOpenRequested;
         panel.CloseRequested += OnCloseRequested;
         var placement = new WindowManagerLayoutParams(
