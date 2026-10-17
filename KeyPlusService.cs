@@ -58,6 +58,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     protected override void OnServiceConnected()
     {
         base.OnServiceConnected();
+        KeyPlusPreferences.SplitLayoutsOnce(this);
         KeyPlusPreferences.Global(this).RegisterOnSharedPreferenceChangeListener(this);
         Place();
     }

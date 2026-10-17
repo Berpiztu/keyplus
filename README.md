@@ -59,6 +59,12 @@ floating keyboard too; with no keyboard open it is out of sight.
   key and let go after it, since some editors select only when Shift itself
   went down.
 - **The arrows and pages** repeat while held.
+- **Long press to move or resize.** Hold a key, or the ground between the
+  keys, still for a moment: it buzzes, and the window follows your finger;
+  started near one of its corners, it resizes from there instead. Keys type
+  on release, so a held key types nothing. The keys that repeat while held
+  (the arrows, ⌫, Del, the pages, Ctrl+Z, Ctrl+Y) act on the touch and
+  repeat instead.
 - **A window, docked or floating.** The keys are a small window with a title
   bar. It starts docked: right above the keyboard, as wide as it, while a
   keyboard is open, and as the **⌨** icon at the bottom right while none is.

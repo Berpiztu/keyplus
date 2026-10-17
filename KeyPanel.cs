@@ -67,6 +67,12 @@ public sealed class KeyPanel
     private const int RepeatDelayMs = 400;
     private const int RepeatIntervalMs = 50;
 
+    /// <summary>How long a touch is held still before it moves or resizes the window.</summary>
+    private const int LongPressMs = 450;
+
+    /// <summary>How near a corner of the window a long press starts to resize it rather than move it.</summary>
+    private const int CornerReachDp = 48;
+
     /// <summary>The icon's label, in sp.</summary>
     private const float LabelSize = 16f;
 
@@ -97,6 +103,7 @@ public sealed class KeyPanel
     private readonly Action<string> type;
     private readonly ISharedPreferences preferences;
     private readonly Handler handler = new(Looper.MainLooper!);
+    private readonly int touchSlop;
     private readonly List<(Held Modifier, TextView View)> modifierKeys = [];
     private readonly List<(PanelKey Key, TextView View)> labelledKeys = [];
     private readonly Dictionary<TextView, CornerLabel> corners = [];
@@ -133,6 +140,7 @@ public sealed class KeyPanel
         this.send = send;
         this.type = type;
         this.preferences = preferences;
+        touchSlop = ViewConfiguration.Get(context)!.ScaledTouchSlop;
         labelScale = preferences.GetFloat(LabelScalePreference, 1f);
 
         var title = new TextView(context) { Text = "KeyPlus", Gravity = GravityFlags.CenterVertical };
@@ -200,6 +208,27 @@ public sealed class KeyPanel
         wholeKeyboard = Rows(PanelKeys.Spanish, PanelKeys.SpanishSide);
         strip.AddView(terminal);
         strip.AddView(wholeKeyboard);
+
+        // Between the keys, a long press moves or resizes the window as on a key.
+        var groundHold = new LongPress(this, strip);
+        strip.Touch += (_, e) =>
+        {
+            var motion = e.Event!;
+            e.Handled = true;
+            switch (motion.ActionMasked)
+            {
+                case MotionEventActions.Down:
+                    groundHold.Begin(motion);
+                    break;
+                case MotionEventActions.Move:
+                    groundHold.Track(motion);
+                    break;
+                case MotionEventActions.Up:
+                case MotionEventActions.Cancel:
+                    groundHold.End(motion);
+                    break;
+            }
+        };
         strip.AddView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(14)));
 
         tab = KeyView("⌨");
@@ -451,24 +480,144 @@ public sealed class KeyPanel
             view.SetPadding(Dp(6), Dp(3), Dp(6), Dp(3));
         }
 
+        // A key that repeats acts on the touch, and repeats while held; any
+        // other acts on its release, for held long it moves the window, or
+        // resizes it from a corner it is near.
+        var hold = key.Repeats ? null : new LongPress(this, view);
         view.Touch += (_, e) =>
         {
             e.Handled = true;
-            switch (e.Event?.ActionMasked)
+            var motion = e.Event!;
+            switch (motion.ActionMasked)
             {
                 case MotionEventActions.Down:
                     view.Pressed = true;
                     view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
-                    Press(key);
+                    if (hold is null)
+                    {
+                        Press(key);
+                    }
+                    else
+                    {
+                        hold.Begin(motion);
+                    }
+
+                    break;
+                case MotionEventActions.Move:
+                    hold?.Track(motion);
                     break;
                 case MotionEventActions.Up:
                 case MotionEventActions.Cancel:
                     view.Pressed = false;
                     StopRepeat();
+                    if (hold?.End(motion) == true && motion.ActionMasked == MotionEventActions.Up)
+                    {
+                        Press(key);
+                    }
+
                     break;
             }
         };
         return view;
+    }
+
+    /// <summary>
+    /// A long press that moves the window, or resizes it from the corner it
+    /// starts near: held still past <see cref="LongPressMs"/>, the touch takes
+    /// the window along, with a buzz to say so; let go before, it was a tap;
+    /// moved before, neither.
+    /// </summary>
+    private sealed class LongPress(KeyPanel panel, View view)
+    {
+        private float startX;
+        private float startY;
+        private bool held;
+        private bool slid;
+        private Corner? corner;
+        private Java.Lang.Runnable? waiting;
+
+        public void Begin(MotionEvent motion)
+        {
+            (startX, startY, held, slid, corner) = (motion.RawX, motion.RawY, false, false, null);
+            waiting = new Java.Lang.Runnable(Hold);
+            panel.handler.PostDelayed(waiting, LongPressMs);
+        }
+
+        public void Track(MotionEvent motion)
+        {
+            var (dx, dy) = (motion.RawX - startX, motion.RawY - startY);
+            if (held)
+            {
+                Report(Drag.Move, dx, dy);
+            }
+            else if (!slid && Math.Sqrt((dx * dx) + (dy * dy)) > panel.touchSlop)
+            {
+                slid = true;
+                Cancel();
+            }
+        }
+
+        /// <summary>Ends the touch; whether it was a tap.</summary>
+        public bool End(MotionEvent motion)
+        {
+            Cancel();
+            if (held)
+            {
+                Report(Drag.End, motion.RawX - startX, motion.RawY - startY);
+                return false;
+            }
+
+            return !slid;
+        }
+
+        private void Hold()
+        {
+            waiting = null;
+            held = true;
+            view.PerformHapticFeedback(FeedbackConstants.LongPress);
+            corner = panel.CornerAt(startX, startY);
+            Report(Drag.Start, 0, 0);
+        }
+
+        private void Report(Drag drag, float dx, float dy)
+        {
+            if (corner is { } from)
+            {
+                panel.Resizing?.Invoke(from, drag, dx, dy);
+            }
+            else
+            {
+                panel.Moving?.Invoke(drag, dx, dy);
+            }
+        }
+
+        private void Cancel()
+        {
+            if (waiting is not null)
+            {
+                panel.handler.RemoveCallbacks(waiting);
+                waiting = null;
+            }
+        }
+    }
+
+    /// <summary>The corner of the window a point on the screen is near, if any.</summary>
+    private Corner? CornerAt(float rawX, float rawY)
+    {
+        var location = new int[2];
+        root.GetLocationOnScreen(location);
+        var (x, y) = (rawX - location[0], rawY - location[1]);
+        var reach = Dp(CornerReachDp);
+        var left = x < reach;
+        var right = x > root.Width - reach;
+        var top = y < reach;
+        var bottom = y > root.Height - reach;
+        if (!(left || right) || !(top || bottom))
+        {
+            return null;
+        }
+
+        return (left ? Corner.Left : 0) | (top ? Corner.Top : 0);
     }
 
     private void Press(PanelKey key)
@@ -660,7 +809,7 @@ public sealed class KeyPanel
     /// </summary>
     private void Draggable(TextView view, Action<Drag, float, float> drag, Action? tapped)
     {
-        var slop = ViewConfiguration.Get(context)!.ScaledTouchSlop;
+        var slop = touchSlop;
         float startX = 0, startY = 0;
         var dragging = false;
         view.Touch += (_, e) =>
