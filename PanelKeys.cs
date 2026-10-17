@@ -232,7 +232,8 @@ public static class PanelKeys
     /// <summary>
     /// The characters that are small glyphs in their room, and how much larger
     /// a label draws each to be read: quotes, points, dashes and accents twice
-    /// as large, brackets and braces half as large again, @ a quarter.
+    /// as large, brackets, braces and the arrows half as large again, @ a
+    /// quarter.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, float> SmallGlyphs =
         new[] { "\"", "·", "=", "?", "¿", "'", "`", "^", "+", "*", "´", "¨", ";", ",", ".", ":", "-", "_", "\\", "|", "~", "¬" }
@@ -241,6 +242,7 @@ public static class PanelKeys
 
             // Wide already: twice as large, in the corner it covers the 2.
             .Append((glyph: "@", factor: 1.25f))
+            .Concat(new[] { "←", "↑", "↓", "→" }.Select(glyph => (glyph, factor: 1.5f)))
             .ToDictionary(pair => pair.glyph, pair => pair.factor);
 
     /// <summary>How much larger a label draws a character: more than 1 for a small glyph.</summary>

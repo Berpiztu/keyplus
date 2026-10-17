@@ -102,7 +102,7 @@ public sealed class KeyPanel
     private readonly List<(PanelKey Key, TextView View)> labelledKeys = [];
     private readonly Dictionary<TextView, CornerLabel> corners = [];
     /// <summary>Every key, and whether it types a character, the keys whose labels A− and A+ size.</summary>
-    private readonly List<(TextView View, bool IsCharacter)> keys = [];
+    private readonly List<(TextView View, bool IsCharacter, float Factor)> keys = [];
 
     /// <summary>The rows and the side column's keys, whose heights follow <see cref="Scale"/> and nothing else.</summary>
     private readonly List<View> rowViews = [];
@@ -423,8 +423,9 @@ public sealed class KeyPanel
     {
         var view = KeyView(key.Label);
         view.SetPadding(Dp(2), 0, Dp(2), 0);
-        FitLabel(view, key.IsCharacter);
-        keys.Add((view, key.IsCharacter));
+        var factor = PanelKeys.GlyphFactor(key.Label);
+        FitLabel(view, key.IsCharacter, factor);
+        keys.Add((view, key.IsCharacter, factor));
         if (key.IsModifier)
         {
             modifierKeys.Add((key.Modifier, view));
@@ -742,9 +743,9 @@ public sealed class KeyPanel
             key.RequestLayout();
         }
 
-        foreach (var (view, isCharacter) in keys)
+        foreach (var (view, isCharacter, factor) in keys)
         {
-            FitLabel(view, isCharacter);
+            FitLabel(view, isCharacter, factor);
         }
     }
 
@@ -753,9 +754,10 @@ public sealed class KeyPanel
     /// and, for a key that types a character, the labels' size the user chose:
     /// A− and A+ leave Ctrl, Alt, Enter and the like as they are.
     /// </summary>
-    private void FitLabel(TextView key, bool isCharacter)
+    /// <param name="factor">How much larger a key that types no character draws its label: an arrow's, half as large again.</param>
+    private void FitLabel(TextView key, bool isCharacter, float factor)
     {
-        var size = isCharacter ? LargestLabelSize * scale * labelScale : OtherLabelSize * scale;
+        var size = isCharacter ? LargestLabelSize * scale * labelScale : OtherLabelSize * scale * factor;
         var largest = Math.Max(SmallestLabelSize + 1, (int)Math.Round(size));
         key.SetAutoSizeTextTypeUniformWithConfiguration(SmallestLabelSize, largest, 1, (int)ComplexUnitType.Sp);
         key.RequestLayout();

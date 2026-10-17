@@ -77,7 +77,7 @@ floating keyboard too; with no keyboard open it is out of sight.
   one small in its bottom right corner, as Windows' touch keyboard does.
   Characters that are small glyphs are drawn larger, on lines that keep
   their height: " · = ? ¿ ' ` ^ + * ´ ¨ ; , . : - _ \ | ~ ¬ twice as large,
-  [ ] { } half as large again, @ a quarter. A label is never larger than its key: past
+  [ ] { } and the arrows half as large again, @ a quarter. A label is never larger than its key: past
   that, a corner makes the keys, and so the labels, larger.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight.
