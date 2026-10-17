@@ -6,16 +6,13 @@ namespace Berpiztu.KeyPlus;
 /// Where the panel stands, kept across restarts: docked right above the
 /// keyboard and in sight only while one is open, or floating where the user
 /// left it, in sight all the time, for the places that lack only the arrows.
-/// The size of its keys holds in both. Closed (Hidden), nothing of it is in
-/// sight until the KeyPlus app is opened again.
+/// The size of its keys holds in both. One display's layout
+/// (<see cref="KeyPlusPreferences.ForDisplay"/>).
 /// </summary>
 public sealed class PanelPlacement(ISharedPreferences preferences)
 {
     public const float MinScale = 0.6f;
     public const float MaxScale = 2.5f;
-
-    /// <summary>The preference behind <see cref="Hidden"/>, which the service watches.</summary>
-    public const string HiddenKey = "hidden";
 
     private const string FloatingKey = "floating";
     private const string XKey = "x";
@@ -26,16 +23,6 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     private const string ScaleKey = "scale";
 
     public bool Floating { get; set; } = preferences.GetBoolean(FloatingKey, false);
-
-    /// <summary>
-    /// Whether KeyPlus was closed: written at once, for the app opening and the
-    /// service showing the panel again are apart.
-    /// </summary>
-    public bool Hidden
-    {
-        get => preferences.GetBoolean(HiddenKey, false);
-        set => preferences.Edit()!.PutBoolean(HiddenKey, value)!.Apply();
-    }
 
     /// <summary>The floating panel's left edge, in pixels from the display's.</summary>
     public int X { get; set; } = preferences.GetInt(XKey, 0);

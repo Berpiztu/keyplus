@@ -79,6 +79,9 @@ floating keyboard too; with no keyboard open it is out of sight.
   their height: " · = ? ¿ ' ` ^ + * ´ ¨ ; , . : - _ \ | ~ ¬ twice as large,
   [ ] { } and the arrows half as large again, @ a quarter. A label is never larger than its key: past
   that, a corner makes the keys, and so the labels, larger.
+- **Phone and DeX apart.** The window's size, place, labels' size, Keys or
+  ABC, docked or floating and minimized are kept apart for the phone's own
+  screen and for Samsung DeX, so each keeps what you made for it.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight, and always where you last left
   it, apart from the window's own place.

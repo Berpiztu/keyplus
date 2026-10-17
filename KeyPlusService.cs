@@ -46,6 +46,9 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     private Overlay? overlay;
     private PanelPlacement? placed;
 
+    /// <summary>The phone screen's layout (true) and DeX's (false).</summary>
+    private readonly Dictionary<bool, PanelPlacement> placements = [];
+
     /// <summary>Where the panel's window and size stood when a drag on its title bar, icon or a grip started.</summary>
     private (int X, int Y, int Width, int Height, float Scale) dragStart;
 
@@ -55,16 +58,14 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     protected override void OnServiceConnected()
     {
         base.OnServiceConnected();
-        var preferences = GetSharedPreferences("keyplus", Android.Content.FileCreationMode.Private)!;
-        preferences.RegisterOnSharedPreferenceChangeListener(this);
-        placed = new PanelPlacement(preferences);
+        KeyPlusPreferences.Global(this).RegisterOnSharedPreferenceChangeListener(this);
         Place();
     }
 
     /// <summary>KeyPlus closed, or opened again by the app: the panel goes, or comes back.</summary>
     public void OnSharedPreferenceChanged(Android.Content.ISharedPreferences? preferences, string? key)
     {
-        if (key == PanelPlacement.HiddenKey)
+        if (key == KeyPlusPreferences.HiddenKey)
         {
             Place();
         }
@@ -86,7 +87,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
     public override void OnDestroy()
     {
-        GetSharedPreferences("keyplus", Android.Content.FileCreationMode.Private)!.UnregisterOnSharedPreferenceChangeListener(this);
+        KeyPlusPreferences.Global(this).UnregisterOnSharedPreferenceChangeListener(this);
         Close();
         base.OnDestroy();
     }
@@ -100,20 +101,15 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// </summary>
     private void Place()
     {
-        if (placed is null)
-        {
-            return;
-        }
-
-        if (placed.Hidden)
+        if (KeyPlusPreferences.IsHidden(this))
         {
             Close();
             return;
         }
 
         var keyboard = FindKeyboard();
-
         var displayId = keyboard?.DisplayId ?? overlay?.DisplayId ?? FocusedDisplayId() ?? Display.DefaultDisplay;
+        placed = PlacementFor(displayId);
         if (overlay?.DisplayId != displayId)
         {
             Close();
@@ -288,7 +284,20 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// the app is opened again. The service stays on, for an app cannot turn
     /// an accessibility service back on; only Settings can.
     /// </summary>
-    private void OnCloseRequested() => placed!.Hidden = true;
+    private void OnCloseRequested() => KeyPlusPreferences.SetHidden(this, true);
+
+    /// <summary>The layout of a display, the phone's own screen's or DeX's, each read once and kept.</summary>
+    private PanelPlacement PlacementFor(int displayId)
+    {
+        var isPhone = displayId == Display.DefaultDisplay;
+        if (!placements.TryGetValue(isPhone, out var placement))
+        {
+            placement = new PanelPlacement(KeyPlusPreferences.ForDisplay(this, displayId));
+            placements[isPhone] = placement;
+        }
+
+        return placement;
+    }
 
     /// <summary>
     /// At a drag's start, floats the panel where it stands now and notes where
@@ -388,7 +397,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        var panel = new KeyPanel(context, SendKey, TypeText) { Scale = placed?.Scale ?? 1f };
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForDisplay(this, displayId), SendKey, TypeText) { Scale = placed?.Scale ?? 1f };
         panel.FoldedChanged += Place;
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;

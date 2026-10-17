@@ -56,7 +56,6 @@ public sealed class KeyPanel
         TopLeft = Left | Top,
     }
 
-    private const string PreferencesName = "keyplus";
     private const string FoldedPreference = "folded";
     private const string WholeKeyboardPreference = "wholeKeyboard";
     private const string LabelScalePreference = "labelScale";
@@ -127,12 +126,13 @@ public sealed class KeyPanel
 
     /// <param name="send">Sends a key with the meta state of the modifiers held for it.</param>
     /// <param name="type">Types text, as the phone's keyboard does.</param>
-    public KeyPanel(Context context, Action<Keycode, MetaKeyStates> send, Action<string> type)
+    /// <param name="preferences">The layout of the display the panel is on.</param>
+    public KeyPanel(Context context, ISharedPreferences preferences, Action<Keycode, MetaKeyStates> send, Action<string> type)
     {
         this.context = context;
         this.send = send;
         this.type = type;
-        preferences = context.GetSharedPreferences(PreferencesName, FileCreationMode.Private)!;
+        this.preferences = preferences;
         labelScale = preferences.GetFloat(LabelScalePreference, 1f);
 
         var title = new TextView(context) { Text = "KeyPlus", Gravity = GravityFlags.CenterVertical };

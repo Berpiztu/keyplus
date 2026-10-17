@@ -64,7 +64,7 @@ public sealed class MainActivity : Activity
     protected override void OnResume()
     {
         base.OnResume();
-        new PanelPlacement(GetSharedPreferences("keyplus", FileCreationMode.Private)!).Hidden = false;
+        KeyPlusPreferences.SetHidden(this, false);
         status!.Text = IsServiceOn()
             ? "KeyPlus is on: the ⌨ icon is on screen, and the keys appear whenever a keyboard is open."
             : "KeyPlus is off.";
