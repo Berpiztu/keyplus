@@ -35,7 +35,8 @@ the title bar, a row of what was copied and the rows of keys, all as tall;
 there the whole keyboard has no column at its right, so its keys are wider
 (Fn and the arrows are Inicio, Fin, RePág and AvPág), and no grips. On the
 keyboard the title bar does not move it nor ⤓ dock it, for Android places
-it; ✕ goes back to the keyboard used before.
+it; in ✕'s place it has **⚙**, its settings, whose first is **Cambiar de
+teclado**, Android's keyboard picker.
 
 | File | What it holds |
 | --- | --- |

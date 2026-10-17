@@ -49,7 +49,7 @@ public sealed class MainActivity : Activity
             "Ctrl and Alt hold for the next key: Ctrl then \"s\" is Ctrl+S. Shift stays on until pressed again. " +
             "Keys repeat while held. Move the keyboard as the headset moves any keyboard; drag a corner up or down " +
             "for larger or smaller keys. – minimizes it into the ⌨ icon, which a tap opens again. " +
-            "✕ goes back to the keyboard you used before."));
+            "⚙ at the right of its title bar has its settings: Cambiar de teclado picks another keyboard."));
 
         status = Text("");
         content.AddView(status);

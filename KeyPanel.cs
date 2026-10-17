@@ -107,13 +107,20 @@ public sealed class KeyPanel
     private static readonly Color RippleColor = Color.Argb(0x55, 0xFF, 0xFF, 0xFF);
     private static readonly Color DimTextColor = Color.Argb(0xFF, 0x9E, 0x9E, 0x9E);
 
+    /// <summary>The copied things' cards, the menu held on one and the editor: a ground a little lighter than the window's.</summary>
+    private static readonly Color CardColor = Color.Argb(0xFF, 0x2C, 0x2C, 0x2C);
+
+    /// <summary>The copied things', their menu's and the editor's words, in sp: a list's, not the keys'.</summary>
+    private const float CardTextSp = 15f;
+    private const float MenuTextSp = 16f;
+
     /// <summary>A key's legend it sends now, strong, and the ones it does not, weak.</summary>
     private static readonly Color SentLegendColor = Color.White;
     private static readonly Color OtherLegendColor = Color.Argb(0xFF, 0xA8, 0xA8, 0xA8);
 
     private readonly Context context;
-    private readonly Action<Keycode, MetaKeyStates> send;
-    private readonly Action<string> type;
+    private readonly Action<Keycode, MetaKeyStates> sendOut;
+    private readonly Action<string> typeOut;
     private readonly ISharedPreferences preferences;
     private readonly Handler handler = new(Looper.MainLooper!);
     private readonly int touchSlop;
@@ -173,8 +180,29 @@ public sealed class KeyPanel
     private readonly HorizontalScrollView clipboardLine;
     private readonly LinearLayout clipboardItems;
 
-    /// <summary>The keys the copied texts stand in place of while 📋 shows them; none while it does not.</summary>
-    private View? keysUnderClipboard;
+    /// <summary>The keys a view stands in place of (the copied texts, the settings), with the button that shows it; none while the keys show.</summary>
+    private (View Keys, View Cover, TextView Button)? covered;
+
+    /// <summary>
+    /// The editor above the keys for a copied text, Cancelar and Guardar under
+    /// it, and the text edited: the keys type into it meanwhile, not into the
+    /// field; none, no editor.
+    /// </summary>
+    private readonly LinearLayout editorBar;
+    private readonly TextView editorTitle;
+    private readonly LinearLayout editorButtons;
+    private readonly View editorGap;
+    private readonly EditText editor;
+    private ClipboardHistory.Entry? edited;
+
+    /// <summary>✕, which closes the popup once asked; a keyboard has none (<see cref="Settings"/>).</summary>
+    private readonly TextView closeButton;
+
+    /// <summary>⚙, and the settings it shows in the keys' place, each a row that does what it says.</summary>
+    private readonly TextView settingsButton;
+    private readonly ScrollView settingsView;
+    private readonly LinearLayout settingsRows;
+    private IReadOnlyList<(string Label, Action Chosen)> settings = [];
 
     /// <summary>The height the copied texts keep above the keys all the time (<see cref="ClipboardAbove"/>); 0, none.</summary>
     private int clipboardAbove;
@@ -200,8 +228,8 @@ public sealed class KeyPanel
     {
         this.context = context;
         this.clipboard = clipboard;
-        this.send = send;
-        this.type = type;
+        sendOut = send;
+        typeOut = type;
         this.preferences = preferences;
         touchSlop = ViewConfiguration.Get(context)!.ScaledTouchSlop;
 
@@ -214,7 +242,7 @@ public sealed class KeyPanel
 
         dock = TitleButton("⤓", "Docked: the keys show while a keyboard is open, where you left them; pressed again, they float, in sight all the time", () => DockRequested?.Invoke());
         var minimize = TitleButton("–", "Minimize the keys into an icon", () => SetFolded(true));
-        var close = TitleButton("✕", "Close KeyPlus", () => Ask("¿Cerrar KeyPlus?", () => CloseRequested?.Invoke()));
+        closeButton = TitleButton("✕", "Close KeyPlus", () => Ask("¿Cerrar KeyPlus?", () => CloseRequested?.Invoke()));
         var smaller = TitleButton("A−", "Smaller labels", () => SetLabelScale(labelScale - LabelScaleStep));
         var larger = TitleButton("A+", "Larger labels", () => SetLabelScale(labelScale + LabelScaleStep));
         // A↺ undoes every size made by hand, so it asks first, as ✕ does.
@@ -224,7 +252,9 @@ public sealed class KeyPanel
             UsualSizeRequested?.Invoke();
         }));
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
-        clipboardButton = TitleButton("📋", "Texts copied lately: tap one to paste it", () => ShowClipboard(keysUnderClipboard is null));
+        clipboardButton = TitleButton("📋", "Texts copied lately: tap one to paste it", () => Toggle(clipboardView!, ShowClipboard));
+        settingsButton = TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings));
+        settingsButton.Visibility = ViewStates.Gone;
         makeSmall = TitleButton("▭", "Two rows: the keys made small, with no title bar; hold PgUp to open them again", () => SetCompact(true));
 
         titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
@@ -238,7 +268,8 @@ public sealed class KeyPanel
         AddToTitleBar(switchKeys, 44);
         AddToTitleBar(dock, 36);
         AddToTitleBar(minimize, 36);
-        AddToTitleBar(close, 36);
+        AddToTitleBar(closeButton, 36);
+        AddToTitleBar(settingsButton, 36);
 
         // A window narrower than the title bar's buttons: they all narrow
         // alike, and their words with them, rather than any going out of sight.
@@ -285,18 +316,32 @@ public sealed class KeyPanel
         clipboardLine = new HorizontalScrollView(context) { Visibility = ViewStates.Gone };
         clipboardLine.AddView(clipboardItems, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         strip.AddView(clipboardLine, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
-        clipboard.Changed += () =>
-        {
-            if (clipboardView.Visibility == ViewStates.Visible)
-            {
-                FillClipboard();
-            }
-
-            if (clipboardLine.Visibility == ViewStates.Visible)
-            {
-                FillClipboardLine();
-            }
-        };
+        // The editor as Gboard's: a card with its title, the text over a line,
+        // and Cancelar and Guardar as words at its bottom right.
+        editorTitle = new TextView(context) { Text = "Editar" };
+        editorTitle.SetTextColor(Color.White);
+        editorTitle.SetTextSize(ComplexUnitType.Sp, MenuTextSp);
+        editor = new EditText(context) { ShowSoftInputOnFocus = false, ContentDescription = "The copied text, to edit" };
+        editor.SetTextColor(Color.White);
+        editor.SetTextSize(ComplexUnitType.Sp, MenuTextSp);
+        editor.BackgroundTintList = ColorStateList.ValueOf(HeldColor);
+        editor.SetMaxLines(3);
+        editorButtons = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        editorGap = new View(context);
+        editorButtons.AddView(editorGap, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        editorButtons.AddView(WordButton("Cancelar", "Leave the copied text as it was", DimTextColor, () => EndEditing(save: false)));
+        editorButtons.AddView(WordButton("Guardar", "Keep the copied text as edited", HeldColor, () => EndEditing(save: true)));
+        editorBar = new LinearLayout(context) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone, Background = Card() };
+        editorBar.SetPadding(Dp(12), Dp(8), Dp(12), Dp(4));
+        editorBar.AddView(editorTitle);
+        editorBar.AddView(editor, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        editorBar.AddView(editorButtons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        strip.AddView(editorBar, CardMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent)));
+        settingsRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        settingsView = new ScrollView(context) { Visibility = ViewStates.Gone };
+        settingsView.AddView(settingsRows);
+        strip.AddView(settingsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        clipboard.Changed += RefillClipboard;
         terminal = Rows(PanelKeys.Terminal);
         wholeKeyboard = Rows(PanelKeys.Spanish, PanelKeys.SpanishSide);
         compact = Rows(PanelKeys.Compact);
@@ -383,7 +428,7 @@ public sealed class KeyPanel
 
     /// <summary>The keys of the mode the window is in, in sight or under the copied texts.</summary>
     private View ShownKeys =>
-        keysUnderClipboard
+        covered?.Keys
         ?? (wholeKeyboard.Visibility == ViewStates.Visible ? wholeKeyboard
             : compact.Visibility == ViewStates.Visible ? compact
             : terminal);
@@ -453,13 +498,13 @@ public sealed class KeyPanel
     }
 
     /// <summary>The height of the keys in sight, which grows with <see cref="Scale"/> alone; none while the window is its icon or 📋 shows the copied texts.</summary>
-    public int KeysHeight => ShowsIcon || keysUnderClipboard is not null ? 0 : ShownKeys.Height;
+    public int KeysHeight => ShowsIcon || covered is not null ? 0 : ShownKeys.Height;
 
     /// <summary>
     /// The height of a row of the copied texts, side by side, above the keys
     /// and under the title bar, all the time, where a keyboard has room to
-    /// spare (Berpiztu AI Keyboard on a headset); 📋 is not needed there. 0,
-    /// none: 📋 shows them in the keys' place.
+    /// spare (Berpiztu AI Keyboard on a headset); 📋 still shows them all in
+    /// the keys' place, with their options, as Gboard does. 0, none.
     /// </summary>
     public int ClipboardAbove
     {
@@ -471,9 +516,8 @@ public sealed class KeyPanel
                 return;
             }
 
-            ShowClipboard(false);
+            Uncover();
             clipboardAbove = value;
-            clipboardButton.Visibility = value > 0 ? ViewStates.Gone : ViewStates.Visible;
             clipboardLine.LayoutParameters!.Height = value;
             clipboardLine.Visibility = value > 0 ? ViewStates.Visible : ViewStates.Gone;
             if (value > 0)
@@ -530,6 +574,13 @@ public sealed class KeyPanel
             repeat = null;
         }
     }
+
+    /// <summary>
+    /// The labels fitted to the keys again, once they are in sight: a
+    /// keyboard's keys may be laid out while it is out of sight, and come
+    /// into sight at the same size, which no layout change says.
+    /// </summary>
+    public void FitLabels() => FitLegendsSoon();
 
     /// <summary>Opens the window out of its icon.</summary>
     public void Unfold() => SetFolded(false);
@@ -588,7 +639,7 @@ public sealed class KeyPanel
     private void ShowMode(bool whole, bool small)
     {
         StopRepeat();
-        ShowClipboard(false);
+        Uncover();
         small &= !whole;
         terminal.Visibility = !whole && !small ? ViewStates.Visible : ViewStates.Gone;
         wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
@@ -605,154 +656,417 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// The copied texts in the keys' place, as tall as the keys were, so the
-    /// window keeps its size, a list that scrolls; or the keys again. 📋 is
-    /// filled while they show, as a held key is.
+    /// The settings ⚙ shows in the keys' place, each a row that does what it
+    /// says (Berpiztu AI Keyboard: choose another keyboard); ⚙ stands at the
+    /// right in ✕'s place, for a keyboard is not closed but changed for
+    /// another. None, no ⚙, and ✕ closes the popup.
     /// </summary>
-    private void ShowClipboard(bool open)
+    public IReadOnlyList<(string Label, Action Chosen)> Settings
     {
-        if (open == (keysUnderClipboard is not null))
+        set
+        {
+            settings = value;
+            settingsButton.Visibility = value.Count > 0 ? ViewStates.Visible : ViewStates.Gone;
+            closeButton.Visibility = value.Count > 0 ? ViewStates.Gone : ViewStates.Visible;
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
+    /// <summary>A title bar's button that shows a view in the keys' place: pressed again, or with another one showing, the keys again.</summary>
+    private void Toggle(View cover, Action show)
+    {
+        var showing = covered?.Cover == cover;
+        Uncover();
+        if (!showing)
+        {
+            show();
+        }
+    }
+
+    /// <summary>
+    /// A view in the keys' place, as tall as the keys were, so the window
+    /// keeps its size; its button filled while it shows, as a held key is.
+    /// </summary>
+    private void Cover(View cover, TextView button)
+    {
+        Uncover();
+        var keys = ShownKeys;
+        cover.LayoutParameters!.Height = Math.Max(keys.Height, RowHeight);
+        keys.Visibility = ViewStates.Gone;
+        cover.Visibility = ViewStates.Visible;
+        covered = (keys, cover, button);
+        button.Background = KeyBackground(HeldColor);
+        button.SetTextColor(HeldTextColor);
+    }
+
+    /// <summary>The keys again, in place of the copied texts or the settings.</summary>
+    private void Uncover()
+    {
+        if (covered is not { } now)
         {
             return;
         }
 
-        if (open)
+        now.Keys.Visibility = ViewStates.Visible;
+        now.Cover.Visibility = ViewStates.Gone;
+        now.Cover.LayoutParameters!.Height = 0;
+        now.Button.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
+        now.Button.SetTextColor(Color.White);
+        covered = null;
+    }
+
+    /// <summary>The copied things in the keys' place, a list that scrolls.</summary>
+    private void ShowClipboard()
+    {
+        FillClipboard();
+        clipboardView.ScrollTo(0, 0);
+        Cover(clipboardView, clipboardButton);
+    }
+
+    /// <summary>The settings in the keys' place, one row each: a tap does it and brings the keys back.</summary>
+    private void ShowSettings()
+    {
+        settingsRows.RemoveAllViews();
+        foreach (var (label, chosen) in settings)
         {
-            var keys = ShownKeys;
-            clipboardView.LayoutParameters!.Height = Math.Max(keys.Height, RowHeight);
-            keysUnderClipboard = keys;
-            keys.Visibility = ViewStates.Gone;
-            FillClipboard();
-            clipboardView.ScrollTo(0, 0);
-            clipboardView.Visibility = ViewStates.Visible;
-        }
-        else
-        {
-            keysUnderClipboard!.Visibility = ViewStates.Visible;
-            keysUnderClipboard = null;
-            clipboardView.Visibility = ViewStates.Gone;
-            clipboardView.LayoutParameters!.Height = 0;
+            var row = KeyView(label);
+            row.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
+            row.SetPadding(Dp(12), 0, Dp(12), 0);
+            row.SetTextSize(ComplexUnitType.Px, RowHeight * 0.4f);
+            row.Click += (_, _) =>
+            {
+                Uncover();
+                chosen();
+            };
+            settingsRows.AddView(row, KeyMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight - (2 * Dp(KeyMarginDp)))));
         }
 
-        clipboardButton.Background = open
-            ? KeyBackground(HeldColor)
-            : new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
-        clipboardButton.SetTextColor(open ? HeldTextColor : Color.White);
+        Cover(settingsView, settingsButton);
     }
 
     /// <summary>
-    /// One row for each thing copied, the newest first: a text on one line,
-    /// an image as small as the row. A tap pastes it into the field and
-    /// brings the keys back, ✕ takes it out of the list.
+    /// What was copied as Gboard shows it: cards in two columns, the pinned
+    /// first, then the newest, a text on up to three lines at a list's size,
+    /// an image cut to its card. A tap pastes it and brings the keys back; a
+    /// long press opens its menu beside it.
     /// </summary>
     private void FillClipboard()
     {
         clipboardRows.RemoveAllViews();
-        var height = RowHeight;
-        var textSize = height * 0.4f;
         var entries = clipboard.Entries;
         if (entries.Count == 0)
         {
-            clipboardRows.AddView(NothingCopied(textSize), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, height));
+            clipboardRows.AddView(NothingCopied(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight));
             return;
         }
 
-        foreach (var entry in entries)
+        const int Columns = 2;
+        for (var first = 0; first < entries.Count; first += Columns)
         {
-            var paste = Copied(entry, height, textSize, () =>
-            {
-                Paste(entry);
-                ShowClipboard(false);
-            });
             var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-            row.AddView(paste, KeyMargins(new LinearLayout.LayoutParams(entry.IsImage ? height * 2 : 0, ViewGroup.LayoutParams.MatchParent, entry.IsImage ? 0f : 1f)));
-            if (entry.IsImage)
+            for (var column = 0; column < Columns; column++)
             {
-                row.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+                if (first + column >= entries.Count)
+                {
+                    row.AddView(new View(context), new LinearLayout.LayoutParams(0, 1, 1f));
+                    continue;
+                }
+
+                var entry = entries[first + column];
+                var card = CopiedCard(entry, maxLines: 3, imageHeight: Dp(96), () =>
+                {
+                    Paste(entry);
+                    Uncover();
+                });
+                row.AddView(card, CardMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f)));
             }
 
-            row.AddView(Uncopy(entry, textSize), KeyMargins(new LinearLayout.LayoutParams(height, ViewGroup.LayoutParams.MatchParent)));
-            clipboardRows.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, height));
+            clipboardRows.AddView(row);
         }
     }
 
     /// <summary>
-    /// What was copied in one row, the newest first at the left: a text as
-    /// wide as it is up to a third of the row, an image twice as wide as the
-    /// row is tall. A tap pastes it, its ✕ takes it out of the list; the row
-    /// scrolls across.
+    /// What was copied in one row above the keys, the pinned first, then the
+    /// newest, at the left: cards as in the list, a text on up to two lines
+    /// and up to a third of the row wide, each with a small ✏ (a text) over
+    /// a small ✕ beside it, to edit it right there or take it out. A tap
+    /// pastes it, a long press opens its menu; the row scrolls across.
     /// </summary>
     private void FillClipboardLine()
     {
         clipboardItems.RemoveAllViews();
         var height = clipboardAbove;
-        var textSize = Math.Min(height, RowHeight) * 0.4f;
         var entries = clipboard.Entries;
         if (entries.Count == 0)
         {
-            clipboardItems.AddView(NothingCopied(textSize), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, height));
+            clipboardItems.AddView(NothingCopied(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, height));
             return;
         }
 
         foreach (var entry in entries)
         {
-            var paste = Copied(entry, height, textSize, () => Paste(entry));
-            if (paste is TextView text)
+            var card = CopiedCard(entry, maxLines: 2, imageHeight: ViewGroup.LayoutParams.MatchParent, () => Paste(entry));
+            if (card is TextView text)
             {
                 text.SetMaxWidth(Math.Max(height, root.Width / 3));
             }
 
-            clipboardItems.AddView(paste, KeyMargins(new LinearLayout.LayoutParams(entry.IsImage ? height * 2 : ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent)));
-            var remove = Uncopy(entry, textSize);
-            remove.SetTextColor(DimTextColor);
-            clipboardItems.AddView(remove, KeyMargins(new LinearLayout.LayoutParams(Math.Min(height, RowHeight) * 2 / 3, ViewGroup.LayoutParams.MatchParent)));
+            clipboardItems.AddView(card, CardMargins(new LinearLayout.LayoutParams(entry.IsImage ? height * 3 / 2 : ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent)));
+            clipboardItems.AddView(EditOrRemove(entry), new LinearLayout.LayoutParams(Dp(28), ViewGroup.LayoutParams.MatchParent));
         }
     }
 
-    private TextView NothingCopied(float textSize)
+    /// <summary>A thing copied's small ✏ (a text) over its small ✕, beside its card in the row above the keys.</summary>
+    private LinearLayout EditOrRemove(ClipboardHistory.Entry entry)
+    {
+        var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        if (!entry.IsImage)
+        {
+            column.AddView(WordButton("✏", "Edit it right here", DimTextColor, () => Edit(entry)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+        }
+
+        column.AddView(WordButton("✕", "Take it out of the list", DimTextColor, () => clipboard.Remove(entry)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+        return column;
+    }
+
+    /// <summary>The copied things again, wherever they show, after a change.</summary>
+    private void RefillClipboard()
+    {
+        if (clipboardView.Visibility == ViewStates.Visible)
+        {
+            FillClipboard();
+        }
+
+        if (clipboardLine.Visibility == ViewStates.Visible)
+        {
+            FillClipboardLine();
+        }
+    }
+
+    private TextView NothingCopied()
     {
         var none = new TextView(context) { Text = "Nothing copied yet", Gravity = GravityFlags.CenterVertical };
         none.SetTextColor(DimTextColor);
-        none.SetTextSize(ComplexUnitType.Px, textSize);
-        none.SetPadding(Dp(8), 0, Dp(8), 0);
+        none.SetTextSize(ComplexUnitType.Sp, CardTextSp);
+        none.SetPadding(Dp(12), 0, Dp(12), 0);
         return none;
     }
 
-    /// <summary>A thing copied as a key that pastes it: its text on one line, or the image, made small for the row.</summary>
-    private View Copied(ClipboardHistory.Entry entry, int height, float textSize, Action pasted)
+    /// <summary>
+    /// A thing copied as a card that pastes it: its text at a list's size on
+    /// up to so many lines, 📌 before it when pinned, or the image cut to the
+    /// card. Held, its menu opens beside it.
+    /// </summary>
+    private View CopiedCard(ClipboardHistory.Entry entry, int maxLines, int imageHeight, Action pasted)
     {
         View view;
         if (entry.IsImage)
         {
-            var image = new ImageView(context) { Background = KeyBackground(KeyColor), ContentDescription = "Paste the image" };
-            image.SetScaleType(ImageView.ScaleType.CenterInside);
-            image.SetPadding(Dp(2), Dp(2), Dp(2), Dp(2));
-            image.SetImageBitmap(Thumbnail(clipboard.PathOf(entry), height));
+            var image = new ImageView(context) { Background = Card(), ClipToOutline = true, ContentDescription = "Paste the image" };
+            image.SetScaleType(ImageView.ScaleType.CenterCrop);
+            image.SetImageBitmap(Thumbnail(clipboard.PathOf(entry), imageHeight > 0 ? imageHeight : RowHeight));
+            image.LayoutParameters = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MatchParent, imageHeight);
             view = image;
         }
         else
         {
-            var text = KeyView(entry.Text!.ReplaceLineEndings(" ⏎ "));
-            text.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
-            text.Ellipsize = Android.Text.TextUtils.TruncateAt.End;
-            text.SetPadding(Dp(8), 0, Dp(8), 0);
-            text.SetTextSize(ComplexUnitType.Px, textSize);
-            text.ContentDescription = $"Paste: {entry.Text}";
+            var text = new TextView(context)
+            {
+                Text = (entry.Pinned ? "📌 " : "") + entry.Text,
+                Background = Card(),
+                Gravity = GravityFlags.Top | GravityFlags.Left,
+                Ellipsize = Android.Text.TextUtils.TruncateAt.End,
+                ContentDescription = $"Paste: {entry.Text}",
+            };
+            text.SetTextColor(Color.White);
+            text.SetTextSize(ComplexUnitType.Sp, CardTextSp);
+            text.SetMaxLines(maxLines);
+            text.SetPadding(Dp(12), Dp(8), Dp(12), Dp(8));
+            text.SetMinHeight(Dp(48));
             view = text;
         }
 
         view.Click += (_, _) => pasted();
+        view.LongClick += (_, e) =>
+        {
+            e.Handled = true;
+            ShowMenu(view, entry, pasted);
+        };
         return view;
     }
 
-    /// <summary>A copied thing's ✕, which takes it out of the list.</summary>
-    private TextView Uncopy(ClipboardHistory.Entry entry, float textSize)
+    /// <summary>
+    /// A thing copied's menu, as Gboard has it: a card beside it with Pegar,
+    /// Fijar or Desfijar, Editar (a text) and Eliminar, each with its sign; a
+    /// touch outside it closes it. It never takes the focus, so the field
+    /// keeps it.
+    /// </summary>
+    private void ShowMenu(View anchor, ClipboardHistory.Entry entry, Action pasted)
     {
-        var remove = KeyView("✕");
-        remove.SetTextSize(ComplexUnitType.Px, textSize);
-        remove.ContentDescription = "Take it out of the list";
-        remove.Click += (_, _) => clipboard.Remove(entry);
-        return remove;
+        var menu = new LinearLayout(context) { Orientation = Orientation.Vertical, Background = Card() };
+        menu.SetPadding(0, Dp(4), 0, Dp(4));
+        var popup = new PopupWindow(menu, ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, false)
+        {
+            OutsideTouchable = true,
+            Elevation = Dp(8),
+        };
+        popup.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
+
+        void Item(string sign, string label, Action chosen)
+        {
+            var item = new TextView(context)
+            {
+                Text = $"{sign}   {label}",
+                Gravity = GravityFlags.CenterVertical,
+                Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
+            };
+            item.SetTextColor(Color.White);
+            item.SetTextSize(ComplexUnitType.Sp, MenuTextSp);
+            item.SetPadding(Dp(16), Dp(12), Dp(24), Dp(12));
+            item.SetMinWidth(Dp(176));
+            item.Click += (_, _) =>
+            {
+                popup.Dismiss();
+                chosen();
+            };
+            menu.AddView(item);
+        }
+
+        Item("📋", "Pegar", pasted);
+        Item("📌", entry.Pinned ? "Desfijar" : "Fijar", () => clipboard.SetPinned(entry, !entry.Pinned));
+        if (!entry.IsImage)
+        {
+            Item("✏", "Editar", () => Edit(entry));
+        }
+
+        Item("🗑", "Eliminar", () => clipboard.Remove(entry));
+        // Within the keyboard, which would cut it: beside the card if there
+        // is room at its right, else at its left, at the card's height, kept
+        // between the keyboard's top and bottom.
+        menu.Measure(View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified), View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
+        var card = new int[2];
+        var keyboard = new int[2];
+        anchor.GetLocationInWindow(card);
+        root.GetLocationInWindow(keyboard);
+        var right = card[0] + anchor.Width - Dp(8);
+        var x = right + menu.MeasuredWidth <= keyboard[0] + root.Width ? right : Math.Max(keyboard[0], card[0] + Dp(8) - menu.MeasuredWidth);
+        var y = Math.Clamp(card[1] + ((anchor.Height - menu.MeasuredHeight) / 2), keyboard[1], Math.Max(keyboard[1], keyboard[1] + root.Height - menu.MeasuredHeight));
+        popup.ShowAtLocation(root, GravityFlags.NoGravity, x, y);
+    }
+
+    /// <summary>A button that is a word or a sign alone, as a dialog's are: Cancelar, Guardar, ✏, ✕.</summary>
+    private TextView WordButton(string label, string description, Color color, Action pressed)
+    {
+        var button = new TextView(context)
+        {
+            Text = label,
+            Gravity = GravityFlags.Center,
+            ContentDescription = description,
+            Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
+        };
+        button.SetTextColor(color);
+        button.SetTextSize(ComplexUnitType.Sp, CardTextSp);
+        button.SetPadding(Dp(12), Dp(8), Dp(12), Dp(8));
+        button.Click += (_, _) => pressed();
+        return button;
+    }
+
+    /// <summary>A card's ground: rounded, a little lighter than the window's.</summary>
+    private GradientDrawable Card()
+    {
+        var shape = new GradientDrawable();
+        shape.SetColor(CardColor);
+        shape.SetCornerRadius(Dp(10));
+        return shape;
+    }
+
+    /// <summary>The room around a card, so cards stand apart.</summary>
+    private LinearLayout.LayoutParams CardMargins(LinearLayout.LayoutParams layout)
+    {
+        var margin = Dp(4);
+        layout.SetMargins(margin, margin, margin, margin);
+        return layout;
+    }
+
+    /// <summary>
+    /// A copied text in the editor, the keys in sight to edit it: they type
+    /// into the editor, not into the field, until Cancelar or Guardar. Where
+    /// the copied things have a row above the keys (<see cref="ClipboardAbove"/>)
+    /// the editor stands in that row, Cancelar and Guardar at its right, so
+    /// nothing else moves; else as a card above the keys, as Gboard's.
+    /// </summary>
+    private void Edit(ClipboardHistory.Entry entry)
+    {
+        Uncover();
+        edited = entry;
+        editor.Text = entry.Text;
+        editor.SetSelection(editor.Text?.Length ?? 0);
+        var inRow = clipboardAbove > 0;
+        editorBar.Orientation = inRow ? Orientation.Horizontal : Orientation.Vertical;
+        editorBar.LayoutParameters = CardMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, inRow ? clipboardAbove - Dp(8) : ViewGroup.LayoutParams.WrapContent));
+        editorTitle.Visibility = inRow ? ViewStates.Gone : ViewStates.Visible;
+        editor.LayoutParameters = inRow
+            ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f)
+            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
+        editorButtons.LayoutParameters = inRow
+            ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent)
+            : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
+        editorGap.Visibility = inRow ? ViewStates.Gone : ViewStates.Visible;
+        clipboardLine.Visibility = inRow ? ViewStates.Gone : clipboardLine.Visibility;
+        editorBar.Visibility = ViewStates.Visible;
+        editor.RequestFocus();
+    }
+
+    /// <summary>The editor closed: the text edited kept in its place in the list (Guardar), or left as it was (Cancelar); the keys type into the field again.</summary>
+    private void EndEditing(bool save)
+    {
+        if (edited is null)
+        {
+            return;
+        }
+
+        if (save)
+        {
+            clipboard.Replace(edited, editor.Text ?? "");
+        }
+
+        edited = null;
+        editor.ClearFocus();
+        editorBar.Visibility = ViewStates.Gone;
+        if (clipboardAbove > 0)
+        {
+            clipboardLine.Visibility = ViewStates.Visible;
+            FillClipboardLine();
+        }
+    }
+
+    /// <summary>A key sent to the field, or, while a copied text is edited, to the editor, which moves, selects and deletes as a field does.</summary>
+    private void Send(Keycode code, MetaKeyStates meta)
+    {
+        if (edited is null)
+        {
+            sendOut(code, meta);
+            return;
+        }
+
+        KeySender.Send(key => editor.DispatchKeyEvent(key), code, meta);
+    }
+
+    /// <summary>Text typed into the field, or, while a copied text is edited, into the editor, in place of what is selected there.</summary>
+    private void Type(string text)
+    {
+        if (edited is null)
+        {
+            typeOut(text);
+            return;
+        }
+
+        var start = Math.Max(0, Math.Min(editor.SelectionStart, editor.SelectionEnd));
+        var end = Math.Max(0, Math.Max(editor.SelectionStart, editor.SelectionEnd));
+        editor.EditableText!.Replace(start, end, new Java.Lang.String(text));
     }
 
     /// <summary>An image read no larger than it is shown, a row's height, so twenty of them cost little memory.</summary>
@@ -778,7 +1092,7 @@ public sealed class KeyPanel
         }
         else
         {
-            type(entry.Text!);
+            typeOut(entry.Text!);
         }
     }
 
@@ -1082,7 +1396,7 @@ public sealed class KeyPanel
             // Windows pressed twice, nothing between: Windows alone, the Start menu.
             if (key.Modifier == Held.Windows && held.HasFlag(Held.Windows))
             {
-                send(key.Code, MetaKeyStates.None);
+                Send(key.Code, MetaKeyStates.None);
             }
 
             SetHeld(held ^ key.Modifier);
@@ -1101,11 +1415,11 @@ public sealed class KeyPanel
         }
 
         var meta = PanelKeys.MetaOf((shifted ? held & ~Held.Shift : held) | key.With);
-        send(code, meta);
+        Send(code, meta);
         SetHeld(held & (Held.Shift | Held.CapsLock | Held.Fn));
         if (key.RepeatsWhenHeld)
         {
-            StartRepeat(() => send(code, meta));
+            StartRepeat(() => Send(code, meta));
         }
     }
 
@@ -1128,7 +1442,7 @@ public sealed class KeyPanel
         {
             var accent = deadAccent;
             deadAccent = null;
-            type(PanelKeys.Compose(accent, text));
+            Type(PanelKeys.Compose(accent, text));
         }
         else if (PanelKeys.IsDead(text))
         {
@@ -1137,12 +1451,12 @@ public sealed class KeyPanel
         }
         else
         {
-            type(text);
+            Type(text);
         }
 
         if (key.RepeatsWhenHeld)
         {
-            StartRepeat(() => type(text));
+            StartRepeat(() => Type(text));
         }
     }
 

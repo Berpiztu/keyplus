@@ -18,8 +18,8 @@ namespace Berpiztu.KeyPlus;
 /// keyboard and Keys the strip's. Android sets where it stands and its width,
 /// so the title bar does not move it nor ⤓ dock it; A−, A+ and the grips size
 /// the keys, kept per screen and mode as the service's window keeps them, ▭
-/// makes it two rows, – folds it into the ⌨ icon, and ✕ goes back to the
-/// keyboard used before. It is a product of its own
+/// makes it two rows, – folds it into the ⌨ icon, and ⚙, in ✕'s place,
+/// shows its settings, the keyboard picker first. It is a product of its own
 /// (-p:KeyPlusProduct=Keyboard); the popup is the other.
 /// </summary>
 [Service(Name = "ai.berpiztu.keyboard.KeyPlusKeyboard", Label = "@string/keyboard_label",
@@ -60,6 +60,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
+        panel?.FitLabels();
         screenshots?.Start();
     }
 
@@ -136,7 +137,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
         placed = new PanelPlacement(preferences);
-        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText) { Dockable = false, PasteImage = PasteImage };
+        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText)
+        {
+            Dockable = false,
+            PasteImage = PasteImage,
+            Settings = [("Cambiar de teclado", () => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker())],
+        };
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
         panel.Resizing += OnResizing;
@@ -150,7 +156,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         panel.UsualSizeRequested += OnUsualSizeRequested;
         panel.ModeChanged += OnModeChanged;
-        panel.CloseRequested += OnCloseRequested;
         return panel.Root;
     }
 
@@ -263,15 +268,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
-    }
-
-    /// <summary>✕, once asked: the keyboard used before KeyPlus's comes back, or, with none, the keyboard goes.</summary>
-    private void OnCloseRequested()
-    {
-        if (!SwitchToPreviousInputMethod())
-        {
-            RequestHideSelf(0);
-        }
     }
 
     private void SendKey(Keycode code, MetaKeyStates meta)
