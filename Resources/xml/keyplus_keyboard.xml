@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- KeyPlus's own keyboard: the same keys as the accessibility service's
+     window, as the keyboard itself, for where an overlay cannot be moved
+     (Android XR places it). The globe key's switching to the next keyboard
+     is offered, as any keyboard's. -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsSwitchingToNextInputMethod="true" />

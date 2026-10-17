@@ -1,14 +1,21 @@
 # KeyPlus
 
 The keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, the arrows,
-Home, End, Page up and Page down) in a strip right above whatever keyboard is
-open, sent to the field being typed in: a terminal, an SSH app, or a web
-editor such as vscode.dev or code-server in the browser. It works beside the
-keyboard you already use; it does not replace it.
+Home, End, Page up and Page down), sent to the field being typed in: a
+terminal, an SSH app, or a web editor such as vscode.dev or code-server in
+the browser. Two products, two apps built from the same code, which can be
+on one phone together:
+
+- **KeyPlus** (the popup, `ai.berpiztu.keyplus`): the keys in a strip right
+  above whatever keyboard is open. It works beside the keyboard you already
+  use; it does not replace it.
+- **Berpiztu AI Keyboard** (`ai.berpiztu.keyboard`): the same keys and
+  title bar as a keyboard of its own, for any Android, and the one for a
+  headset (Galaxy XR).
 
 ## How it works
 
-Android allows one keyboard at a time, so KeyPlus is not a keyboard but an
+Android allows one keyboard at a time, so the popup is not a keyboard but an
 **accessibility service**. Since Android 13 such a service can get its own
 input connection to the focused editor (`flagInputMethodEditor`) and send key
 events through it; a browser turns them into the page's `keydown` events.
@@ -18,18 +25,46 @@ keyboard's window is, on whichever display (Samsung DeX is a display of its
 own), and sits right above it, as wide as the keyboard, so it follows a
 floating keyboard too; with no keyboard open it is out of sight.
 
+On a headset (Galaxy XR, Android XR) the popup cannot follow the keyboard:
+the headset keeps an accessibility overlay before the user's eyes, and
+places the keyboard where the user moves it without Android knowing where.
+There the **keyboard** is KeyPlus: the headset places it and lets the user
+move it. The headset gives every keyboard the same box (1166 × 656 pixels on
+the Galaxy XR): the keyboard fills it, the keys across its width and, under
+the title bar, a row of what was copied and the rows of keys, all as tall;
+there the whole keyboard has no column at its right, so its keys are wider
+(Fn and the arrows are Inicio, Fin, RePág and AvPág), and no grips. On the
+keyboard the title bar does not move it nor ⤓ dock it, for Android places
+it; ✕ goes back to the keyboard used before.
+
 | File | What it holds |
 | --- | --- |
 | [PanelKeys.cs](PanelKeys.cs) | The layouts (the editing shortcuts over Termux's two rows; the whole Spanish keyboard), the dead keys' accents, the meta state of held modifiers |
 | [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
+| [KeyPlusKeyboard.cs](KeyPlusKeyboard.cs) | The keyboard product: the same panel as a keyboard of its own |
+| [KeySender.cs](KeySender.cs) | Sending a key with its scan code and its modifiers pressed around it, for both products |
+| [ClipboardHistory.cs](ClipboardHistory.cs) | What was copied lately, texts and images, kept to paste again |
+| [ClipboardImages.cs](ClipboardImages.cs) | The keyboard's images handed to the app they are pasted into |
+| [ScreenshotWatcher.cs](ScreenshotWatcher.cs) | Each new screenshot into the keyboard's copied list |
 | [ScanCodes.cs](ScanCodes.cs) | The scan code a hardware keyboard sends with each key, which remote desktop apps go by |
 | [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
 | [MainActivity.cs](MainActivity.cs) | The app's one screen: what it does, whether it is on, the way to Settings |
 
 ## Using it
 
+- **What was copied** is kept to paste again, the last 20. **📋** in the
+  title bar shows it in the keys' place; a tap pastes it, **✕** takes it out
+  of the list. Berpiztu AI Keyboard keeps whatever is copied in any app,
+  images too (Chrome's "Copy image"), and, once its app is let read the
+  photos (**Allow screenshots**), each screenshot taken from then on, for
+  Android puts none on the clipboard; an image pastes into a field that
+  takes images (Chrome, Telegram), and a field that does not says so. The
+  popup keeps what its own Ctrl+C and Ctrl+X copy, texts alone: Android
+  keeps the clipboard from an accessibility service. On a headset the
+  keyboard shows what was copied in a row of its own above the keys, every
+  row as tall, the keyboard as tall as the headset's box.
 - **Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in
   the top row, beside **Del** (delete forward); **⌫** (Backspace) and **⏎**
   (Enter) end the terminal's two rows.
@@ -116,20 +151,37 @@ Needs the .NET 10 SDK with the `android` workload
 
 ```powershell
 dotnet build                 # Debug build
-.\debug.ps1 -Phone           # Debug build installed on the phone (cable or Wi-Fi) and opened
+dotnet build -p:KeyPlusProduct=Keyboard   # the keyboard's (Popup by default)
+.\debug.ps1 -Phone           # Debug build installed on the phone (cable or Wi-Fi), turned on and opened
 .\debug.ps1 -Emulator        # the same on an emulator, started if none runs
-.\build-apk.ps1              # Release APK, copied to dist\KeyPlus-1.0.0.<build>.apk
+.\deploy.ps1                 # Release APK built and installed on the phone, turned on, app opened
+.\build-apk.ps1              # both Release APKs, in dist\KeyPlus-Popup-1.0.0.<build>.apk
+                             #   and dist\Berpiztu-AI-Keyboard-1.0.0.<build>.apk
+.\enable.ps1                 # KeyPlus turned on by adb: the popup's service, or the keyboard
 ```
 
-Then on the phone:
+debug.ps1, deploy.ps1 and enable.ps1 take `-Product Popup` or
+`-Product Keyboard`; without it a headset gets the keyboard and any other
+device asks. Each APK carries everything it runs, so it installs with no
+computer: copy it to the device and open it there.
 
-1. Copy `dist\KeyPlus-1.0.0.<build>.apk` to it and open it to install it
-   (Android asks to allow installing from the app that opens it).
+Then on the phone, for the popup:
+
+1. Copy `dist\KeyPlus-Popup-1.0.0.<build>.apk` to it and open it to install
+   it (Android asks to allow installing from the app that opens it).
 2. Open **KeyPlus** and choose **Open accessibility settings**.
 3. Turn on **KeyPlus keys**.
 4. If Android says the setting is restricted (Android 13 and later do so for
    apps not installed from a store), choose **Open app info** in KeyPlus,
    then **⋮ → Allow restricted settings**, and turn it on again.
+
+For the keyboard, on a phone or a headset:
+
+1. Copy `dist\Berpiztu-AI-Keyboard-1.0.0.<build>.apk` to it and open it to
+   install it.
+2. Open **Berpiztu AI Keyboard** and choose **Open keyboard settings**.
+3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
+   keyboard**.
 
 ## Limits
 

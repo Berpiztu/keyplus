@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- KeyPlus: the keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift,
-       arrows, Home, End, pages) in a strip above whatever keyboard is open,
-       sent to the field being typed in. An accessibility service, not a
-       keyboard: Android 13 lets one write to the focused editor beside the
+       arrows, Home, End, pages), sent to the field being typed in. The popup
+       is an accessibility service in a strip above whatever keyboard is
+       open: Android 13 lets one write to the focused editor beside the
        user's own keyboard, which is why the minimum is API 33. -->
   <Import Project="version.props" />
 
@@ -15,7 +15,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <RootNamespace>Berpiztu.KeyPlus</RootNamespace>
-    <ApplicationId>com.berpiztu.keyplus</ApplicationId>
+    <ApplicationId>ai.berpiztu.keyplus</ApplicationId>
     <ApplicationVersion>$(BuildNumber)</ApplicationVersion>
     <ApplicationDisplayVersion>1.0.0.$(BuildNumber)</ApplicationDisplayVersion>
     <!-- Only the APK, which is copied to the phone: no app bundle for a store,
@@ -27,5 +27,34 @@
     <Authors>Berpiztu</Authors>
     <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
   </PropertyGroup>
+
+  <!-- Two products from the same code, each an app of its own, so both can
+       be on one phone (-p:KeyPlusProduct=Keyboard):
+       Popup, the accessibility service's window above the user's keyboard;
+       Keyboard, Berpiztu AI Keyboard, the keys as a keyboard of their own,
+       for any Android and for a
+       headset (Galaxy XR), which keeps a popup before the user's eyes and
+       places only a keyboard where the user moves it. Each builds into its
+       own folders, so neither reuses the other's. -->
+  <PropertyGroup>
+    <KeyPlusProduct Condition="'$(KeyPlusProduct)' == ''">Popup</KeyPlusProduct>
+    <OutputPath>bin\$(KeyPlusProduct)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\$(KeyPlusProduct)\$(Configuration)\</IntermediateOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
+    <ApplicationId>ai.berpiztu.keyboard</ApplicationId>
+    <DefineConstants>$(DefineConstants);KEYBOARD</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
+    <Compile Remove="KeyPlusService.cs;SelectionInputMethod.cs" />
+    <AndroidResource Remove="Resources\xml\keyplus_accessibility.xml" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
+    <Compile Remove="KeyPlusKeyboard.cs;ClipboardImages.cs;ScreenshotWatcher.cs" />
+    <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml" />
+  </ItemGroup>
 
 </Project>

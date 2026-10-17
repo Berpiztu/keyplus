@@ -21,7 +21,7 @@ namespace Berpiztu.KeyPlus;
 /// row and the terminal's two or the whole keyboard; and a grip at each
 /// corner that resizes it, across for its width and up or down for its keys'
 /// size. Where the window stands is
-/// <see cref="KeyPlusService"/>'s: the title bar, the icon and the grips only
+/// the popup's service's (KeyPlusService): the title bar, the icon and the grips only
 /// say how far they were dragged.
 /// Ctrl, Alt and AltGr are held as Termux holds them: pressed once they stay
 /// down, filled, for the next key, here or typed on the phone's keyboard
@@ -137,6 +137,9 @@ public sealed class KeyPanel
     /// <summary>The rows and the side column's keys, whose heights follow <see cref="Scale"/> and nothing else.</summary>
     private readonly List<View> rowViews = [];
     private readonly List<View> sideKeys = [];
+
+    /// <summary>The whole keyboard's column at its right (ImpPnt, Inicio, Fin, RePág, AvPág).</summary>
+    private View? sideColumn;
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
     private readonly LinearLayout terminal;
@@ -145,6 +148,10 @@ public sealed class KeyPanel
     /// <summary>Keys made small: two rows, no title bar.</summary>
     private readonly LinearLayout compact;
     private readonly TextView makeSmall;
+
+    /// <summary>The grips at the four corners, and the bar along the bottom that holds two of them.</summary>
+    private readonly List<View> grips = [];
+    private readonly LinearLayout bottomBar;
     private readonly TextView tab;
     private readonly LinearLayout titleBar;
     private readonly LinearLayout closeBar;
@@ -155,6 +162,22 @@ public sealed class KeyPanel
     private bool iconOnly;
     private readonly TextView dock;
     private readonly TextView switchKeys;
+
+    /// <summary>The texts copied lately, and 📋, which shows them in the keys' place to paste one.</summary>
+    private readonly ClipboardHistory clipboard;
+    private readonly TextView clipboardButton;
+    private readonly ScrollView clipboardView;
+    private readonly LinearLayout clipboardRows;
+
+    /// <summary>The copied texts side by side in one row above the keys (<see cref="ClipboardAbove"/>).</summary>
+    private readonly HorizontalScrollView clipboardLine;
+    private readonly LinearLayout clipboardItems;
+
+    /// <summary>The keys the copied texts stand in place of while 📋 shows them; none while it does not.</summary>
+    private View? keysUnderClipboard;
+
+    /// <summary>The height the copied texts keep above the keys all the time (<see cref="ClipboardAbove"/>); 0, none.</summary>
+    private int clipboardAbove;
     private Java.Lang.Runnable? repeat;
     private Held held;
     private string? deadAccent;
@@ -172,18 +195,22 @@ public sealed class KeyPanel
     /// <param name="send">Sends a key with the meta state of the modifiers held for it.</param>
     /// <param name="type">Types text, as the phone's keyboard does.</param>
     /// <param name="preferences">The layout of the display the panel is on.</param>
-    public KeyPanel(Context context, ISharedPreferences preferences, Action<Keycode, MetaKeyStates> send, Action<string> type)
+    /// <param name="clipboard">The texts copied lately, which 📋 lists.</param>
+    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type)
     {
         this.context = context;
+        this.clipboard = clipboard;
         this.send = send;
         this.type = type;
         this.preferences = preferences;
         touchSlop = ViewConfiguration.Get(context)!.ScaledTouchSlop;
 
         // No name in the title bar, so its buttons have the room: what is
-        // left between them is the place to hold and move the window by.
-        var title = new View(context) { ContentDescription = "Hold to move the keys" };
-        HoldToMove(title, tapped: null, resizes: false);
+        // left between them is the place to drag the window by.
+        var title = new View(context) { ContentDescription = "Drag to move the keys" };
+        // The bar's free room is dragged at once, as a window's title is: a
+        // headset's pinch (Galaxy XR) never holds still enough for a long press.
+        Draggable(title, (drag, dx, dy) => Moving?.Invoke(drag, dx, dy), tapped: null);
 
         dock = TitleButton("⤓", "Docked: the keys show while a keyboard is open, where you left them; pressed again, they float, in sight all the time", () => DockRequested?.Invoke());
         var minimize = TitleButton("–", "Minimize the keys into an icon", () => SetFolded(true));
@@ -197,6 +224,7 @@ public sealed class KeyPanel
             UsualSizeRequested?.Invoke();
         }));
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
+        clipboardButton = TitleButton("📋", "Texts copied lately: tap one to paste it", () => ShowClipboard(keysUnderClipboard is null));
         makeSmall = TitleButton("▭", "Two rows: the keys made small, with no title bar; hold PgUp to open them again", () => SetCompact(true));
 
         titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
@@ -206,6 +234,7 @@ public sealed class KeyPanel
         AddToTitleBar(larger, 36);
         AddToTitleBar(usual, 36);
         AddToTitleBar(makeSmall, 36);
+        AddToTitleBar(clipboardButton, 36);
         AddToTitleBar(switchKeys, 44);
         AddToTitleBar(dock, 36);
         AddToTitleBar(minimize, 36);
@@ -238,7 +267,7 @@ public sealed class KeyPanel
         closeBar.AddView(no, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         AddToTitleBar(Grip("◥", Corner.TopRight), 24);
 
-        var bottomBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        bottomBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         bottomBar.AddView(Grip("◣", Corner.BottomLeft), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
         bottomBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         bottomBar.AddView(Grip("◢", Corner.BottomRight), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
@@ -248,6 +277,26 @@ public sealed class KeyPanel
         strip.SetPadding(Dp(KeyMarginDp), 0, Dp(KeyMarginDp), 0);
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
+        clipboardRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        clipboardView = new ScrollView(context) { Visibility = ViewStates.Gone };
+        clipboardView.AddView(clipboardRows);
+        strip.AddView(clipboardView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        clipboardItems = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        clipboardLine = new HorizontalScrollView(context) { Visibility = ViewStates.Gone };
+        clipboardLine.AddView(clipboardItems, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        strip.AddView(clipboardLine, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        clipboard.Changed += () =>
+        {
+            if (clipboardView.Visibility == ViewStates.Visible)
+            {
+                FillClipboard();
+            }
+
+            if (clipboardLine.Visibility == ViewStates.Visible)
+            {
+                FillClipboardLine();
+            }
+        };
         terminal = Rows(PanelKeys.Terminal);
         wholeKeyboard = Rows(PanelKeys.Spanish, PanelKeys.SpanishSide);
         compact = Rows(PanelKeys.Compact);
@@ -328,9 +377,16 @@ public sealed class KeyPanel
 
     /// <summary>The mode the window is in: the strip's keys or the whole keyboard (<see cref="PanelPlacement.KeysMode"/>, <see cref="PanelPlacement.WholeKeyboardMode"/>).</summary>
     public string Mode =>
-        wholeKeyboard.Visibility == ViewStates.Visible ? PanelPlacement.WholeKeyboardMode
-        : compact.Visibility == ViewStates.Visible ? PanelPlacement.CompactMode
+        ShownKeys == wholeKeyboard ? PanelPlacement.WholeKeyboardMode
+        : ShownKeys == compact ? PanelPlacement.CompactMode
         : PanelPlacement.KeysMode;
+
+    /// <summary>The keys of the mode the window is in, in sight or under the copied texts.</summary>
+    private View ShownKeys =>
+        keysUnderClipboard
+        ?? (wholeKeyboard.Visibility == ViewStates.Visible ? wholeKeyboard
+            : compact.Visibility == ViewStates.Visible ? compact
+            : terminal);
 
     /// <summary>Whether the window floats, which is when ⤓ can dock it.</summary>
     public bool Floating
@@ -344,6 +400,97 @@ public sealed class KeyPanel
             dock.SetTextColor(value ? Color.White : HeldTextColor);
         }
     }
+
+    /// <summary>
+    /// Whether ⤓ is in the title bar: not in Berpiztu AI Keyboard
+    /// (KeyPlusKeyboard), which stands where Android puts it, with no other
+    /// keyboard to dock above.
+    /// </summary>
+    public bool Dockable
+    {
+        set
+        {
+            dock.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+
+            // Not laid out yet, the bar is fitted once it is.
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the corners' grips resize the window: not where the keys fill
+    /// the room they are given (Berpiztu AI Keyboard on a headset), which
+    /// sets their size itself.
+    /// </summary>
+    public bool Resizable
+    {
+        set
+        {
+            foreach (var grip in grips)
+            {
+                grip.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+            }
+
+            bottomBar.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the whole keyboard has its column at the right: not where its
+    /// width is short (Berpiztu AI Keyboard on a headset), so the other keys
+    /// are wider; Fn and the arrows are Inicio, Fin, RePág and AvPág there.
+    /// </summary>
+    public bool SideKeys
+    {
+        set => sideColumn!.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+    }
+
+    /// <summary>The height of the keys in sight, which grows with <see cref="Scale"/> alone; none while the window is its icon or 📋 shows the copied texts.</summary>
+    public int KeysHeight => ShowsIcon || keysUnderClipboard is not null ? 0 : ShownKeys.Height;
+
+    /// <summary>
+    /// The height of a row of the copied texts, side by side, above the keys
+    /// and under the title bar, all the time, where a keyboard has room to
+    /// spare (Berpiztu AI Keyboard on a headset); 📋 is not needed there. 0,
+    /// none: 📋 shows them in the keys' place.
+    /// </summary>
+    public int ClipboardAbove
+    {
+        get => clipboardAbove;
+        set
+        {
+            if (value == clipboardAbove)
+            {
+                return;
+            }
+
+            ShowClipboard(false);
+            clipboardAbove = value;
+            clipboardButton.Visibility = value > 0 ? ViewStates.Gone : ViewStates.Visible;
+            clipboardLine.LayoutParameters!.Height = value;
+            clipboardLine.Visibility = value > 0 ? ViewStates.Visible : ViewStates.Gone;
+            if (value > 0)
+            {
+                FillClipboardLine();
+            }
+
+            clipboardLine.RequestLayout();
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
+    /// <summary>Pastes an image copied into the field, where the panel can (Berpiztu AI Keyboard); none, the images are listed but not pasted.</summary>
+    public Action<ClipboardHistory.Entry>? PasteImage { get; set; }
 
     /// <summary>The keys' size, 1 for the usual one; the strip grows or shrinks with it.</summary>
     public float Scale
@@ -441,6 +588,7 @@ public sealed class KeyPanel
     private void ShowMode(bool whole, bool small)
     {
         StopRepeat();
+        ShowClipboard(false);
         small &= !whole;
         terminal.Visibility = !whole && !small ? ViewStates.Visible : ViewStates.Gone;
         wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
@@ -454,6 +602,184 @@ public sealed class KeyPanel
         SizeLabels();
         FitLegendsSoon();
         switchKeys.Text = whole ? "Keys" : "ABC";
+    }
+
+    /// <summary>
+    /// The copied texts in the keys' place, as tall as the keys were, so the
+    /// window keeps its size, a list that scrolls; or the keys again. 📋 is
+    /// filled while they show, as a held key is.
+    /// </summary>
+    private void ShowClipboard(bool open)
+    {
+        if (open == (keysUnderClipboard is not null))
+        {
+            return;
+        }
+
+        if (open)
+        {
+            var keys = ShownKeys;
+            clipboardView.LayoutParameters!.Height = Math.Max(keys.Height, RowHeight);
+            keysUnderClipboard = keys;
+            keys.Visibility = ViewStates.Gone;
+            FillClipboard();
+            clipboardView.ScrollTo(0, 0);
+            clipboardView.Visibility = ViewStates.Visible;
+        }
+        else
+        {
+            keysUnderClipboard!.Visibility = ViewStates.Visible;
+            keysUnderClipboard = null;
+            clipboardView.Visibility = ViewStates.Gone;
+            clipboardView.LayoutParameters!.Height = 0;
+        }
+
+        clipboardButton.Background = open
+            ? KeyBackground(HeldColor)
+            : new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
+        clipboardButton.SetTextColor(open ? HeldTextColor : Color.White);
+    }
+
+    /// <summary>
+    /// One row for each thing copied, the newest first: a text on one line,
+    /// an image as small as the row. A tap pastes it into the field and
+    /// brings the keys back, ✕ takes it out of the list.
+    /// </summary>
+    private void FillClipboard()
+    {
+        clipboardRows.RemoveAllViews();
+        var height = RowHeight;
+        var textSize = height * 0.4f;
+        var entries = clipboard.Entries;
+        if (entries.Count == 0)
+        {
+            clipboardRows.AddView(NothingCopied(textSize), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, height));
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            var paste = Copied(entry, height, textSize, () =>
+            {
+                Paste(entry);
+                ShowClipboard(false);
+            });
+            var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+            row.AddView(paste, KeyMargins(new LinearLayout.LayoutParams(entry.IsImage ? height * 2 : 0, ViewGroup.LayoutParams.MatchParent, entry.IsImage ? 0f : 1f)));
+            if (entry.IsImage)
+            {
+                row.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            }
+
+            row.AddView(Uncopy(entry, textSize), KeyMargins(new LinearLayout.LayoutParams(height, ViewGroup.LayoutParams.MatchParent)));
+            clipboardRows.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, height));
+        }
+    }
+
+    /// <summary>
+    /// What was copied in one row, the newest first at the left: a text as
+    /// wide as it is up to a third of the row, an image twice as wide as the
+    /// row is tall. A tap pastes it, its ✕ takes it out of the list; the row
+    /// scrolls across.
+    /// </summary>
+    private void FillClipboardLine()
+    {
+        clipboardItems.RemoveAllViews();
+        var height = clipboardAbove;
+        var textSize = Math.Min(height, RowHeight) * 0.4f;
+        var entries = clipboard.Entries;
+        if (entries.Count == 0)
+        {
+            clipboardItems.AddView(NothingCopied(textSize), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, height));
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            var paste = Copied(entry, height, textSize, () => Paste(entry));
+            if (paste is TextView text)
+            {
+                text.SetMaxWidth(Math.Max(height, root.Width / 3));
+            }
+
+            clipboardItems.AddView(paste, KeyMargins(new LinearLayout.LayoutParams(entry.IsImage ? height * 2 : ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent)));
+            var remove = Uncopy(entry, textSize);
+            remove.SetTextColor(DimTextColor);
+            clipboardItems.AddView(remove, KeyMargins(new LinearLayout.LayoutParams(Math.Min(height, RowHeight) * 2 / 3, ViewGroup.LayoutParams.MatchParent)));
+        }
+    }
+
+    private TextView NothingCopied(float textSize)
+    {
+        var none = new TextView(context) { Text = "Nothing copied yet", Gravity = GravityFlags.CenterVertical };
+        none.SetTextColor(DimTextColor);
+        none.SetTextSize(ComplexUnitType.Px, textSize);
+        none.SetPadding(Dp(8), 0, Dp(8), 0);
+        return none;
+    }
+
+    /// <summary>A thing copied as a key that pastes it: its text on one line, or the image, made small for the row.</summary>
+    private View Copied(ClipboardHistory.Entry entry, int height, float textSize, Action pasted)
+    {
+        View view;
+        if (entry.IsImage)
+        {
+            var image = new ImageView(context) { Background = KeyBackground(KeyColor), ContentDescription = "Paste the image" };
+            image.SetScaleType(ImageView.ScaleType.CenterInside);
+            image.SetPadding(Dp(2), Dp(2), Dp(2), Dp(2));
+            image.SetImageBitmap(Thumbnail(clipboard.PathOf(entry), height));
+            view = image;
+        }
+        else
+        {
+            var text = KeyView(entry.Text!.ReplaceLineEndings(" ⏎ "));
+            text.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
+            text.Ellipsize = Android.Text.TextUtils.TruncateAt.End;
+            text.SetPadding(Dp(8), 0, Dp(8), 0);
+            text.SetTextSize(ComplexUnitType.Px, textSize);
+            text.ContentDescription = $"Paste: {entry.Text}";
+            view = text;
+        }
+
+        view.Click += (_, _) => pasted();
+        return view;
+    }
+
+    /// <summary>A copied thing's ✕, which takes it out of the list.</summary>
+    private TextView Uncopy(ClipboardHistory.Entry entry, float textSize)
+    {
+        var remove = KeyView("✕");
+        remove.SetTextSize(ComplexUnitType.Px, textSize);
+        remove.ContentDescription = "Take it out of the list";
+        remove.Click += (_, _) => clipboard.Remove(entry);
+        return remove;
+    }
+
+    /// <summary>An image read no larger than it is shown, a row's height, so twenty of them cost little memory.</summary>
+    private static Bitmap? Thumbnail(string path, int height)
+    {
+        var bounds = new BitmapFactory.Options { InJustDecodeBounds = true };
+        BitmapFactory.DecodeFile(path, bounds);
+        var sample = 1;
+        while (bounds.OutHeight / (sample * 2) >= height)
+        {
+            sample *= 2;
+        }
+
+        return BitmapFactory.DecodeFile(path, new BitmapFactory.Options { InSampleSize = sample });
+    }
+
+    /// <summary>A thing copied pasted into the field: a text typed, an image handed to the field by <see cref="PasteImage"/>.</summary>
+    private void Paste(ClipboardHistory.Entry entry)
+    {
+        if (entry.IsImage)
+        {
+            PasteImage?.Invoke(entry);
+        }
+        else
+        {
+            type(entry.Text!);
+        }
     }
 
     private void ShowFolded(bool folded)
@@ -470,7 +796,7 @@ public sealed class KeyPanel
     /// (two lines, or one with Fn, Shift or Alt Gr held) changes the
     /// keyboard's height, and the side column's keys stand level with the rows.
     /// </summary>
-    private int RowHeight => Dp(56 * scale);
+    public int RowHeight => Dp(56 * scale);
 
     /// <param name="side">Keys in a column at the right, one beside each row.</param>
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)
@@ -509,6 +835,7 @@ public sealed class KeyPanel
         }
 
         var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        sideColumn = column;
         foreach (var key in side)
         {
             var view = PanelKeyView(key);
@@ -663,14 +990,16 @@ public sealed class KeyPanel
 
         public void Begin(MotionEvent motion)
         {
-            (startX, startY, held, slid, corner) = (motion.RawX, motion.RawY, false, false, null);
+            var (x, y) = OnScreen(view, motion);
+            (startX, startY, held, slid, corner) = (x, y, false, false, null);
             waiting = new Java.Lang.Runnable(Hold);
             panel.handler.PostDelayed(waiting, LongPressMs);
         }
 
         public void Track(MotionEvent motion)
         {
-            var (dx, dy) = (motion.RawX - startX, motion.RawY - startY);
+            var (x, y) = OnScreen(view, motion);
+            var (dx, dy) = (x - startX, y - startY);
             if (held)
             {
                 Report(Drag.Move, dx, dy);
@@ -688,7 +1017,8 @@ public sealed class KeyPanel
             Cancel();
             if (held)
             {
-                Report(Drag.End, motion.RawX - startX, motion.RawY - startY);
+                var (x, y) = OnScreen(view, motion);
+                Report(Drag.End, x - startX, y - startY);
                 return false;
             }
 
@@ -922,7 +1252,7 @@ public sealed class KeyPanel
     /// <summary>The title bar's pieces at their widths, or, where the bar is narrower than they, all narrower alike.</summary>
     private void FitTitleBar(int width)
     {
-        var wanted = Dp(titleParts.Sum(part => part.WidthDp));
+        var wanted = Dp(titleParts.Where(part => part.View.Visibility != ViewStates.Gone).Sum(part => part.WidthDp));
         var share = Math.Min(1f, width / (float)wanted);
         foreach (var (view, widthDp) in titleParts)
         {
@@ -954,14 +1284,28 @@ public sealed class KeyPanel
         view.SetTextColor(DimTextColor);
         view.SetTextSize(ComplexUnitType.Sp, 10);
         Draggable(view, (drag, dx, dy) => Resizing?.Invoke(corner, drag, dx, dy), tapped: null);
+        grips.Add(view);
         return view;
+    }
+
+    /// <summary>
+    /// Where a touch is on the screen: the view's place on it and the touch's
+    /// place in the view. Not the event's raw place, which a headset (Galaxy
+    /// XR) gives from the window: the window moved under it, the raw place
+    /// moved back as much, and a dragged window shook where it was.
+    /// </summary>
+    private static (float X, float Y) OnScreen(View view, MotionEvent motion)
+    {
+        var location = new int[2];
+        view.GetLocationOnScreen(location);
+        return (location[0] + motion.GetX(), location[1] + motion.GetY());
     }
 
     /// <summary>
     /// Makes a view draggable: past the touch slop it reports the drag, in
     /// pixels from where it started; a touch that never got that far is a tap.
     /// </summary>
-    private void Draggable(TextView view, Action<Drag, float, float> drag, Action? tapped)
+    private void Draggable(View view, Action<Drag, float, float> drag, Action? tapped)
     {
         var slop = touchSlop;
         float startX = 0, startY = 0;
@@ -970,13 +1314,14 @@ public sealed class KeyPanel
         {
             e.Handled = true;
             var motion = e.Event!;
-            var dx = motion.RawX - startX;
-            var dy = motion.RawY - startY;
+            var (x, y) = OnScreen(view, motion);
+            var dx = x - startX;
+            var dy = y - startY;
             switch (motion.ActionMasked)
             {
                 case MotionEventActions.Down:
                     view.Pressed = true;
-                    (startX, startY, dragging) = (motion.RawX, motion.RawY, false);
+                    (startX, startY, dragging) = (x, y, false);
                     break;
                 case MotionEventActions.Move:
                     if (!dragging && Math.Sqrt((dx * dx) + (dy * dy)) > slop)

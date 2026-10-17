@@ -25,17 +25,17 @@ namespace Berpiztu.KeyPlus;
 /// floating keyboard as well as one across the bottom, and is out of sight
 /// while no keyboard is open. Floating (<see cref="PanelPlacement"/>), it
 /// stands where the user dragged it, at the width they gave it, all the time.
+/// It is the KeyPlus popup; Berpiztu AI Keyboard (KeyPlusKeyboard) is the
+/// other product, the one for a headset (Galaxy XR), which keeps this window
+/// before the user's eyes.
 /// </summary>
-[Service(Name = "com.berpiztu.keyplus.KeyPlusService", Label = "@string/service_label",
+[Service(Name = "ai.berpiztu.keyplus.KeyPlusService", Label = "@string/service_label",
     Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
 [IntentFilter(["android.accessibilityservice.AccessibilityService"])]
 [MetaData("android.accessibilityservice", Resource = "@xml/keyplus_accessibility")]
 public sealed class KeyPlusService : AccessibilityService, Android.Content.ISharedPreferencesOnSharedPreferenceChangeListener
 {
     private const string LogTag = "KeyPlus";
-
-    /// <summary>The device id of key events no hardware sent (KeyCharacterMap.VIRTUAL_KEYBOARD).</summary>
-    private const int VirtualKeyboardId = -1;
 
     /// <summary>The panel in its window on one display, and the screen whose layout it has.</summary>
     private sealed record Overlay(int DisplayId, KeyPlusPreferences.Screen Screen, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement);
@@ -466,7 +466,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), SendKey, TypeText);
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText);
         panel.FoldedChanged += Place;
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;
@@ -567,49 +567,29 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     private void TypeText(string text) => InputMethod?.CurrentInputConnection?.CommitText(text, 1, null);
 
     /// <summary>
-    /// Sends a key as a hardware keyboard would: with its scan code, which
-    /// remote desktop apps go by (<see cref="ScanCodes"/>), and each modifier
-    /// held pressed before it and let go after it. The meta state alone is not
-    /// enough for every editor: Android's own text fields, for one, select with
-    /// Shift and the arrows only when Shift itself went down.
+    /// Sends a key, with the modifiers held, to the focused editor
+    /// (<see cref="KeySender"/>); Ctrl+C and Ctrl+X keep the text selected in
+    /// the copied texts first, for Android lets no accessibility service read
+    /// the clipboard they copy it to.
     /// </summary>
     private void SendKey(Keycode code, MetaKeyStates meta)
     {
-        var connection = InputMethod?.CurrentInputConnection;
-        if (connection is null)
+        if (InputMethod?.CurrentInputConnection is not { } connection)
         {
             return;
         }
 
-        var down = SystemClock.UptimeMillis();
-        void Send(KeyEventActions action, Keycode key, MetaKeyStates state) =>
-            connection.SendKeyEvent(new KeyEvent(
-                down, SystemClock.UptimeMillis(), action, key, 0, state,
-                VirtualKeyboardId, ScanCodes.Of(key), 0, InputSourceType.Keyboard));
-
-        var pressed = Modifiers.Where(modifier => meta.HasFlag(modifier.On)).ToList();
-        var state = MetaKeyStates.None;
-        foreach (var modifier in pressed)
+        if (code is Keycode.C or Keycode.X && meta.HasFlag(MetaKeyStates.CtrlOn))
         {
-            state |= modifier.Meta;
-            Send(KeyEventActions.Down, modifier.Key, state);
+            // No text around the selection asked for: the selection alone.
+            Clipboard.Add(connection.GetSurroundingText(0, 0, 0)?.Text?.ToString());
         }
 
-        Send(KeyEventActions.Down, code, meta);
-        Send(KeyEventActions.Up, code, meta);
-        foreach (var modifier in Enumerable.Reverse(pressed))
-        {
-            state &= ~modifier.Meta;
-            Send(KeyEventActions.Up, modifier.Key, state);
-        }
+        KeySender.Send(connection.SendKeyEvent, code, meta);
     }
 
-    /// <summary>The modifiers a key may be sent with: the meta flag that says so, the key pressed for it, and the meta state it adds.</summary>
-    private static readonly (MetaKeyStates On, Keycode Key, MetaKeyStates Meta)[] Modifiers =
-    [
-        (MetaKeyStates.CtrlOn, Keycode.CtrlLeft, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn),
-        (MetaKeyStates.AltOn, Keycode.AltLeft, MetaKeyStates.AltOn | MetaKeyStates.AltLeftOn),
-        (MetaKeyStates.ShiftOn, Keycode.ShiftLeft, MetaKeyStates.ShiftOn | MetaKeyStates.ShiftLeftOn),
-        (MetaKeyStates.MetaOn, Keycode.MetaLeft, MetaKeyStates.MetaOn | MetaKeyStates.MetaLeftOn),
-    ];
+    /// <summary>The texts copied lately, which 📋 lists.</summary>
+    private ClipboardHistory Clipboard => clipboard ??= new ClipboardHistory(this);
+
+    private ClipboardHistory? clipboard;
 }
