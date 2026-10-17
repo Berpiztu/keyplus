@@ -3,6 +3,8 @@ using Android.Content.Res;
 using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.OS;
+using Android.Text;
+using Android.Text.Style;
 using Android.Util;
 using Android.Views;
 using Android.Widget;
@@ -12,7 +14,7 @@ namespace Berpiztu.KeyPlus;
 
 /// <summary>
 /// The keys, as a small window: a title bar that moves it, with ABC to turn
-/// it into a whole Spanish keyboard and Fn to turn it back, ⤓ to dock it
+/// it into a whole Spanish keyboard and Keys to turn it back, ⤓ to dock it
 /// above the keyboard again (while it floats) and ✕ to close it into the ⌨
 /// icon, which a tap opens again and a drag moves; the keys, the shortcuts'
 /// row and the terminal's two or the whole keyboard; and a grip at each
@@ -70,7 +72,7 @@ public sealed class KeyPanel
     private readonly ISharedPreferences preferences;
     private readonly Handler handler = new(Looper.MainLooper!);
     private readonly List<(Held Modifier, TextView View)> modifierKeys = [];
-    private readonly List<(PanelKey Key, TextView View)> characterKeys = [];
+    private readonly List<(PanelKey Key, TextView View)> labelledKeys = [];
     private readonly List<TextView> keys = [];
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
@@ -193,7 +195,7 @@ public sealed class KeyPanel
     public MetaKeyStates TakeHeldForTyped()
     {
         var meta = PanelKeys.MetaOf(held);
-        SetHeld(held & (Held.Shift | Held.CapsLock));
+        SetHeld(held & (Held.Shift | Held.CapsLock | Held.Fn));
         return meta;
     }
 
@@ -225,7 +227,7 @@ public sealed class KeyPanel
         StopRepeat();
         terminal.Visibility = whole ? ViewStates.Gone : ViewStates.Visible;
         wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
-        switchKeys.Text = whole ? "Fn" : "ABC";
+        switchKeys.Text = whole ? "Keys" : "ABC";
     }
 
     private void ShowFolded(bool folded)
@@ -236,21 +238,36 @@ public sealed class KeyPanel
         tab.Visibility = folded ? ViewStates.Visible : ViewStates.Gone;
     }
 
-    private LinearLayout Rows(IReadOnlyList<IReadOnlyList<PanelKey>> layout)
+    private LinearLayout Rows(IReadOnlyList<KeyBlock> layout)
     {
-        var rows = new LinearLayout(context) { Orientation = Orientation.Vertical };
-        foreach (var keys in layout)
+        var blocks = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        foreach (var block in layout)
         {
-            var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-            foreach (var key in keys)
+            var rows = new LinearLayout(context) { Orientation = Orientation.Vertical };
+            foreach (var keys in block.Rows)
             {
-                row.AddView(PanelKeyView(key), KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, key.Weight)));
+                var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+                foreach (var key in keys)
+                {
+                    row.AddView(PanelKeyView(key), KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, key.Weight)));
+                }
+
+                rows.AddView(row);
             }
 
-            rows.AddView(row);
+            if (block.Tall is not { } tall)
+            {
+                blocks.AddView(rows);
+                continue;
+            }
+
+            var withTall = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+            withTall.AddView(rows, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, block.RowsWeight));
+            withTall.AddView(PanelKeyView(tall), KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, tall.Weight)));
+            blocks.AddView(withTall);
         }
 
-        return rows;
+        return blocks;
     }
 
     private TextView PanelKeyView(PanelKey key)
@@ -262,9 +279,11 @@ public sealed class KeyPanel
             modifierKeys.Add((key.Modifier, view));
         }
 
-        if (key.IsCharacter)
+        if (key.IsCharacter || key.FnLabel is not null)
         {
-            characterKeys.Add((key, view));
+            labelledKeys.Add((key, view));
+            view.SetSingleLine(false);
+            view.SetMaxLines(2);
         }
 
         view.Touch += (_, e) =>
@@ -295,18 +314,19 @@ public sealed class KeyPanel
             return;
         }
 
-        if (key.IsCharacter && ((held & (Held.Ctrl | Held.Alt)) == Held.None || key.Code == Keycode.Unknown))
+        var code = held.HasFlag(Held.Fn) && key.FnCode is { } fnCode ? fnCode : key.Code;
+        if (code == key.Code && key.IsCharacter && ((held & (Held.Ctrl | Held.Alt)) == Held.None || key.Code == Keycode.Unknown))
         {
             TypeCharacter(key);
             return;
         }
 
         var meta = PanelKeys.MetaOf(held | key.With);
-        send(key.Code, meta);
-        SetHeld(held & (Held.Shift | Held.CapsLock));
+        send(code, meta);
+        SetHeld(held & (Held.Shift | Held.CapsLock | Held.Fn));
         if (key.Repeats)
         {
-            StartRepeat(key.Code, meta);
+            StartRepeat(code, meta);
         }
     }
 
@@ -317,7 +337,7 @@ public sealed class KeyPanel
     private void TypeCharacter(PanelKey key)
     {
         var text = key.TextFor(held);
-        SetHeld(held & Held.CapsLock);
+        SetHeld(held & (Held.CapsLock | Held.Fn));
         if (text is null)
         {
             return;
@@ -356,7 +376,7 @@ public sealed class KeyPanel
         ShowHeld();
     }
 
-    /// <summary>Fills the modifiers held, and labels each character key with what it types now.</summary>
+    /// <summary>Fills the modifiers held, and labels each character key and each key Fn changes for the modifiers held.</summary>
     private void ShowHeld()
     {
         foreach (var (modifier, view) in modifierKeys)
@@ -366,11 +386,49 @@ public sealed class KeyPanel
             view.SetTextColor(isHeld ? HeldTextColor : Color.White);
         }
 
-        foreach (var (key, view) in characterKeys)
+        foreach (var (key, view) in labelledKeys)
         {
-            var text = key.TextFor(held);
-            view.Text = text is null or " " ? key.Label : text;
+            view.TextFormatted = Legend(key);
         }
+    }
+
+    /// <summary>
+    /// What a key reads, as Windows' touch keyboard labels it: with Fn held
+    /// the key it becomes; a letter as it types now; any other character with
+    /// its shifted one small above it and its AltGr one small at its right.
+    /// </summary>
+    private Java.Lang.ICharSequence Legend(PanelKey key)
+    {
+        if (held.HasFlag(Held.Fn) && key.FnLabel is { } fnLabel)
+        {
+            return new Java.Lang.String(fnLabel);
+        }
+
+        if (!key.IsCharacter)
+        {
+            return new Java.Lang.String(key.Label);
+        }
+
+        var legend = new SpannableStringBuilder();
+        if (!key.IsLetter && key.ShiftText is { } shifted && shifted != key.Text)
+        {
+            AppendSmall(legend, shifted + "\n");
+        }
+
+        legend.Append(key.IsLetter ? key.TextFor(held & ~Held.AltGr) : key.Label);
+        if (key.AltGrText is { } altGr)
+        {
+            AppendSmall(legend, " " + altGr);
+        }
+
+        return legend;
+    }
+
+    private static void AppendSmall(SpannableStringBuilder legend, string text)
+    {
+        var start = legend.Length();
+        legend.Append(text);
+        legend.SetSpan(new RelativeSizeSpan(0.6f), start, legend.Length(), SpanTypes.ExclusiveExclusive);
     }
 
     private TextView TitleButton(string label, string description)

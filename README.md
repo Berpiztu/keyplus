@@ -34,13 +34,15 @@ floating keyboard too; with no keyboard open it is out of sight.
   (Enter) end the terminal's two rows. Ctrl+Z, Ctrl+Y, Del and ⌫ repeat
   while held.
 - **ABC** in the title bar turns the window into a whole keyboard laid out
-  as Spain's (ISO, es-ES): ñ, ç, ¡ ¿ º ª, AltGr for \ | @ # ~ € ¬ [ ] { },
-  ⇪ for Caps Lock, and ´ ` ^ ¨ as dead keys (´ then a is á, ¨ then u is ü);
-  Esc, F1 to F12 and Del along the top, the arrows as an inverted T at the
-  bottom right with Home and End beside the up arrow.
-  It types its characters as text, so it types what it shows whatever
-  layout the editor expects; with Ctrl or Alt held its keys go out as keys
-  (Ctrl+S). **Fn** turns it back into the strip.
+  as Windows' touch keyboard lays out Spain's (ISO, es-ES), each key labelled
+  as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Bloq May, ´ ` ^ ¨
+  as dead keys (´ then a is á, ¨ then u is ü), Entrar as tall as two rows,
+  and the arrows as an inverted T at the bottom right. **Fn** stays on until
+  pressed again: it makes 1 to ¡ F1 to F12 and the arrows Inicio, Fin, RePág
+  and AvPág. The keyboard types its characters as text, so it types what it
+  shows whatever layout the editor expects; with Ctrl or Alt held its keys
+  go out as keys (Ctrl+S). **Keys** in the title bar turns it back into the
+  strip.
 - **Ctrl and Alt** hold for the next key: pressed once they stay filled, and
   are let go after the next key; pressed again they let go at once. The next
   key can be one of the strip's or a character typed on your own keyboard:
