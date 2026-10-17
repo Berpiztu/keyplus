@@ -30,7 +30,7 @@ public static class ScanCodes
         [Keycode.F1] = 59, [Keycode.F2] = 60, [Keycode.F3] = 61, [Keycode.F4] = 62, [Keycode.F5] = 63,
         [Keycode.F6] = 64, [Keycode.F7] = 65, [Keycode.F8] = 66, [Keycode.F9] = 67, [Keycode.F10] = 68,
         [Keycode.F11] = 87, [Keycode.F12] = 88,
-        [Keycode.CtrlRight] = 97, [Keycode.Sysrq] = 99, [Keycode.AltRight] = 100,
+        [Keycode.CtrlRight] = 97, [Keycode.AltRight] = 100,
         [Keycode.MoveHome] = 102, [Keycode.DpadUp] = 103, [Keycode.PageUp] = 104, [Keycode.DpadLeft] = 105,
         [Keycode.DpadRight] = 106, [Keycode.MoveEnd] = 107, [Keycode.DpadDown] = 108, [Keycode.PageDown] = 109,
         [Keycode.Insert] = 110, [Keycode.ForwardDel] = 111, [Keycode.MetaLeft] = 125,

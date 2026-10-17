@@ -39,7 +39,8 @@ floating keyboard too; with no keyboard open it is out of sight.
   as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Bloq May, ´ ` ^ ¨
   as dead keys (´ then a is á, ¨ then u is ü), Entrar as tall as two rows,
   the arrows as an inverted T at the bottom right, and Inicio, Fin, RePág,
-  AvPág and ImpPnt (Print Screen) in a column at the right, beside Supr and
+  AvPág and ImpPnt (Windows+Shift+S, the snipping tool, since Print Screen
+  does not reach a remote desktop) in a column at the right, beside Supr and
   Insert. Rows keep their height whatever their keys read. **Fn** stays on until
   pressed again: it makes 1 to ¡ F1 to F12 and the arrows Inicio, Fin, RePág
   and AvPág. **⊞** (Windows) holds for the next key, as Ctrl does (⊞ then E

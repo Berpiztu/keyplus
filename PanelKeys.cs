@@ -176,7 +176,7 @@ public static class PanelKeys
     /// <summary>
     /// The keys a PC has beside its keyboard, in a column at the whole
     /// keyboard's right, one beside each of its rows, so beside Supr and
-    /// Insert too: Home, End, the pages and Print Screen, in sight without Fn.
+    /// Insert too: Home, End, the pages and a screen capture, in sight without Fn.
     /// </summary>
     public static readonly IReadOnlyList<PanelKey> SpanishSide =
     [
@@ -184,7 +184,9 @@ public static class PanelKeys
         new("Fin", Keycode.MoveEnd),
         new("RePág", Keycode.PageUp, Repeats: true),
         new("AvPág", Keycode.PageDown, Repeats: true),
-        new("ImpPnt", Keycode.Sysrq),
+        // Windows+Shift+S, the snipping tool, for Print Screen itself does
+        // not reach a remote desktop session.
+        new("ImpPnt", Keycode.S, With: Held.Windows | Held.Shift),
     ];
 
     /// <summary>The letters each dead key puts its accent on, and the accented letter.</summary>
