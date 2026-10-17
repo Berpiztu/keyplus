@@ -20,7 +20,7 @@ floating keyboard too; with no keyboard open it is out of sight.
 
 | File | What it holds |
 | --- | --- |
-| [PanelKeys.cs](PanelKeys.cs) | The layout (the editing shortcuts, then Termux's two rows of seven) and the meta state of held modifiers |
+| [PanelKeys.cs](PanelKeys.cs) | The layouts (the editing shortcuts over Termux's two rows; the whole Spanish keyboard), the dead keys' accents, the meta state of held modifiers |
 | [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
@@ -30,8 +30,15 @@ floating keyboard too; with no keyboard open it is out of sight.
 ## Using it
 
 - **Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in
-  the top row, beside **Del** (delete forward); Ctrl+Z, Ctrl+Y and Del repeat
+  the top row, beside **Del** (delete forward); **⌫** (Backspace) and **⏎**
+  (Enter) end the terminal's two rows. Ctrl+Z, Ctrl+Y, Del and ⌫ repeat
   while held.
+- **ABC** in the title bar turns the window into a whole keyboard laid out
+  as Spain's (ISO, es-ES): ñ, ç, ¡ ¿ º ª, AltGr for \ | @ # ~ € ¬ [ ] { },
+  ⇪ for Caps Lock, and ´ ` ^ ¨ as dead keys (´ then a is á, ¨ then u is ü).
+  It types its characters as text, so it types what it shows whatever
+  layout the editor expects; with Ctrl or Alt held its keys go out as keys
+  (Ctrl+S). **Fn** turns it back into the strip.
 - **Ctrl and Alt** hold for the next key: pressed once they stay filled, and
   are let go after the next key; pressed again they let go at once. The next
   key can be one of the strip's or a character typed on your own keyboard:

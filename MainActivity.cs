@@ -33,7 +33,9 @@ public sealed class MainActivity : Activity
             "KeyPlus adds Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End and the page keys " +
             "above the keyboard you already use, and sends them to the field you are typing in: " +
             "a terminal, an SSH app, or a web editor such as vscode.dev in the browser.\n\n" +
-            "Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y and Del (delete forward) have keys of their own, in the top row. " +
+            "Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+Y and Del (delete forward) have keys of their own, in the top row, " +
+            "and ⌫ and ⏎ end the rows below. ABC in the title bar turns the keys into a whole Spanish keyboard; " +
+            "Fn turns it back. " +
             "Ctrl and Alt hold for the next key, one of the strip's or a letter typed on your keyboard: " +
             "Ctrl then \"s\" is Ctrl+S. Shift stays on until pressed again. " +
             "The arrows and pages repeat while held.\n\n" +

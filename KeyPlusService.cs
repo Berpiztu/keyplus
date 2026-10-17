@@ -288,7 +288,7 @@ public sealed class KeyPlusService : AccessibilityService
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        var panel = new KeyPanel(context, SendKey) { Scale = placed?.Scale ?? 1f };
+        var panel = new KeyPanel(context, SendKey, TypeText) { Scale = placed?.Scale ?? 1f };
         panel.FoldedChanged += Place;
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;
@@ -368,6 +368,9 @@ public sealed class KeyPlusService : AccessibilityService
         var down = events?.FirstOrDefault(e => e.Action == KeyEventActions.Down && !KeyEvent.IsModifierKey(e.KeyCode));
         return down is null ? null : (down.KeyCode, down.MetaState & MetaKeyStates.ShiftMask);
     }
+
+    /// <summary>Types text into the focused editor, as the phone's keyboard does.</summary>
+    private void TypeText(string text) => InputMethod?.CurrentInputConnection?.CommitText(text, 1, null);
 
     /// <summary>
     /// Sends a key as a hardware keyboard would: each modifier held is pressed

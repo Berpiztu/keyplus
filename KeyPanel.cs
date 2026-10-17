@@ -11,18 +11,23 @@ using Orientation = Android.Widget.Orientation;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The keys, as a small window: a title bar that moves it, with ⤓ to dock it
+/// The keys, as a small window: a title bar that moves it, with ABC to turn
+/// it into a whole Spanish keyboard and Fn to turn it back, ⤓ to dock it
 /// above the keyboard again (while it floats) and ✕ to close it into the ⌨
-/// icon, which a tap opens again and a drag moves; the shortcuts' row and the
-/// terminal's two; and a grip at each corner that resizes it, across for its
-/// width and up or down for its keys' size. Where the window stands is
+/// icon, which a tap opens again and a drag moves; the keys, the shortcuts'
+/// row and the terminal's two or the whole keyboard; and a grip at each
+/// corner that resizes it, across for its width and up or down for its keys'
+/// size. Where the window stands is
 /// <see cref="KeyPlusService"/>'s: the title bar, the icon and the grips only
 /// say how far they were dragged.
-/// Ctrl and Alt are held as Termux holds them: pressed once they stay down,
-/// filled, for the next key, here or typed on the phone's keyboard
+/// Ctrl, Alt and AltGr are held as Termux holds them: pressed once they stay
+/// down, filled, for the next key, here or typed on the phone's keyboard
 /// (<see cref="TakeHeldForTyped"/>), and are let go after it; pressed again
-/// they let go at once. Shift is locked until it is pressed again. Keys act on
-/// the touch, not on its release, and the arrows and pages repeat while held.
+/// they let go at once. Shift stays down for the strip's keys, so Shift and
+/// the arrows select, and is let go after a character typed; Caps Lock stays
+/// until pressed again. A dead key (´ ` ^ ¨) waits for the next character
+/// and puts its accent on it. Keys act on the touch, not on its release, and
+/// the arrows, the pages and the deleting keys repeat while held.
 /// </summary>
 public sealed class KeyPanel
 {
@@ -48,6 +53,7 @@ public sealed class KeyPanel
 
     private const string PreferencesName = "keyplus";
     private const string FoldedPreference = "folded";
+    private const string WholeKeyboardPreference = "wholeKeyboard";
     private const int RepeatDelayMs = 400;
     private const int RepeatIntervalMs = 50;
 
@@ -60,23 +66,31 @@ public sealed class KeyPanel
 
     private readonly Context context;
     private readonly Action<Keycode, MetaKeyStates> send;
+    private readonly Action<string> type;
     private readonly ISharedPreferences preferences;
     private readonly Handler handler = new(Looper.MainLooper!);
-    private readonly Dictionary<Held, TextView> modifierKeys = [];
+    private readonly List<(Held Modifier, TextView View)> modifierKeys = [];
+    private readonly List<(PanelKey Key, TextView View)> characterKeys = [];
     private readonly List<TextView> keys = [];
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
+    private readonly LinearLayout terminal;
+    private readonly LinearLayout wholeKeyboard;
     private readonly TextView tab;
     private readonly TextView dock;
+    private readonly TextView switchKeys;
     private Java.Lang.Runnable? repeat;
     private Held held;
+    private string? deadAccent;
     private float scale = 1f;
 
     /// <param name="send">Sends a key with the meta state of the modifiers held for it.</param>
-    public KeyPanel(Context context, Action<Keycode, MetaKeyStates> send)
+    /// <param name="type">Types text, as the phone's keyboard does.</param>
+    public KeyPanel(Context context, Action<Keycode, MetaKeyStates> send, Action<string> type)
     {
         this.context = context;
         this.send = send;
+        this.type = type;
         preferences = context.GetSharedPreferences(PreferencesName, FileCreationMode.Private)!;
 
         var title = new TextView(context) { Text = "KeyPlus", Gravity = GravityFlags.CenterVertical };
@@ -90,10 +104,13 @@ public sealed class KeyPanel
         dock.Click += (_, _) => DockRequested?.Invoke();
         var close = TitleButton("✕", "Close the keys into an icon");
         close.Click += (_, _) => SetFolded(true);
+        switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard");
+        switchKeys.Click += (_, _) => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible);
 
         var titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         titleBar.AddView(Grip("◤", Corner.TopLeft), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        titleBar.AddView(switchKeys, new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(dock, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(close, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(Grip("◥", Corner.TopRight), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
@@ -107,7 +124,10 @@ public sealed class KeyPanel
         strip.SetBackgroundColor(PanelColor);
         strip.SetPadding(Dp(2), 0, Dp(2), 0);
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(28)));
-        strip.AddView(Rows(PanelKeys.Terminal));
+        terminal = Rows(PanelKeys.Terminal);
+        wholeKeyboard = Rows(PanelKeys.Spanish);
+        strip.AddView(terminal);
+        strip.AddView(wholeKeyboard);
         strip.AddView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(14)));
 
         tab = KeyView("⌨");
@@ -119,6 +139,8 @@ public sealed class KeyPanel
         root.AddView(strip);
         root.AddView(tab);
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
+        ShowWholeKeyboard(preferences.GetBoolean(WholeKeyboardPreference, false));
+        ShowHeld();
     }
 
     /// <summary>The panel's view, for the window that shows it.</summary>
@@ -171,7 +193,7 @@ public sealed class KeyPanel
     public MetaKeyStates TakeHeldForTyped()
     {
         var meta = PanelKeys.MetaOf(held);
-        SetHeld(held & Held.Shift);
+        SetHeld(held & (Held.Shift | Held.CapsLock));
         return meta;
     }
 
@@ -192,6 +214,20 @@ public sealed class KeyPanel
         FoldedChanged?.Invoke();
     }
 
+    private void SetWholeKeyboard(bool whole)
+    {
+        ShowWholeKeyboard(whole);
+        preferences.Edit()!.PutBoolean(WholeKeyboardPreference, whole)!.Apply();
+    }
+
+    private void ShowWholeKeyboard(bool whole)
+    {
+        StopRepeat();
+        terminal.Visibility = whole ? ViewStates.Gone : ViewStates.Visible;
+        wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
+        switchKeys.Text = whole ? "Fn" : "ABC";
+    }
+
     private void ShowFolded(bool folded)
     {
         Folded = folded;
@@ -208,7 +244,7 @@ public sealed class KeyPanel
             var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
             foreach (var key in keys)
             {
-                row.AddView(PanelKeyView(key), KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f)));
+                row.AddView(PanelKeyView(key), KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, key.Weight)));
             }
 
             rows.AddView(row);
@@ -223,7 +259,12 @@ public sealed class KeyPanel
         keys.Add(view);
         if (key.IsModifier)
         {
-            modifierKeys[key.Modifier] = view;
+            modifierKeys.Add((key.Modifier, view));
+        }
+
+        if (key.IsCharacter)
+        {
+            characterKeys.Add((key, view));
         }
 
         view.Touch += (_, e) =>
@@ -254,12 +295,47 @@ public sealed class KeyPanel
             return;
         }
 
+        if (key.IsCharacter && ((held & (Held.Ctrl | Held.Alt)) == Held.None || key.Code == Keycode.Unknown))
+        {
+            TypeCharacter(key);
+            return;
+        }
+
         var meta = PanelKeys.MetaOf(held | key.With);
         send(key.Code, meta);
-        SetHeld(held & Held.Shift);
+        SetHeld(held & (Held.Shift | Held.CapsLock));
         if (key.Repeats)
         {
             StartRepeat(key.Code, meta);
+        }
+    }
+
+    /// <summary>
+    /// Types a character key's text for the modifiers held, or keeps a dead
+    /// key's accent for the next one; Shift and AltGr are let go after it.
+    /// </summary>
+    private void TypeCharacter(PanelKey key)
+    {
+        var text = key.TextFor(held);
+        SetHeld(held & Held.CapsLock);
+        if (text is null)
+        {
+            return;
+        }
+
+        if (deadAccent is not null)
+        {
+            var accent = deadAccent;
+            deadAccent = null;
+            type(PanelKeys.Compose(accent, text));
+        }
+        else if (PanelKeys.IsDead(text))
+        {
+            deadAccent = text;
+        }
+        else
+        {
+            type(text);
         }
     }
 
@@ -277,11 +353,23 @@ public sealed class KeyPanel
     private void SetHeld(Held value)
     {
         held = value;
+        ShowHeld();
+    }
+
+    /// <summary>Fills the modifiers held, and labels each character key with what it types now.</summary>
+    private void ShowHeld()
+    {
         foreach (var (modifier, view) in modifierKeys)
         {
             var isHeld = held.HasFlag(modifier);
             view.Background = KeyBackground(isHeld ? HeldColor : KeyColor);
             view.SetTextColor(isHeld ? HeldTextColor : Color.White);
+        }
+
+        foreach (var (key, view) in characterKeys)
+        {
+            var text = key.TextFor(held);
+            view.Text = text is null or " " ? key.Label : text;
         }
     }
 
