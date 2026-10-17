@@ -60,11 +60,18 @@ public sealed class KeyPanel
     private const int RepeatDelayMs = 400;
     private const int RepeatIntervalMs = 50;
 
-    /// <summary>A key's label, in sp at the usual size.</summary>
+    /// <summary>The icon's label, in sp.</summary>
     private const float LabelSize = 16f;
 
+    /// <summary>
+    /// A key's label, in sp at the usual size: as large as fits in the key, up
+    /// to the largest, down to the smallest for a long label in a narrow key.
+    /// </summary>
+    private const int LargestLabelSize = 20;
+    private const int SmallestLabelSize = 8;
+
     /// <summary>The share of it a secondary legend takes: the shifted character above, the Alt Gr one at the right.</summary>
-    private const float SecondaryLabelShare = 0.75f;
+    private const float SecondaryLabelShare = 0.8f;
 
     // Opaque, the keys well apart from the ground: the window looks the same
     // over a white screen as over a black one.
@@ -239,7 +246,7 @@ public sealed class KeyPanel
             scale = value;
             foreach (var key in keys)
             {
-                key.SetTextSize(ComplexUnitType.Sp, LabelSize * scale);
+                FitLabel(key);
             }
 
             foreach (var row in rowViews)
@@ -341,7 +348,7 @@ public sealed class KeyPanel
     /// (two lines, or one with Fn, Shift or Alt Gr held) changes the
     /// keyboard's height, and the side column's keys stand level with the rows.
     /// </summary>
-    private int RowHeight => Dp(50 * scale);
+    private int RowHeight => Dp(56 * scale);
 
     /// <param name="side">Keys in a column at the right, one beside each row.</param>
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)
@@ -397,6 +404,8 @@ public sealed class KeyPanel
     private TextView PanelKeyView(PanelKey key)
     {
         var view = KeyView(key.Label);
+        view.SetPadding(Dp(2), 0, Dp(2), 0);
+        FitLabel(view);
         keys.Add(view);
         if (key.IsModifier)
         {
@@ -660,6 +669,13 @@ public sealed class KeyPanel
         view.SetSingleLine(true);
         view.SetPadding(0, 0, 0, 0);
         return view;
+    }
+
+    /// <summary>Sizes a key's label to the largest that fits in it, for the keys' size.</summary>
+    private void FitLabel(TextView key)
+    {
+        var largest = Math.Max(SmallestLabelSize + 1, (int)Math.Round(LargestLabelSize * scale));
+        key.SetAutoSizeTextTypeUniformWithConfiguration(SmallestLabelSize, largest, 1, (int)ComplexUnitType.Sp);
     }
 
     private RippleDrawable KeyBackground(Color color)
