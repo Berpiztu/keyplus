@@ -75,6 +75,10 @@ public sealed class KeyPanel
     private readonly List<(Held Modifier, TextView View)> modifierKeys = [];
     private readonly List<(PanelKey Key, TextView View)> labelledKeys = [];
     private readonly List<TextView> keys = [];
+
+    /// <summary>The rows and the side column's keys, whose heights follow <see cref="Scale"/> and nothing else.</summary>
+    private readonly List<View> rowViews = [];
+    private readonly List<View> sideKeys = [];
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
     private readonly LinearLayout terminal;
@@ -148,7 +152,7 @@ public sealed class KeyPanel
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(28)));
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(28)));
         terminal = Rows(PanelKeys.Terminal);
-        wholeKeyboard = Rows(PanelKeys.Spanish);
+        wholeKeyboard = Rows(PanelKeys.Spanish, PanelKeys.SpanishSide);
         strip.AddView(terminal);
         strip.AddView(wholeKeyboard);
         strip.AddView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(14)));
@@ -228,7 +232,18 @@ public sealed class KeyPanel
             foreach (var key in keys)
             {
                 key.SetTextSize(ComplexUnitType.Sp, 15 * scale);
-                key.SetPadding(0, Dp(10 * scale), 0, Dp(10 * scale));
+            }
+
+            foreach (var row in rowViews)
+            {
+                row.LayoutParameters!.Height = RowHeight;
+                row.RequestLayout();
+            }
+
+            foreach (var key in sideKeys)
+            {
+                key.LayoutParameters!.Height = RowHeight - Dp(4);
+                key.RequestLayout();
             }
         }
     }
@@ -310,7 +325,15 @@ public sealed class KeyPanel
         tab.Visibility = ShowsIcon ? ViewStates.Visible : ViewStates.Gone;
     }
 
-    private LinearLayout Rows(IReadOnlyList<KeyBlock> layout)
+    /// <summary>
+    /// A row's height: fixed, following the keys' size alone, so no legend
+    /// (two lines, or one with Fn, Shift or Alt Gr held) changes the
+    /// keyboard's height, and the side column's keys stand level with the rows.
+    /// </summary>
+    private int RowHeight => Dp(46 * scale);
+
+    /// <param name="side">Keys in a column at the right, one beside each row.</param>
+    private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)
     {
         var blocks = new LinearLayout(context) { Orientation = Orientation.Vertical };
         foreach (var block in layout)
@@ -324,7 +347,8 @@ public sealed class KeyPanel
                     row.AddView(PanelKeyView(key), KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, key.Weight)));
                 }
 
-                rows.AddView(row);
+                rows.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight));
+                rowViews.Add(row);
             }
 
             if (block.Tall is not { } tall)
@@ -339,7 +363,23 @@ public sealed class KeyPanel
             blocks.AddView(withTall);
         }
 
-        return blocks;
+        if (side is null)
+        {
+            return blocks;
+        }
+
+        var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        foreach (var key in side)
+        {
+            var view = PanelKeyView(key);
+            column.AddView(view, KeyMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight - Dp(4))));
+            sideKeys.Add(view);
+        }
+
+        var withSide = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        withSide.AddView(blocks, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 15.5f));
+        withSide.AddView(column, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1.5f));
+        return withSide;
     }
 
     private TextView PanelKeyView(PanelKey key)
@@ -355,11 +395,8 @@ public sealed class KeyPanel
         {
             labelledKeys.Add((key, view));
 
-            // Always two lines high, whether the legend takes two (shifted
-            // above plain) or one (with Fn, Shift or Alt Gr held), or the
-            // keyboard would change height at every modifier.
             view.SetSingleLine(false);
-            view.SetLines(2);
+            view.SetMaxLines(2);
         }
 
         view.Touch += (_, e) =>
@@ -603,7 +640,7 @@ public sealed class KeyPanel
         view.SetTextColor(Color.White);
         view.SetTextSize(ComplexUnitType.Sp, 15);
         view.SetSingleLine(true);
-        view.SetPadding(0, Dp(10), 0, Dp(10));
+        view.SetPadding(0, 0, 0, 0);
         return view;
     }
 
