@@ -354,8 +354,12 @@ public sealed class KeyPanel
         if (key.IsCharacter || key.FnLabel is not null)
         {
             labelledKeys.Add((key, view));
+
+            // Always two lines high, whether the legend takes two (shifted
+            // above plain) or one (with Fn, Shift or Alt Gr held), or the
+            // keyboard would change height at every modifier.
             view.SetSingleLine(false);
-            view.SetMaxLines(2);
+            view.SetLines(2);
         }
 
         view.Touch += (_, e) =>
