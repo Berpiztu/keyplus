@@ -11,13 +11,13 @@ using Orientation = Android.Widget.Orientation;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The strip of keys, as views: the terminal's two rows, the letters and
-/// digits above them while Ctrl or Alt is held, and a narrow key at the right
-/// that folds the strip into a small tab, which unfolds it again. Ctrl and
-/// Alt are held as Termux holds them: pressed once they stay down, filled, for
-/// the next key and are let go after it; pressed again they let go at once.
-/// Shift is locked until it is pressed again. Keys act on the touch, not on
-/// its release, and the arrows and pages repeat while held.
+/// The strip of keys, as views: the terminal's two rows, and a narrow key at
+/// the right that folds the strip into a small tab, which unfolds it again.
+/// Ctrl and Alt are held as Termux holds them: pressed once they stay down,
+/// filled, for the next key, here or typed on the phone's keyboard
+/// (<see cref="TakeHeldForTyped"/>), and are let go after it; pressed again
+/// they let go at once. Shift is locked until it is pressed again. Keys act on
+/// the touch, not on its release, and the arrows and pages repeat while held.
 /// </summary>
 public sealed class KeyPanel
 {
@@ -39,7 +39,6 @@ public sealed class KeyPanel
     private readonly Dictionary<Held, TextView> modifierKeys = [];
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
-    private readonly LinearLayout combining;
     private readonly TextView tab;
     private Java.Lang.Runnable? repeat;
     private Held held;
@@ -50,9 +49,6 @@ public sealed class KeyPanel
         this.context = context;
         this.send = send;
         preferences = context.GetSharedPreferences(PreferencesName, FileCreationMode.Private)!;
-
-        combining = Rows(PanelKeys.Combining);
-        combining.Visibility = ViewStates.Gone;
 
         var terminal = Rows(PanelKeys.Terminal);
         var fold = KeyView("▾");
@@ -66,7 +62,6 @@ public sealed class KeyPanel
         strip = new LinearLayout(context) { Orientation = Orientation.Vertical };
         strip.SetBackgroundColor(PanelColor);
         strip.SetPadding(Dp(2), Dp(2), Dp(2), Dp(2));
-        strip.AddView(combining);
         strip.AddView(bottom);
 
         tab = KeyView("⌨");
@@ -88,6 +83,21 @@ public sealed class KeyPanel
 
     /// <summary>The panel was folded or unfolded: its window changes shape.</summary>
     public event Action? FoldedChanged;
+
+    /// <summary>Whether Ctrl or Alt is held, waiting for the next key.</summary>
+    public bool HoldsCtrlOrAlt => (held & (Held.Ctrl | Held.Alt)) != Held.None;
+
+    /// <summary>
+    /// The meta state of the modifiers held, for a key typed on the phone's
+    /// keyboard instead of here; Ctrl and Alt are let go after it, as after a
+    /// key here.
+    /// </summary>
+    public MetaKeyStates TakeHeldForTyped()
+    {
+        var meta = PanelKeys.MetaOf(held);
+        SetHeld(held & Held.Shift);
+        return meta;
+    }
 
     /// <summary>Lets go of a held key's repeat, when the panel goes out of sight.</summary>
     public void StopRepeat()
@@ -196,8 +206,6 @@ public sealed class KeyPanel
             view.Background = KeyBackground(isHeld ? HeldColor : KeyColor);
             view.SetTextColor(isHeld ? HeldTextColor : Color.White);
         }
-
-        combining.Visibility = (held & (Held.Ctrl | Held.Alt)) != Held.None ? ViewStates.Visible : ViewStates.Gone;
     }
 
     private TextView KeyView(string label)

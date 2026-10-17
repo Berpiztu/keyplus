@@ -14,42 +14,51 @@ input connection to the focused editor (`flagInputMethodEditor`) and send key
 events through it; a browser turns them into the page's `keydown` events.
 The strip is an accessibility overlay that never takes the focus, so the
 keyboard stays open while you press its keys. The service watches where the
-keyboard's window is and sits right above it; with no keyboard open it is
-out of sight.
+keyboard's window is, on whichever display (Samsung DeX is a display of its
+own), and sits right above it, as wide as the keyboard, so it follows a
+floating keyboard too; with no keyboard open it is out of sight.
 
 | File | What it holds |
 | --- | --- |
-| [PanelKeys.cs](PanelKeys.cs) | The layouts (Termux's two rows of seven, and the letters and digits) and the meta state of held modifiers |
+| [PanelKeys.cs](PanelKeys.cs) | The layout (Termux's two rows of seven) and the meta state of held modifiers |
 | [KeyPanel.cs](KeyPanel.cs) | The strip's views: holding Ctrl, Alt and Shift, repeat, folding into a tab |
-| [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys |
+| [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
+| [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
 | [MainActivity.cs](MainActivity.cs) | The app's one screen: what it does, whether it is on, the way to Settings |
 
 ## Using it
 
 - **Ctrl and Alt** hold for the next key: pressed once they stay filled, and
-  are let go after the next key; pressed again they let go at once. While one
-  is held, letters and digits appear above the strip: Ctrl+C, Ctrl+S or
-  Alt+F are pressed there, because the phone's keyboard types text, not keys,
-  and a modifier held here cannot reach a letter typed there.
+  are let go after the next key; pressed again they let go at once. The next
+  key can be one of the strip's or a character typed on your own keyboard:
+  Ctrl then "c" is Ctrl+C, Ctrl then "P" is Ctrl+Shift+P. Your keyboard types
+  text, not keys, so KeyPlus sees the character arrive in the editor, takes
+  it back with Backspace and sends the key with Ctrl or Alt instead.
 - **Shift** stays on until pressed again, so Shift and the arrows select.
 - **The arrows and pages** repeat while held.
 - **▾** folds the strip into a small tab at the right; the tab unfolds it.
 
 ## Build and install
 
+The rules for working on KeyPlus are in [rules.md](rules.md). Each
+`build-apk.ps1` raises the build number in [version.props](version.props),
+so every APK installs over the one before; commit it with the build.
+
 Needs the .NET 10 SDK with the `android` workload
 (`dotnet workload install android`) and a phone with Android 13 or later.
 
 ```powershell
 dotnet build                 # Debug build
-.\install.ps1                # Release build, installed on the phone over adb
+.\build-apk.ps1              # Release APK, copied to dist\KeyPlus-1.0.0.<build>.apk
 ```
 
 Then on the phone:
 
-1. Open **KeyPlus** and choose **Open accessibility settings**.
-2. Turn on **KeyPlus keys**.
-3. If Android says the setting is restricted (Android 13 and later do so for
+1. Copy `dist\KeyPlus-1.0.0.<build>.apk` to it and open it to install it
+   (Android asks to allow installing from the app that opens it).
+2. Open **KeyPlus** and choose **Open accessibility settings**.
+3. Turn on **KeyPlus keys**.
+4. If Android says the setting is restricted (Android 13 and later do so for
    apps not installed from a store), choose **Open app info** in KeyPlus,
    then **⋮ → Allow restricted settings**, and turn it on again.
 
@@ -59,6 +68,10 @@ Then on the phone:
   another app.
 - An app that reads only text, not key events, ignores Esc and the arrows.
   Browsers, terminals and SSH apps read them.
+- A character typed under Ctrl or Alt reaches the editor before KeyPlus takes
+  it back: in a terminal the program sees it and then a Backspace. And an
+  editor that does not report its caret (Termux's terminal, for one) keeps
+  the character as typed; use the strip's keys there, or Termux's own.
 - The browser may take a few shortcuts (Ctrl+T, Ctrl+W) before the page does.
 - Google Play reviews accessibility services closely; installed from the
   APK, nothing of that applies.

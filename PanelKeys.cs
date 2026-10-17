@@ -49,19 +49,6 @@ public static class PanelKeys
         ],
     ];
 
-    /// <summary>
-    /// The keys Ctrl or Alt combine with, shown while one of them is held. The
-    /// phone's keyboard commits text, not key events, so a modifier held here
-    /// cannot reach a letter typed there: Ctrl+C has to be pressed here.
-    /// </summary>
-    public static readonly IReadOnlyList<IReadOnlyList<PanelKey>> Combining =
-    [
-        Row("1234567890"),
-        Row("qwertyuiop"),
-        Row("asdfghjkl"),
-        [.. Row("zxcvbnm"), new(",", Keycode.Comma), new(".", Keycode.Period), new("Space", Keycode.Space)],
-    ];
-
     /// <summary>The meta state a key event carries for the modifiers held.</summary>
     public static MetaKeyStates MetaOf(Held held)
     {
@@ -83,9 +70,4 @@ public static class PanelKeys
 
         return meta;
     }
-
-    private static List<PanelKey> Row(string characters) =>
-        [.. characters.Select(character => char.IsDigit(character)
-            ? new PanelKey(character.ToString(), Keycode.Num0 + (character - '0'))
-            : new PanelKey(char.ToUpperInvariant(character).ToString(), Keycode.A + (character - 'a')))];
 }

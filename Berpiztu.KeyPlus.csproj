@@ -5,6 +5,8 @@
        sent to the field being typed in. An accessibility service, not a
        keyboard: Android 13 lets one write to the focused editor beside the
        user's own keyboard, which is why the minimum is API 33. -->
+  <Import Project="version.props" />
+
   <PropertyGroup>
     <TargetFramework>net10.0-android</TargetFramework>
     <SupportedOSPlatformVersion>33.0</SupportedOSPlatformVersion>
@@ -14,8 +16,11 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Berpiztu.KeyPlus</RootNamespace>
     <ApplicationId>com.berpiztu.keyplus</ApplicationId>
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>$(BuildNumber)</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.0.$(BuildNumber)</ApplicationDisplayVersion>
+    <!-- Only the APK, which is copied to the phone: no app bundle for a store,
+         nor the bundletool step that turns one into APKs. -->
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
     <Authors>Berpiztu</Authors>
     <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
   </PropertyGroup>

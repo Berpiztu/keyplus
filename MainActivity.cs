@@ -33,8 +33,8 @@ public sealed class MainActivity : Activity
             "KeyPlus adds Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End and the page keys " +
             "above the keyboard you already use, and sends them to the field you are typing in: " +
             "a terminal, an SSH app, or a web editor such as vscode.dev in the browser.\n\n" +
-            "Ctrl and Alt hold for the next key; while one is held, letters and digits appear " +
-            "above the keys, so Ctrl+C or Ctrl+S is pressed there. Shift stays on until pressed again. " +
+            "Ctrl and Alt hold for the next key, one of the strip's or a letter typed on your keyboard: " +
+            "Ctrl then \"c\" is Ctrl+C. Shift stays on until pressed again. " +
             "The arrows and pages repeat while held. ▾ folds the keys into a tab."));
 
         status = Text("");
