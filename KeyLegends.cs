@@ -167,7 +167,7 @@ public sealed class KeyLegends(int inset, int gap, Color strong, Color weak) : D
     }
 
     /// <summary>
-    /// The owner's design for the ; , and : . and _ - keys (doc/diseño.md, drawing 2): the
+    /// The owner's design for the ; , : . _ - and &gt; &lt; keys (doc/diseño.md, drawing 2): the
     /// shifted legend centred in the top left quarter, the plain one centred
     /// in the bottom half, both at one size, the one A− and A+ ask for
     /// (<see cref="TextSize"/>). Grown till they would meet, they move apart
@@ -177,7 +177,7 @@ public sealed class KeyLegends(int inset, int gap, Color strong, Color weak) : D
     /// </summary>
     private IReadOnlyList<(Legend Legend, float Size, float X, float Baseline)>? QuartersTrial(IReadOnlyList<Legend> shown, RectF room)
     {
-        if (shown.Count != 2 || shown.FirstOrDefault(legend => legend.Cell == Plain) is not { Text: "," or "." or "-" } plain
+        if (shown.Count != 2 || shown.FirstOrDefault(legend => legend.Cell == Plain) is not { Text: "," or "." or "-" or "<" } plain
             || shown.FirstOrDefault(legend => legend.Cell == Shifted) is not { Text: not null } shifted)
         {
             return null;
