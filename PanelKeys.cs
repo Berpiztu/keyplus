@@ -3,8 +3,8 @@ using Android.Views;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The modifiers as the panel holds them: Ctrl, Alt and AltGr for the next
-/// key, Shift locked until pressed again for the strip's keys and let go after
+/// The modifiers as the panel holds them: Ctrl, Alt, AltGr and Windows for
+/// the next key, Shift locked until pressed again for the strip's keys and let go after
 /// a character typed, Caps Lock and Fn until pressed again.
 /// </summary>
 [Flags]
@@ -17,6 +17,7 @@ public enum Held
     AltGr = 8,
     CapsLock = 16,
     Fn = 32,
+    Windows = 64,
 }
 
 /// <summary>
@@ -160,8 +161,9 @@ public static class PanelKeys
             new("Mayús", Keycode.ShiftRight, Held.Shift), new("Supr", Keycode.ForwardDel, Repeats: true),
         ],
         [
-            new("Ctrl", Keycode.CtrlLeft, Held.Ctrl), new("Fn", Keycode.Function, Held.Fn), new("Alt", Keycode.AltLeft, Held.Alt),
-            Character(" ", " ", null, Keycode.Space) with { Label = "", Weight = 6.5f },
+            new("Ctrl", Keycode.CtrlLeft, Held.Ctrl), new("Fn", Keycode.Function, Held.Fn),
+            new("⊞", Keycode.MetaLeft, Held.Windows), new("Alt", Keycode.AltLeft, Held.Alt),
+            Character(" ", " ", null, Keycode.Space) with { Label = "", Weight = 5.5f },
             new("Alt Gr", Keycode.AltRight, Held.AltGr), new("Ctrl", Keycode.CtrlRight, Held.Ctrl),
             new("←", Keycode.DpadLeft, Repeats: true, FnLabel: "Inicio", FnCode: Keycode.MoveHome),
             new("↓", Keycode.DpadDown, Repeats: true, FnLabel: "AvPág", FnCode: Keycode.PageDown),
@@ -250,6 +252,11 @@ public static class PanelKeys
         if (held.HasFlag(Held.Alt))
         {
             meta |= MetaKeyStates.AltOn | MetaKeyStates.AltLeftOn;
+        }
+
+        if (held.HasFlag(Held.Windows))
+        {
+            meta |= MetaKeyStates.MetaOn | MetaKeyStates.MetaLeftOn;
         }
 
         return meta;

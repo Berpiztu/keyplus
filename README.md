@@ -42,7 +42,8 @@ floating keyboard too; with no keyboard open it is out of sight.
   AvPág and ImpPnt (Print Screen) in a column at the right, beside Supr and
   Insert. Rows keep their height whatever their keys read. **Fn** stays on until
   pressed again: it makes 1 to ¡ F1 to F12 and the arrows Inicio, Fin, RePág
-  and AvPág. The keyboard types its characters as text, so it types what it
+  and AvPág. **⊞** (Windows) holds for the next key, as Ctrl does (⊞ then E
+  is Windows+E); pressed twice it is Windows alone, the Start menu. The keyboard types its characters as text, so it types what it
   shows whatever layout the editor expects; with Ctrl or Alt held its keys
   go out as keys (Ctrl+S). **Keys** in the title bar turns it back into the
   strip.

@@ -248,8 +248,11 @@ public sealed class KeyPanel
         }
     }
 
-    /// <summary>Whether Ctrl or Alt is held, waiting for the next key.</summary>
-    public bool HoldsCtrlOrAlt => (held & (Held.Ctrl | Held.Alt)) != Held.None;
+    /// <summary>Whether Ctrl, Alt or Windows is held, waiting for the next key.</summary>
+    public bool HoldsKeyModifier => (held & KeyModifiers) != Held.None;
+
+    /// <summary>The modifiers that make a character key go out as a key, not as its text.</summary>
+    private const Held KeyModifiers = Held.Ctrl | Held.Alt | Held.Windows;
 
     /// <summary>
     /// The meta state of the modifiers held, for a key typed on the phone's
@@ -423,12 +426,18 @@ public sealed class KeyPanel
     {
         if (key.IsModifier)
         {
+            // Windows pressed twice, nothing between: Windows alone, the Start menu.
+            if (key.Modifier == Held.Windows && held.HasFlag(Held.Windows))
+            {
+                send(key.Code, MetaKeyStates.None);
+            }
+
             SetHeld(held ^ key.Modifier);
             return;
         }
 
         var code = held.HasFlag(Held.Fn) && key.FnCode is { } fnCode ? fnCode : key.Code;
-        if (code == key.Code && key.IsCharacter && ((held & (Held.Ctrl | Held.Alt)) == Held.None || key.Code == Keycode.Unknown))
+        if (code == key.Code && key.IsCharacter && ((held & KeyModifiers) == Held.None || key.Code == Keycode.Unknown))
         {
             TypeCharacter(key);
             return;

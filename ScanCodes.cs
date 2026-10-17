@@ -33,7 +33,7 @@ public static class ScanCodes
         [Keycode.CtrlRight] = 97, [Keycode.Sysrq] = 99, [Keycode.AltRight] = 100,
         [Keycode.MoveHome] = 102, [Keycode.DpadUp] = 103, [Keycode.PageUp] = 104, [Keycode.DpadLeft] = 105,
         [Keycode.DpadRight] = 106, [Keycode.MoveEnd] = 107, [Keycode.DpadDown] = 108, [Keycode.PageDown] = 109,
-        [Keycode.Insert] = 110, [Keycode.ForwardDel] = 111,
+        [Keycode.Insert] = 110, [Keycode.ForwardDel] = 111, [Keycode.MetaLeft] = 125,
     };
 
     /// <summary>The scan code of a key; 0 for one a PC keyboard does not have.</summary>

@@ -380,7 +380,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// </summary>
     private void OnCaretMoved(int oldStart, int newStart)
     {
-        if (overlay?.Panel is not { HoldsCtrlOrAlt: true } panel || newStart != oldStart + 1)
+        if (overlay?.Panel is not { HoldsKeyModifier: true } panel || newStart != oldStart + 1)
         {
             return;
         }
@@ -467,5 +467,6 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         (MetaKeyStates.CtrlOn, Keycode.CtrlLeft, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn),
         (MetaKeyStates.AltOn, Keycode.AltLeft, MetaKeyStates.AltOn | MetaKeyStates.AltLeftOn),
         (MetaKeyStates.ShiftOn, Keycode.ShiftLeft, MetaKeyStates.ShiftOn | MetaKeyStates.ShiftLeftOn),
+        (MetaKeyStates.MetaOn, Keycode.MetaLeft, MetaKeyStates.MetaOn | MetaKeyStates.MetaLeftOn),
     ];
 }
