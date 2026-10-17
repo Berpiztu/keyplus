@@ -35,7 +35,9 @@ floating keyboard too; with no keyboard open it is out of sight.
   while held.
 - **ABC** in the title bar turns the window into a whole keyboard laid out
   as Spain's (ISO, es-ES): ñ, ç, ¡ ¿ º ª, AltGr for \ | @ # ~ € ¬ [ ] { },
-  ⇪ for Caps Lock, and ´ ` ^ ¨ as dead keys (´ then a is á, ¨ then u is ü).
+  ⇪ for Caps Lock, and ´ ` ^ ¨ as dead keys (´ then a is á, ¨ then u is ü);
+  Esc, F1 to F12 and Del along the top, the arrows as an inverted T at the
+  bottom right with Home and End beside the up arrow.
   It types its characters as text, so it types what it shows whatever
   layout the editor expects; with Ctrl or Alt held its keys go out as keys
   (Ctrl+S). **Fn** turns it back into the strip.

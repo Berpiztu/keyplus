@@ -102,11 +102,17 @@ public static class PanelKeys
 
     /// <summary>
     /// A whole keyboard as Spain's (ISO, es-ES) lays it out, AltGr's characters
-    /// included, with ´ ` ^ and ¨ as dead keys; Esc, Ctrl, Alt and the arrows
-    /// along the bottom.
+    /// included, with ´ ` ^ and ¨ as dead keys: Esc, the function keys and Del
+    /// along the top, as a PC's; the arrows as an inverted T at the bottom
+    /// right, Home and End beside the up arrow. The last two rows weigh the
+    /// same, so the up arrow stands right above the down one.
     /// </summary>
     public static readonly IReadOnlyList<IReadOnlyList<PanelKey>> Spanish =
     [
+        [
+            new("Esc", Keycode.Escape), .. Enumerable.Range(1, 12).Select(n => new PanelKey($"F{n}", Keycode.F1 + (n - 1))),
+            new("Del", Keycode.ForwardDel, Repeats: true),
+        ],
         [
             Character("º", "ª", "\\"), Character("1", "!", "|", Keycode.Num1), Character("2", "\"", "@", Keycode.Num2),
             Character("3", "·", "#", Keycode.Num3), Character("4", "$", "~", Keycode.Num4), Character("5", "%", "€", Keycode.Num5),
@@ -123,15 +129,15 @@ public static class PanelKeys
             Character("´", "¨", "{"), Character("ç", "Ç", "}"), new("⏎", Keycode.Enter),
         ],
         [
-            new("⇧", Keycode.ShiftLeft, Held.Shift, Weight: 1.5f), Character("<", ">", null), .. Letters("zxcvbnm"),
+            new("⇧", Keycode.ShiftLeft, Held.Shift), Character("<", ">", null), .. Letters("zxcvbnm"),
             Character(",", ";", null, Keycode.Comma), Character(".", ":", null, Keycode.Period), Character("-", "_", null, Keycode.Minus),
-            new("⇧", Keycode.ShiftRight, Held.Shift, Weight: 1.5f),
+            new("Home", Keycode.MoveHome), new("↑", Keycode.DpadUp, Repeats: true), new("End", Keycode.MoveEnd),
         ],
         [
-            new("Esc", Keycode.Escape), new("Ctrl", Keycode.CtrlLeft, Held.Ctrl), new("Alt", Keycode.AltLeft, Held.Alt),
-            Character(" ", " ", null, Keycode.Space) with { Label = "Space", Weight = 4f },
-            new("AltGr", Keycode.AltRight, Held.AltGr), new("←", Keycode.DpadLeft, Repeats: true),
-            new("↑", Keycode.DpadUp, Repeats: true), new("↓", Keycode.DpadDown, Repeats: true), new("→", Keycode.DpadRight, Repeats: true),
+            new("Ctrl", Keycode.CtrlLeft, Held.Ctrl, Weight: 1.5f), new("Alt", Keycode.AltLeft, Held.Alt, Weight: 1.5f),
+            Character(" ", " ", null, Keycode.Space) with { Label = "Space", Weight = 7.5f },
+            new("AltGr", Keycode.AltRight, Held.AltGr, Weight: 1.5f),
+            new("←", Keycode.DpadLeft, Repeats: true), new("↓", Keycode.DpadDown, Repeats: true), new("→", Keycode.DpadRight, Repeats: true),
         ],
     ];
 
