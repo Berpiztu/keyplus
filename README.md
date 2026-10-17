@@ -24,6 +24,7 @@ floating keyboard too; with no keyboard open it is out of sight.
 | [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
+| [ScanCodes.cs](ScanCodes.cs) | The scan code a hardware keyboard sends with each key, which remote desktop apps go by |
 | [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
 | [MainActivity.cs](MainActivity.cs) | The app's one screen: what it does, whether it is on, the way to Settings |
 
@@ -102,5 +103,10 @@ Then on the phone:
   With text selected, the character typed replaces the selection before it
   is taken back: that is why copying has a key of its own.
 - The browser may take a few shortcuts (Ctrl+T, Ctrl+W) before the page does.
+- Keys go out as a Spanish hardware keyboard sends them: each with its scan
+  code, and each character key at its place on the keyboard (ç where a US
+  keyboard has the backslash). A remote desktop app presses that same key on
+  the remote machine, so Ctrl+ç there is Ctrl+ç when the remote machine's
+  layout is Spanish; with another layout it is whatever that key is there.
 - Google Play reviews accessibility services closely; installed from the
   APK, nothing of that applies.

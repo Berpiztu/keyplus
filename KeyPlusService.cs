@@ -34,6 +34,9 @@ public sealed class KeyPlusService : AccessibilityService
 {
     private const string LogTag = "KeyPlus";
 
+    /// <summary>The device id of key events no hardware sent (KeyCharacterMap.VIRTUAL_KEYBOARD).</summary>
+    private const int VirtualKeyboardId = -1;
+
     /// <summary>The panel in its window on one display.</summary>
     private sealed record Overlay(int DisplayId, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement);
 
@@ -361,9 +364,18 @@ public sealed class KeyPlusService : AccessibilityService
         SendKey(typed.Code, meta);
     }
 
-    /// <summary>The key that types a character on a virtual keyboard, with the Shift it takes; none for a character no key types.</summary>
+    /// <summary>
+    /// The key that types a character, with the Shift it takes: the Spanish
+    /// keyboard's, so ç is the key where a US keyboard has the backslash, else
+    /// a virtual keyboard's; none for a character no key types.
+    /// </summary>
     private static (Keycode Code, MetaKeyStates Meta)? KeyOf(char character)
     {
+        if (PanelKeys.SpanishKeyOf(character.ToString()) is { } spanish)
+        {
+            return spanish;
+        }
+
         var events = KeyCharacterMap.Load((int)KeyboardType.VirtualKeyboard)?.GetEvents([character]);
         var down = events?.FirstOrDefault(e => e.Action == KeyEventActions.Down && !KeyEvent.IsModifierKey(e.KeyCode));
         return down is null ? null : (down.KeyCode, down.MetaState & MetaKeyStates.ShiftMask);
@@ -373,10 +385,11 @@ public sealed class KeyPlusService : AccessibilityService
     private void TypeText(string text) => InputMethod?.CurrentInputConnection?.CommitText(text, 1, null);
 
     /// <summary>
-    /// Sends a key as a hardware keyboard would: each modifier held is pressed
-    /// before it and let go after it. The meta state alone is not enough for
-    /// every editor: Android's own text fields, for one, select with Shift and
-    /// the arrows only when Shift itself went down.
+    /// Sends a key as a hardware keyboard would: with its scan code, which
+    /// remote desktop apps go by (<see cref="ScanCodes"/>), and each modifier
+    /// held pressed before it and let go after it. The meta state alone is not
+    /// enough for every editor: Android's own text fields, for one, select with
+    /// Shift and the arrows only when Shift itself went down.
     /// </summary>
     private void SendKey(Keycode code, MetaKeyStates meta)
     {
@@ -388,7 +401,9 @@ public sealed class KeyPlusService : AccessibilityService
 
         var down = SystemClock.UptimeMillis();
         void Send(KeyEventActions action, Keycode key, MetaKeyStates state) =>
-            connection.SendKeyEvent(new KeyEvent(down, SystemClock.UptimeMillis(), action, key, 0, state));
+            connection.SendKeyEvent(new KeyEvent(
+                down, SystemClock.UptimeMillis(), action, key, 0, state,
+                VirtualKeyboardId, ScanCodes.Of(key), 0, InputSourceType.Keyboard));
 
         var pressed = Modifiers.Where(modifier => meta.HasFlag(modifier.On)).ToList();
         var state = MetaKeyStates.None;

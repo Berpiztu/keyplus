@@ -93,7 +93,7 @@ public static class PanelKeys
         ],
         [
             new("Esc", Keycode.Escape),
-            new("/", Keycode.Slash),
+            Character("/", "/", null, Keycode.Slash),
             new("Shift", Keycode.ShiftLeft, Held.Shift),
             new("Home", Keycode.MoveHome),
             new("↑", Keycode.DpadUp, Repeats: true),
@@ -121,19 +121,21 @@ public static class PanelKeys
     /// the bottom right, the up arrow between the minus and the right Shift.
     /// Fn, held until pressed again, makes the digits' row F1 to F12 and the
     /// arrows Home, End, Page up and Page down. Every row weighs 15.5, so the
-    /// up arrow stands right above the down one.
+    /// up arrow stands right above the down one. Each key's code is its place
+    /// on a US keyboard, as a Spanish hardware keyboard sends it (ç where the
+    /// backslash is), so Ctrl+ç reaches a remote machine set to Spanish.
     /// </summary>
     public static readonly IReadOnlyList<KeyBlock> Spanish =
     [
         new([
         [
-            new("Esc", Keycode.Escape), Character("º", "ª", "\\"),
+            new("Esc", Keycode.Escape), Character("º", "ª", "\\", Keycode.Grave),
             Function(Character("1", "!", "|", Keycode.Num1), 1), Function(Character("2", "\"", "@", Keycode.Num2), 2),
             Function(Character("3", "·", "#", Keycode.Num3), 3), Function(Character("4", "$", "~", Keycode.Num4), 4),
             Function(Character("5", "%", "€", Keycode.Num5), 5), Function(Character("6", "&", "¬", Keycode.Num6), 6),
             Function(Character("7", "/", null, Keycode.Num7), 7), Function(Character("8", "(", null, Keycode.Num8), 8),
             Function(Character("9", ")", null, Keycode.Num9), 9), Function(Character("0", "=", null, Keycode.Num0), 10),
-            Function(Character("'", "?", null, Keycode.Apostrophe), 11), Function(Character("¡", "¿", null), 12),
+            Function(Character("'", "?", null, Keycode.Minus), 11), Function(Character("¡", "¿", null, Keycode.Equals), 12),
             new("⌫", Keycode.Del, Repeats: true, Weight: 1.5f),
         ],
         ]),
@@ -141,11 +143,11 @@ public static class PanelKeys
         [
             [
                 new("Tab", Keycode.Tab, Weight: 1.75f), .. Letters("qwertyuiop"),
-                Character("`", "^", "[", Keycode.Grave), Character("+", "*", "]", Keycode.Plus),
+                Character("`", "^", "[", Keycode.LeftBracket), Character("+", "*", "]", Keycode.RightBracket),
             ],
             [
-                new("Bloq May", Keycode.CapsLock, Held.CapsLock, Weight: 1.75f), .. Letters("asdfghjkl"), Character("ñ", "Ñ", null),
-                Character("´", "¨", "{"), Character("ç", "Ç", "}"),
+                new("Bloq May", Keycode.CapsLock, Held.CapsLock, Weight: 1.75f), .. Letters("asdfghjkl"), Character("ñ", "Ñ", null, Keycode.Semicolon),
+                Character("´", "¨", "{", Keycode.Apostrophe), Character("ç", "Ç", "}", Keycode.Backslash),
             ],
         ],
         Tall: new("Entrar", Keycode.Enter, Weight: 1.75f),
@@ -153,7 +155,7 @@ public static class PanelKeys
         new([
         [
             new("Mayús", Keycode.ShiftLeft, Held.Shift, Weight: 1.5f), Character("<", ">", null), .. Letters("zxcvbnm"),
-            Character(",", ";", null, Keycode.Comma), Character(".", ":", null, Keycode.Period), Character("-", "_", null, Keycode.Minus),
+            Character(",", ";", null, Keycode.Comma), Character(".", ":", null, Keycode.Period), Character("-", "_", null, Keycode.Slash),
             new("↑", Keycode.DpadUp, Repeats: true, FnLabel: "RePág", FnCode: Keycode.PageUp),
             new("Mayús", Keycode.ShiftRight, Held.Shift), new("Supr", Keycode.ForwardDel, Repeats: true),
         ],
@@ -177,6 +179,33 @@ public static class PanelKeys
         ["^"] = Accented("aeiouAEIOU", "âêîôûÂÊÎÔÛ"),
         ["¨"] = Accented("aeiouAEIOU", "äëïöüÄËÏÖÜ"),
     };
+
+    /// <summary>
+    /// The key that types a character on the Spanish keyboard, with the Shift
+    /// it takes; none for a character it has no key for.
+    /// </summary>
+    public static (Keycode Code, MetaKeyStates Meta)? SpanishKeyOf(string character)
+    {
+        foreach (var key in Spanish.SelectMany(block => block.Rows.SelectMany(row => row)))
+        {
+            if (key.Code == Keycode.Unknown)
+            {
+                continue;
+            }
+
+            if (key.Text == character)
+            {
+                return (key.Code, MetaKeyStates.None);
+            }
+
+            if (key.ShiftText == character)
+            {
+                return (key.Code, MetaKeyStates.ShiftOn | MetaKeyStates.ShiftLeftOn);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Whether a key's text is a dead key's accent, which waits for the next character.</summary>
     public static bool IsDead(string text) => Accents.ContainsKey(text);
