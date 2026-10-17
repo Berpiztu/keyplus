@@ -14,7 +14,8 @@ namespace Berpiztu.KeyPlus;
 
 /// <summary>
 /// The keys, as a small window: a title bar that moves it, with ABC to turn
-/// it into a whole Spanish keyboard and Keys to turn it back, ⤓ to dock it
+/// it into a whole Spanish keyboard and Keys to turn it back, A− and A+ for
+/// smaller or larger labels, ⤓ to dock it
 /// above the keyboard again (while it floats), – to minimize it into the ⌨
 /// icon, which a tap opens again and a drag moves, and ✕ to close KeyPlus,
 /// once the title bar has asked whether to; the keys, the shortcuts'
@@ -57,6 +58,12 @@ public sealed class KeyPanel
     private const string PreferencesName = "keyplus";
     private const string FoldedPreference = "folded";
     private const string WholeKeyboardPreference = "wholeKeyboard";
+    private const string LabelScalePreference = "labelScale";
+
+    /// <summary>How much A− and A+ change the labels' size at a press, and how far.</summary>
+    private const float LabelScaleStep = 0.1f;
+    private const float SmallestLabelScale = 0.5f;
+    private const float LargestLabelScale = 2.5f;
     private const int RepeatDelayMs = 400;
     private const int RepeatIntervalMs = 50;
 
@@ -67,7 +74,7 @@ public sealed class KeyPanel
     /// A key's label, in sp at the usual size: as large as fits in the key, up
     /// to the largest, down to the smallest for a long label in a narrow key.
     /// </summary>
-    private const int LargestLabelSize = 20;
+    private const int LargestLabelSize = 24;
     private const int SmallestLabelSize = 8;
 
     /// <summary>The share of it a secondary legend takes: the shifted character above, the Alt Gr one at the right.</summary>
@@ -109,6 +116,9 @@ public sealed class KeyPanel
     private string? deadAccent;
     private float scale = 1f;
 
+    /// <summary>The labels' size the user chose with A− and A+, 1 for the usual one.</summary>
+    private float labelScale;
+
     /// <param name="send">Sends a key with the meta state of the modifiers held for it.</param>
     /// <param name="type">Types text, as the phone's keyboard does.</param>
     public KeyPanel(Context context, Action<Keycode, MetaKeyStates> send, Action<string> type)
@@ -117,6 +127,7 @@ public sealed class KeyPanel
         this.send = send;
         this.type = type;
         preferences = context.GetSharedPreferences(PreferencesName, FileCreationMode.Private)!;
+        labelScale = preferences.GetFloat(LabelScalePreference, 1f);
 
         var title = new TextView(context) { Text = "KeyPlus", Gravity = GravityFlags.CenterVertical };
         title.SetTextColor(DimTextColor);
@@ -131,12 +142,18 @@ public sealed class KeyPanel
         minimize.Click += (_, _) => SetFolded(true);
         var close = TitleButton("✕", "Close KeyPlus");
         close.Click += (_, _) => AskToClose(true);
+        var smaller = TitleButton("A−", "Smaller labels");
+        smaller.Click += (_, _) => SetLabelScale(labelScale - LabelScaleStep);
+        var larger = TitleButton("A+", "Larger labels");
+        larger.Click += (_, _) => SetLabelScale(labelScale + LabelScaleStep);
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard");
         switchKeys.Click += (_, _) => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible);
 
         titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         titleBar.AddView(Grip("◤", Corner.TopLeft), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        titleBar.AddView(smaller, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
+        titleBar.AddView(larger, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(switchKeys, new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(dock, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(minimize, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
@@ -671,10 +688,21 @@ public sealed class KeyPanel
         return view;
     }
 
-    /// <summary>Sizes a key's label to the largest that fits in it, for the keys' size.</summary>
+    /// <summary>Sets the labels' size the user chose, kept across restarts, and sizes every key's label to it.</summary>
+    private void SetLabelScale(float value)
+    {
+        labelScale = Math.Clamp((float)Math.Round(value, 1), SmallestLabelScale, LargestLabelScale);
+        preferences.Edit()!.PutFloat(LabelScalePreference, labelScale)!.Apply();
+        foreach (var key in keys)
+        {
+            FitLabel(key);
+        }
+    }
+
+    /// <summary>Sizes a key's label to the largest that fits in it, for the keys' size and the labels' size the user chose.</summary>
     private void FitLabel(TextView key)
     {
-        var largest = Math.Max(SmallestLabelSize + 1, (int)Math.Round(LargestLabelSize * scale));
+        var largest = Math.Max(SmallestLabelSize + 1, (int)Math.Round(LargestLabelSize * scale * labelScale));
         key.SetAutoSizeTextTypeUniformWithConfiguration(SmallestLabelSize, largest, 1, (int)ComplexUnitType.Sp);
     }
 
