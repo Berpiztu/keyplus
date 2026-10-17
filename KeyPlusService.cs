@@ -30,7 +30,7 @@ namespace Berpiztu.KeyPlus;
     Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
 [IntentFilter(["android.accessibilityservice.AccessibilityService"])]
 [MetaData("android.accessibilityservice", Resource = "@xml/keyplus_accessibility")]
-public sealed class KeyPlusService : AccessibilityService
+public sealed class KeyPlusService : AccessibilityService, Android.Content.ISharedPreferencesOnSharedPreferenceChangeListener
 {
     private const string LogTag = "KeyPlus";
 
@@ -52,8 +52,19 @@ public sealed class KeyPlusService : AccessibilityService
     protected override void OnServiceConnected()
     {
         base.OnServiceConnected();
-        placed = new PanelPlacement(GetSharedPreferences("keyplus", Android.Content.FileCreationMode.Private)!);
+        var preferences = GetSharedPreferences("keyplus", Android.Content.FileCreationMode.Private)!;
+        preferences.RegisterOnSharedPreferenceChangeListener(this);
+        placed = new PanelPlacement(preferences);
         Place();
+    }
+
+    /// <summary>KeyPlus closed, or opened again by the app: the panel goes, or comes back.</summary>
+    public void OnSharedPreferenceChanged(Android.Content.ISharedPreferences? preferences, string? key)
+    {
+        if (key == PanelPlacement.HiddenKey)
+        {
+            Place();
+        }
     }
 
     public override Android.AccessibilityServices.InputMethod OnCreateInputMethod() => new SelectionInputMethod(this, OnCaretMoved);
@@ -72,6 +83,7 @@ public sealed class KeyPlusService : AccessibilityService
 
     public override void OnDestroy()
     {
+        GetSharedPreferences("keyplus", Android.Content.FileCreationMode.Private)!.UnregisterOnSharedPreferenceChangeListener(this);
         Close();
         base.OnDestroy();
     }
@@ -87,6 +99,12 @@ public sealed class KeyPlusService : AccessibilityService
     {
         if (placed is null)
         {
+            return;
+        }
+
+        if (placed.Hidden)
+        {
+            Close();
             return;
         }
 
@@ -214,12 +232,12 @@ public sealed class KeyPlusService : AccessibilityService
         }
     }
 
-    /// <summary>The user said yes to closing KeyPlus: the service turns itself off, until turned on again in Settings.</summary>
-    private void OnCloseRequested()
-    {
-        Close();
-        DisableSelf();
-    }
+    /// <summary>
+    /// The user said yes to closing KeyPlus: nothing of it is in sight until
+    /// the app is opened again. The service stays on, for an app cannot turn
+    /// an accessibility service back on; only Settings can.
+    /// </summary>
+    private void OnCloseRequested() => placed!.Hidden = true;
 
     /// <summary>
     /// At a drag's start, floats the panel where it stands now and notes where

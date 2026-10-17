@@ -67,8 +67,9 @@ floating keyboard too; with no keyboard open it is out of sight.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight.
 - **✕** closes KeyPlus, once you say yes to "¿Quieres cerrar KeyPlus?" in the
-  title bar: the service turns itself off. To bring it back, open KeyPlus and
-  turn it on again in the accessibility settings.
+  title bar: nothing of it is in sight. Opening the KeyPlus app brings it
+  back. The service stays on meanwhile, since only Settings can turn an
+  accessibility service on again; turn it off there to stop it altogether.
 
 ## Build and install
 

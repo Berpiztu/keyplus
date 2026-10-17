@@ -12,7 +12,8 @@ namespace Berpiztu.KeyPlus;
 
 /// <summary>
 /// The app's one screen: what KeyPlus does, whether its service is on, and the
-/// two places in Settings that turn it on. The keys themselves live in
+/// two places in Settings that turn it on. Opening it brings KeyPlus back on
+/// screen after ✕ closed it. The keys themselves live in
 /// <see cref="KeyPlusService"/>, not here.
 /// </summary>
 [Activity(Label = "@string/app_name", MainLauncher = true, Exported = true,
@@ -42,7 +43,7 @@ public sealed class MainActivity : Activity
             "The keys are a small window above the keyboard while one is open. Drag its title bar " +
             "to float it anywhere, in sight all the time, keyboard or not; drag a corner to resize it; " +
             "⤓ docks it above the keyboard again. – minimizes it into the ⌨ icon, always in sight, " +
-            "which a tap opens again. ✕ closes KeyPlus, after asking; turn it on here again to bring it back."));
+            "which a tap opens again. ✕ closes KeyPlus, after asking; open this app to bring it back."));
 
         status = Text("");
         content.AddView(status);
@@ -63,8 +64,9 @@ public sealed class MainActivity : Activity
     protected override void OnResume()
     {
         base.OnResume();
+        new PanelPlacement(GetSharedPreferences("keyplus", FileCreationMode.Private)!).Hidden = false;
         status!.Text = IsServiceOn()
-            ? "KeyPlus is on: the keys appear whenever a keyboard is open."
+            ? "KeyPlus is on: the ⌨ icon is on screen, and the keys appear whenever a keyboard is open."
             : "KeyPlus is off.";
     }
 
