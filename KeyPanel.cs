@@ -449,9 +449,12 @@ public sealed class KeyPanel
             view.SetMaxLines(3);
 
             // Lines close together, with no room above and below for accents
-            // a legend does not have, so the legends grow as far as they can.
+            // a legend does not have, so the legends grow as far as they can;
+            // a margin inside the key's edges, so the top left and bottom
+            // right legends do not touch them.
             view.SetIncludeFontPadding(false);
-            view.SetLineSpacing(0, 0.9f);
+            view.SetLineSpacing(0, 0.85f);
+            view.SetPadding(Dp(6), Dp(3), Dp(6), Dp(3));
         }
 
         view.Touch += (_, e) =>
@@ -569,9 +572,9 @@ public sealed class KeyPanel
     /// <summary>
     /// What a key reads, much as Windows' touch keyboard labels it: with Fn
     /// held the key it becomes; with Alt Gr or Shift held only what it types
-    /// now, nothing where it types nothing; else the character it types, its
-    /// shifted one small above at the left and its Alt Gr one small below at
-    /// the right.
+    /// now, nothing where it types nothing; else the character it types with
+    /// its shifted one small above it and its Alt Gr one small below it, at
+    /// the top left and the bottom right when it has both.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
     {
@@ -591,16 +594,22 @@ public sealed class KeyPanel
             return new Java.Lang.String(typed is null or " " ? key.Label == key.Text ? "" : key.Label : typed);
         }
 
+        var shifted = !key.IsLetter && key.ShiftText != key.Text ? key.ShiftText : null;
+        var altGr = key.AltGrText;
+
+        // Two legends one above the other, both in the middle; three across
+        // the key from its top left to its bottom right.
+        var three = shifted is not null && altGr is not null;
         var legend = new SpannableStringBuilder();
-        if (!key.IsLetter && key.ShiftText is { } shifted && shifted != key.Text)
+        if (shifted is not null)
         {
-            AppendLine(legend, shifted, Layout.Alignment.AlignNormal!, secondary: true);
+            AppendLine(legend, shifted, three ? Layout.Alignment.AlignNormal! : Layout.Alignment.AlignCenter!, secondary: true);
         }
 
         AppendLine(legend, key.IsLetter ? key.TextFor(held & ~Held.AltGr)! : key.Label, Layout.Alignment.AlignCenter!, secondary: false);
-        if (key.AltGrText is { } altGr)
+        if (altGr is not null)
         {
-            AppendLine(legend, altGr, Layout.Alignment.AlignOpposite!, secondary: true);
+            AppendLine(legend, altGr, three ? Layout.Alignment.AlignOpposite! : Layout.Alignment.AlignCenter!, secondary: true);
         }
 
         return legend;
@@ -608,8 +617,7 @@ public sealed class KeyPanel
 
     /// <summary>
     /// Adds a line to a legend: one character a line, so the legends take the
-    /// key's height rather than its width, the shifted one at the left, the
-    /// Alt Gr one at the right, a secondary one smaller.
+    /// key's height rather than its width, a secondary one smaller.
     /// </summary>
     private static void AppendLine(SpannableStringBuilder legend, string text, Layout.Alignment alignment, bool secondary)
     {
