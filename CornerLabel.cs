@@ -1,6 +1,5 @@
 using Android.Graphics;
 using Android.Graphics.Drawables;
-using Android.Widget;
 
 namespace Berpiztu.KeyPlus;
 
@@ -9,9 +8,9 @@ namespace Berpiztu.KeyPlus;
 /// key, as Windows' touch keyboard draws it: apart from the key's own label,
 /// so it neither moves the label off the middle nor takes room the label
 /// could grow into. Its size follows the label's, whatever that fitted to,
-/// larger for a small glyph.
+/// larger for a small glyph, and it moves left as far as the label does.
 /// </summary>
-public sealed class CornerLabel(TextView key, float share, int inset) : Drawable
+public sealed class CornerLabel(KeyLabel key, float share, int inset) : Drawable
 {
     private readonly Paint paint = new(PaintFlags.AntiAlias) { TextAlign = Paint.Align.Right };
 
@@ -28,7 +27,7 @@ public sealed class CornerLabel(TextView key, float share, int inset) : Drawable
         paint.Color = new Color(key.CurrentTextColor);
         paint.TextSize = key.TextSize * share * PanelKeys.GlyphFactor(Text);
         var bounds = Bounds;
-        canvas.DrawText(Text, bounds.Right - inset, bounds.Bottom - inset - paint.Descent(), paint);
+        canvas.DrawText(Text, bounds.Right - inset - key.Shift, bounds.Bottom - inset - paint.Descent(), paint);
     }
 
     public override void SetAlpha(int alpha) => paint.Alpha = alpha;

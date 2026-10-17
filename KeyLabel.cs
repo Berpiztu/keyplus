@@ -8,8 +8,9 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// A key's label: a TextView that can draw its text closer to its left edge
 /// than the middle would, by a share of the room left of it, measured on the
-/// text as it is laid out, whatever size it fitted to. The key's ground and
-/// what is drawn over it (an Alt Gr character in the corner) stay put.
+/// text as it is laid out, whatever size it fitted to. The key's ground stays
+/// put; what is drawn over it (an Alt Gr character in the corner) moves as
+/// far, by <see cref="Shift"/>.
 /// </summary>
 public sealed class KeyLabel : TextView
 {
@@ -26,11 +27,14 @@ public sealed class KeyLabel : TextView
     /// <summary>The share of the room left of the text it gives up, 0 for none.</summary>
     public float LeftRoomGivenUp { get; set; }
 
+    /// <summary>How far left the text was last drawn, for what is drawn over the key to follow.</summary>
+    public float Shift { get; private set; }
+
     protected override void OnDraw(Canvas? canvas)
     {
-        var shift = LeftRoomGivenUp > 0 ? LeftRoom() * LeftRoomGivenUp : 0f;
+        Shift = LeftRoomGivenUp > 0 ? LeftRoom() * LeftRoomGivenUp : 0f;
         canvas!.Save();
-        canvas.Translate(-shift, 0);
+        canvas.Translate(-Shift, 0);
         base.OnDraw(canvas);
         canvas.Restore();
     }

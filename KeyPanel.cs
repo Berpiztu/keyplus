@@ -719,8 +719,8 @@ public sealed class KeyPanel
                 corner.Text = plain ? key.AltGrText : null;
                 corner.InvalidateSelf();
 
-                // Three legends: the two above one another give up half the
-                // room left of them, to stand apart from the corner's.
+                // Three legends: all three move left by half the room left of
+                // the two above one another.
                 ((KeyLabel)view).LeftRoomGivenUp = plain && key.HasThreeLegends ? ThreeLegendsLeftRoomGivenUp : 0f;
                 view.Invalidate();
             }
