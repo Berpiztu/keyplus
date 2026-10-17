@@ -466,8 +466,10 @@ public sealed class KeyPanel
 
     /// <summary>
     /// What a key reads, as Windows' touch keyboard labels it: with Fn held
-    /// the key it becomes; a letter as it types now; any other character with
-    /// its shifted one small above it and its AltGr one small at its right.
+    /// the key it becomes; with Alt Gr or Shift held only what it types now,
+    /// nothing where it types nothing; else a letter as it types now and any
+    /// other character with its shifted one small above it and its AltGr one
+    /// small at its right.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
     {
@@ -479,6 +481,12 @@ public sealed class KeyPanel
         if (!key.IsCharacter)
         {
             return new Java.Lang.String(key.Label);
+        }
+
+        if ((held & (Held.AltGr | Held.Shift)) != Held.None)
+        {
+            var typed = key.TextFor(held);
+            return new Java.Lang.String(typed is null or " " ? key.Label == key.Text ? "" : key.Label : typed);
         }
 
         var legend = new SpannableStringBuilder();
