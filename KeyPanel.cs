@@ -15,7 +15,7 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// The keys, as a small window: a title bar that moves it, with ABC to turn
 /// it into a whole Spanish keyboard and Keys to turn it back, A− and A+ for
-/// smaller or larger labels, ⤓ to dock it
+/// smaller or larger labels on the keys that type characters, ⤓ to dock it
 /// above the keyboard again (while it floats), – to minimize it into the ⌨
 /// icon, which a tap opens again and a drag moves, and ✕ to close KeyPlus,
 /// once the title bar has asked whether to; the keys, the shortcuts'
@@ -96,7 +96,8 @@ public sealed class KeyPanel
     private readonly Handler handler = new(Looper.MainLooper!);
     private readonly List<(Held Modifier, TextView View)> modifierKeys = [];
     private readonly List<(PanelKey Key, TextView View)> labelledKeys = [];
-    private readonly List<TextView> keys = [];
+    /// <summary>Every key, and whether it types a character, the keys whose labels A− and A+ size.</summary>
+    private readonly List<(TextView View, bool IsCharacter)> keys = [];
 
     /// <summary>The rows and the side column's keys, whose heights follow <see cref="Scale"/> and nothing else.</summary>
     private readonly List<View> rowViews = [];
@@ -261,9 +262,9 @@ public sealed class KeyPanel
         set
         {
             scale = value;
-            foreach (var key in keys)
+            foreach (var (view, isCharacter) in keys)
             {
-                FitLabel(key);
+                FitLabel(view, isCharacter);
             }
 
             foreach (var row in rowViews)
@@ -422,8 +423,8 @@ public sealed class KeyPanel
     {
         var view = KeyView(key.Label);
         view.SetPadding(Dp(2), 0, Dp(2), 0);
-        FitLabel(view);
-        keys.Add(view);
+        FitLabel(view, key.IsCharacter);
+        keys.Add((view, key.IsCharacter));
         if (key.IsModifier)
         {
             modifierKeys.Add((key.Modifier, view));
@@ -688,21 +689,26 @@ public sealed class KeyPanel
         return view;
     }
 
-    /// <summary>Sets the labels' size the user chose, kept across restarts, and sizes every key's label to it.</summary>
+    /// <summary>Sets the labels' size the user chose, kept across restarts, and sizes the character keys' labels to it.</summary>
     private void SetLabelScale(float value)
     {
         labelScale = Math.Clamp((float)Math.Round(value, 1), SmallestLabelScale, LargestLabelScale);
         preferences.Edit()!.PutFloat(LabelScalePreference, labelScale)!.Apply();
-        foreach (var key in keys)
+        foreach (var (view, isCharacter) in keys)
         {
-            FitLabel(key);
+            FitLabel(view, isCharacter);
         }
     }
 
-    /// <summary>Sizes a key's label to the largest that fits in it, for the keys' size and the labels' size the user chose.</summary>
-    private void FitLabel(TextView key)
+    /// <summary>
+    /// Sizes a key's label to the largest that fits in it, for the keys' size
+    /// and, for a key that types a character, the labels' size the user chose:
+    /// A− and A+ leave Ctrl, Alt, Enter and the like as they are.
+    /// </summary>
+    private void FitLabel(TextView key, bool isCharacter)
     {
-        var largest = Math.Max(SmallestLabelSize + 1, (int)Math.Round(LargestLabelSize * scale * labelScale));
+        var chosen = isCharacter ? labelScale : 1f;
+        var largest = Math.Max(SmallestLabelSize + 1, (int)Math.Round(LargestLabelSize * scale * chosen));
         key.SetAutoSizeTextTypeUniformWithConfiguration(SmallestLabelSize, largest, 1, (int)ComplexUnitType.Sp);
     }
 

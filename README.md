@@ -68,8 +68,10 @@ floating keyboard too; with no keyboard open it is out of sight.
   width, up or down for the size of its keys; the opposite corner stays put.
   **⤓** in the title bar docks it again. Where it stands and its size are
   kept.
-- **A−** and **A+** in the title bar make the labels smaller or larger, a
-  tenth at a press, and the size is kept. A label is never larger than its
+- **A−** and **A+** in the title bar make the labels of the keys that type
+  characters (letters, digits, symbols) smaller or larger, a tenth at a
+  press, and the size is kept; Ctrl, Alt, Enter and the like stay as they
+  are. A label is never larger than its
   key: past that, a corner makes the keys, and so the labels, larger.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight.
