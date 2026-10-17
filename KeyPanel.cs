@@ -15,7 +15,8 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// The keys, as a small window: a title bar that moves it, with ABC to turn
 /// it into a whole Spanish keyboard and Keys to turn it back, A− and A+ for
-/// smaller or larger labels on the keys that type characters, ⤓ to dock it
+/// smaller or larger labels on the keys that type characters and A↺ for their
+/// usual size, ⤓ to dock it
 /// above the keyboard again (while it floats), – to minimize it into the ⌨
 /// icon, which a tap opens again and a drag moves, and ✕ to close KeyPlus,
 /// once the title bar has asked whether to; the keys, the shortcuts'
@@ -147,6 +148,8 @@ public sealed class KeyPanel
         smaller.Click += (_, _) => SetLabelScale(labelScale - LabelScaleStep);
         var larger = TitleButton("A+", "Larger labels");
         larger.Click += (_, _) => SetLabelScale(labelScale + LabelScaleStep);
+        var usual = TitleButton("A↺", "Labels at their usual size");
+        usual.Click += (_, _) => SetLabelScale(1f);
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard");
         switchKeys.Click += (_, _) => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible);
 
@@ -155,6 +158,7 @@ public sealed class KeyPanel
         titleBar.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         titleBar.AddView(smaller, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(larger, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
+        titleBar.AddView(usual, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(switchKeys, new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(dock, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         titleBar.AddView(minimize, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
@@ -435,7 +439,12 @@ public sealed class KeyPanel
             labelledKeys.Add((key, view));
 
             view.SetSingleLine(false);
-            view.SetMaxLines(2);
+            view.SetMaxLines(3);
+
+            // Lines close together, with no room above and below for accents
+            // a legend does not have, so the legends grow as far as they can.
+            view.SetIncludeFontPadding(false);
+            view.SetLineSpacing(0, 0.9f);
         }
 
         view.Touch += (_, e) =>
@@ -551,11 +560,11 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// What a key reads, as Windows' touch keyboard labels it: with Fn held
-    /// the key it becomes; with Alt Gr or Shift held only what it types now,
-    /// nothing where it types nothing; else a letter as it types now and any
-    /// other character with its shifted one small above it and its AltGr one
-    /// small at its right.
+    /// What a key reads, much as Windows' touch keyboard labels it: with Fn
+    /// held the key it becomes; with Alt Gr or Shift held only what it types
+    /// now, nothing where it types nothing; else the character it types, its
+    /// shifted one small above at the left and its Alt Gr one small below at
+    /// the right.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
     {
@@ -578,23 +587,37 @@ public sealed class KeyPanel
         var legend = new SpannableStringBuilder();
         if (!key.IsLetter && key.ShiftText is { } shifted && shifted != key.Text)
         {
-            AppendSmall(legend, shifted + "\n");
+            AppendLine(legend, shifted, Layout.Alignment.AlignNormal!, secondary: true);
         }
 
-        legend.Append(key.IsLetter ? key.TextFor(held & ~Held.AltGr) : key.Label);
+        AppendLine(legend, key.IsLetter ? key.TextFor(held & ~Held.AltGr)! : key.Label, Layout.Alignment.AlignCenter!, secondary: false);
         if (key.AltGrText is { } altGr)
         {
-            AppendSmall(legend, " " + altGr);
+            AppendLine(legend, altGr, Layout.Alignment.AlignOpposite!, secondary: true);
         }
 
         return legend;
     }
 
-    private static void AppendSmall(SpannableStringBuilder legend, string text)
+    /// <summary>
+    /// Adds a line to a legend: one character a line, so the legends take the
+    /// key's height rather than its width, the shifted one at the left, the
+    /// Alt Gr one at the right, a secondary one smaller.
+    /// </summary>
+    private static void AppendLine(SpannableStringBuilder legend, string text, Layout.Alignment alignment, bool secondary)
     {
+        if (legend.Length() > 0)
+        {
+            legend.Append("\n");
+        }
+
         var start = legend.Length();
         legend.Append(text);
-        legend.SetSpan(new RelativeSizeSpan(SecondaryLabelShare), start, legend.Length(), SpanTypes.ExclusiveExclusive);
+        legend.SetSpan(new AlignmentSpanStandard(alignment), start, legend.Length(), SpanTypes.ExclusiveExclusive);
+        if (secondary)
+        {
+            legend.SetSpan(new RelativeSizeSpan(SecondaryLabelShare), start, legend.Length(), SpanTypes.ExclusiveExclusive);
+        }
     }
 
     private TextView TitleButton(string label, string description)
