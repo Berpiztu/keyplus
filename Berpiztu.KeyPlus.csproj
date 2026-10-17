@@ -21,6 +21,9 @@
     <!-- Only the APK, which is copied to the phone: no app bundle for a store,
          nor the bundletool step that turns one into APKs. -->
     <AndroidPackageFormats>apk</AndroidPackageFormats>
+    <!-- 64-bit ARM only: the phones it runs on, and a smaller APK than one
+         carrying the x86 and 32-bit runtimes too. -->
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
     <Authors>Berpiztu</Authors>
     <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
   </PropertyGroup>

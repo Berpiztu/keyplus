@@ -4,7 +4,7 @@
        (rules.md): the version is 1.0.0.<BuildNumber>, and the Android version
        code is the build number itself, so each APK installs over the last. -->
   <PropertyGroup>
-    <BuildNumber>2</BuildNumber>
+    <BuildNumber>3</BuildNumber>
   </PropertyGroup>
 
 </Project>
