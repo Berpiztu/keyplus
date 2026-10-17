@@ -21,6 +21,8 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     private const string XKey = "x";
     private const string YKey = "y";
     private const string WidthKey = "width";
+    private const string IconXKey = "iconX";
+    private const string IconYKey = "iconY";
     private const string ScaleKey = "scale";
 
     public bool Floating { get; set; } = preferences.GetBoolean(FloatingKey, false);
@@ -44,6 +46,16 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// <summary>The floating panel's width in pixels; 0 until the user gives it one.</summary>
     public int Width { get; set; } = preferences.GetInt(WidthKey, 0);
 
+    /// <summary>
+    /// Where the user left the icon, its left and top edges in pixels from the
+    /// display's, apart from the window's; -1 until the icon is first dragged.
+    /// </summary>
+    public int IconX { get; set; } = preferences.GetInt(IconXKey, -1);
+
+    public int IconY { get; set; } = preferences.GetInt(IconYKey, -1);
+
+    public bool HasIconPlace => IconX >= 0 && IconY >= 0;
+
     /// <summary>The keys' size, 1 for the usual one.</summary>
     public float Scale { get; set; } = preferences.GetFloat(ScaleKey, 1f);
 
@@ -52,6 +64,8 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
         .PutInt(XKey, X)!
         .PutInt(YKey, Y)!
         .PutInt(WidthKey, Width)!
+        .PutInt(IconXKey, IconX)!
+        .PutInt(IconYKey, IconY)!
         .PutFloat(ScaleKey, Scale)!
         .Apply();
 }

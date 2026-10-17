@@ -80,7 +80,8 @@ floating keyboard too; with no keyboard open it is out of sight.
   [ ] { } and the arrows half as large again, @ a quarter. A label is never larger than its key: past
   that, a corner makes the keys, and so the labels, larger.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
-  drag moves it. The icon is always in sight.
+  drag moves it. The icon is always in sight, and always where you last left
+  it, apart from the window's own place.
 - **✕** closes KeyPlus, once you say yes to "¿Quieres cerrar KeyPlus?" in the
   title bar: nothing of it is in sight. Opening the KeyPlus app brings it
   back. The service stays on meanwhile, since only Settings can turn an

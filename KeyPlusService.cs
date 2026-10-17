@@ -49,6 +49,9 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// <summary>Where the panel's window and size stood when a drag on its title bar, icon or a grip started.</summary>
     private (int X, int Y, int Width, int Height, float Scale) dragStart;
 
+    /// <summary>Where the icon stood when a drag on it started.</summary>
+    private (int X, int Y) iconDragStart;
+
     protected override void OnServiceConnected()
     {
         base.OnServiceConnected();
@@ -127,7 +130,14 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         var display = windowManager.MaximumWindowMetrics.Bounds;
         int x, y, width;
         GravityFlags gravity;
-        if (panel.IconOnly)
+        if (panel.ShowsIcon && placed.HasIconPlace)
+        {
+            width = ViewGroup.LayoutParams.WrapContent;
+            x = Math.Clamp(placed.IconX, 0, Math.Max(0, display.Width() - panel.Root.Width));
+            y = Math.Clamp(placed.IconY, 0, Math.Max(0, display.Height() - panel.Root.Height));
+            gravity = GravityFlags.Top | GravityFlags.Left;
+        }
+        else if (panel.IconOnly)
         {
             var margin = (int)(16 * Resources!.DisplayMetrics!.Density);
             (x, y, width) = (margin, 6 * margin, ViewGroup.LayoutParams.WrapContent);
@@ -170,9 +180,15 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         windowManager.UpdateViewLayout(panel.Root, placement);
     }
 
-    /// <summary>The title bar or the icon dragged: the panel floats, and follows the finger.</summary>
+    /// <summary>The title bar dragged: the panel floats, and follows the finger; the icon dragged moves the icon alone.</summary>
     private void OnMoving(KeyPanel.Drag drag, float dx, float dy)
     {
+        if (overlay?.Panel.ShowsIcon == true)
+        {
+            MoveIcon(drag, dx, dy);
+            return;
+        }
+
         if (StartFloating(drag) is not { } floating)
         {
             return;
@@ -181,6 +197,27 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         floating.X = dragStart.X + (int)dx;
         floating.Y = dragStart.Y + (int)dy;
         Dragged(drag, floating);
+    }
+
+    /// <summary>The icon dragged: it alone follows the finger, and stays where it is left; the window keeps its own place.</summary>
+    private void MoveIcon(KeyPanel.Drag drag, float dx, float dy)
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        if (drag == KeyPanel.Drag.Start)
+        {
+            var location = new int[2];
+            overlay.Panel.Root.GetLocationOnScreen(location);
+            var display = overlay.WindowManager.MaximumWindowMetrics.Bounds;
+            iconDragStart = (location[0] - display.Left, location[1] - display.Top);
+        }
+
+        placed.IconX = iconDragStart.X + (int)dx;
+        placed.IconY = iconDragStart.Y + (int)dy;
+        Dragged(drag, placed);
     }
 
     /// <summary>
