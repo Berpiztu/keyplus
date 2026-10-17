@@ -60,8 +60,10 @@ public sealed class KeyPanel
     private const int RepeatDelayMs = 400;
     private const int RepeatIntervalMs = 50;
 
-    private static readonly Color PanelColor = Color.Argb(0xEE, 0x1E, 0x1E, 0x1E);
-    private static readonly Color KeyColor = Color.Argb(0xFF, 0x37, 0x37, 0x37);
+    // Opaque, the keys well apart from the ground: the window looks the same
+    // over a white screen as over a black one.
+    private static readonly Color PanelColor = Color.Argb(0xFF, 0x12, 0x12, 0x12);
+    private static readonly Color KeyColor = Color.Argb(0xFF, 0x42, 0x42, 0x42);
     private static readonly Color HeldColor = Color.Argb(0xFF, 0x4F, 0xC3, 0xF7);
     private static readonly Color HeldTextColor = Color.Argb(0xFF, 0x10, 0x10, 0x10);
     private static readonly Color RippleColor = Color.Argb(0x55, 0xFF, 0xFF, 0xFF);
