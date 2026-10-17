@@ -240,7 +240,7 @@ public static class PanelKeys
             .Concat(new[] { "[", "]", "{", "}" }.Select(glyph => (glyph, factor: 1.5f)))
 
             // Wide already: twice as large, in the corner it covers the 2.
-            .Append(("@", 1.25f))
+            .Append((glyph: "@", factor: 1.25f))
             .ToDictionary(pair => pair.glyph, pair => pair.factor);
 
     /// <summary>How much larger a label draws a character: more than 1 for a small glyph.</summary>
