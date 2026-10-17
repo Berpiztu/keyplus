@@ -72,10 +72,9 @@ floating keyboard too; with no keyboard open it is out of sight.
   characters (letters, digits, symbols) smaller or larger, a tenth at a
   press, and the size is kept; Ctrl, Alt, Enter and the like stay as they
   are. **A↺** brings them, and the keys a corner made larger or smaller,
-  back to their usual size; the window keeps its place and width. A key with two
-  characters shows them one above the other; one with three shows one a
-  line, the shifted one at the left, the plain one in the middle, the Alt Gr
-  one at the right, clear of the key's edges. A label is never larger than its
+  back to their usual size; the window keeps its place and width. Each key shows its
+  shifted character above its plain one, both in the middle, and its Alt Gr
+  one small in its bottom right corner, as Windows' touch keyboard does. A label is never larger than its
   key: past that, a corner makes the keys, and so the labels, larger.
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight.

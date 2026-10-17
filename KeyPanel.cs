@@ -97,6 +97,7 @@ public sealed class KeyPanel
     private readonly Handler handler = new(Looper.MainLooper!);
     private readonly List<(Held Modifier, TextView View)> modifierKeys = [];
     private readonly List<(PanelKey Key, TextView View)> labelledKeys = [];
+    private readonly Dictionary<TextView, CornerLabel> corners = [];
     /// <summary>Every key, and whether it types a character, the keys whose labels A− and A+ size.</summary>
     private readonly List<(TextView View, bool IsCharacter)> keys = [];
 
@@ -444,16 +445,20 @@ public sealed class KeyPanel
         if (key.IsCharacter || key.FnLabel is not null)
         {
             labelledKeys.Add((key, view));
+            if (key.AltGrText is not null)
+            {
+                var corner = new CornerLabel(view, SecondaryLabelShare, Dp(5));
+                view.Foreground = corner;
+                corners[view] = corner;
+            }
 
             view.SetSingleLine(false);
-            view.SetMaxLines(3);
+            view.SetMaxLines(2);
 
-            // Lines close together, with no room above and below for accents
-            // a legend does not have, so the legends grow as far as they can;
-            // a margin inside the key's edges, so the top left and bottom
-            // right legends do not touch them.
+            // No room above and below the lines for accents a legend does not
+            // have, so the legends grow as far as they can; a margin inside
+            // the key's edges, which the corner's Alt Gr character keeps too.
             view.SetIncludeFontPadding(false);
-            view.SetLineSpacing(0, 0.85f);
             view.SetPadding(Dp(6), Dp(3), Dp(6), Dp(3));
         }
 
@@ -566,6 +571,13 @@ public sealed class KeyPanel
         foreach (var (key, view) in labelledKeys)
         {
             view.TextFormatted = Legend(key);
+            if (corners.TryGetValue(view, out var corner))
+            {
+                // The Alt Gr character in the corner only while the key reads all it types.
+                var plain = (held & (Held.AltGr | Held.Shift)) == Held.None && !(held.HasFlag(Held.Fn) && key.FnLabel is not null);
+                corner.Text = plain ? key.AltGrText : null;
+                corner.InvalidateSelf();
+            }
         }
     }
 
@@ -573,8 +585,8 @@ public sealed class KeyPanel
     /// What a key reads, much as Windows' touch keyboard labels it: with Fn
     /// held the key it becomes; with Alt Gr or Shift held only what it types
     /// now, nothing where it types nothing; else the character it types with
-    /// its shifted one small above it and its Alt Gr one small below it, at
-    /// the top left and the bottom right when it has both.
+    /// its shifted one small above it, both in the middle. The Alt Gr one is
+    /// the key's <see cref="CornerLabel"/>.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
     {
@@ -594,32 +606,18 @@ public sealed class KeyPanel
             return new Java.Lang.String(typed is null or " " ? key.Label == key.Text ? "" : key.Label : typed);
         }
 
-        var shifted = !key.IsLetter && key.ShiftText != key.Text ? key.ShiftText : null;
-        var altGr = key.AltGrText;
-
-        // Two legends one above the other, both in the middle; three across
-        // the key from its top left to its bottom right.
-        var three = shifted is not null && altGr is not null;
         var legend = new SpannableStringBuilder();
-        if (shifted is not null)
+        if (!key.IsLetter && key.ShiftText is { } shifted && shifted != key.Text)
         {
-            AppendLine(legend, shifted, three ? Layout.Alignment.AlignNormal! : Layout.Alignment.AlignCenter!, secondary: true);
+            AppendLine(legend, shifted, secondary: true);
         }
 
-        AppendLine(legend, key.IsLetter ? key.TextFor(held & ~Held.AltGr)! : key.Label, Layout.Alignment.AlignCenter!, secondary: false);
-        if (altGr is not null)
-        {
-            AppendLine(legend, altGr, three ? Layout.Alignment.AlignOpposite! : Layout.Alignment.AlignCenter!, secondary: true);
-        }
-
+        AppendLine(legend, key.IsLetter ? key.TextFor(held & ~Held.AltGr)! : key.Label, secondary: false);
         return legend;
     }
 
-    /// <summary>
-    /// Adds a line to a legend: one character a line, so the legends take the
-    /// key's height rather than its width, a secondary one smaller.
-    /// </summary>
-    private static void AppendLine(SpannableStringBuilder legend, string text, Layout.Alignment alignment, bool secondary)
+    /// <summary>Adds a line to a legend, a secondary one smaller.</summary>
+    private static void AppendLine(SpannableStringBuilder legend, string text, bool secondary)
     {
         if (legend.Length() > 0)
         {
@@ -628,7 +626,6 @@ public sealed class KeyPanel
 
         var start = legend.Length();
         legend.Append(text);
-        legend.SetSpan(new AlignmentSpanStandard(alignment), start, legend.Length(), SpanTypes.ExclusiveExclusive);
         if (secondary)
         {
             legend.SetSpan(new RelativeSizeSpan(SecondaryLabelShare), start, legend.Length(), SpanTypes.ExclusiveExclusive);
