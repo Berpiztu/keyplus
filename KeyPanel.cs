@@ -477,7 +477,10 @@ public sealed class KeyPanel
             // have, so the legends grow as far as they can; a margin inside
             // the key's edges, which the corner's Alt Gr character keeps too.
             view.SetIncludeFontPadding(false);
-            view.SetPadding(Dp(key.AltGrText is null ? 6 : 3), Dp(3), Dp(6), Dp(3));
+            // Beside an Alt Gr character in the corner, the legend's middle
+            // sits a little to the left, so the two stand a little apart.
+            var cornered = key.AltGrText is not null;
+            view.SetPadding(Dp(cornered ? 4 : 6), Dp(3), Dp(cornered ? 14 : 6), Dp(3));
         }
 
         // A key that repeats acts on the touch, and repeats while held; any
@@ -723,8 +726,8 @@ public sealed class KeyPanel
     /// What a key reads, much as Windows' touch keyboard labels it: with Fn
     /// held the key it becomes; with Alt Gr or Shift held only what it types
     /// now, nothing where it types nothing; else the character it types with
-    /// its shifted one small above it, both in the middle, or at the left when
-    /// the key has an Alt Gr character, its <see cref="CornerLabel"/>.
+    /// its shifted one small above it, both in the middle, a little to the left
+    /// when the key has an Alt Gr character, its <see cref="CornerLabel"/>.
     /// </summary>
     private Java.Lang.ICharSequence Legend(PanelKey key)
     {
@@ -746,20 +749,18 @@ public sealed class KeyPanel
             return only;
         }
 
-        var atLeft = key.AltGrText is not null;
         var legend = new SpannableStringBuilder();
         if (!key.IsLetter && key.ShiftText is { } shifted && shifted != key.Text)
         {
-            AppendLine(legend, shifted, secondary: true, atLeft);
+            AppendLine(legend, shifted, secondary: true);
         }
 
-        AppendLine(legend, key.IsLetter ? key.TextFor(held & ~Held.AltGr)! : key.Label, secondary: false, atLeft);
+        AppendLine(legend, key.IsLetter ? key.TextFor(held & ~Held.AltGr)! : key.Label, secondary: false);
         return legend;
     }
 
     /// <summary>Adds a line to a legend, a secondary one smaller, a small glyph larger.</summary>
-    /// <param name="atLeft">At the key's left rather than in its middle: beside an Alt Gr character in the corner, so the two stand apart.</param>
-    private static void AppendLine(SpannableStringBuilder legend, string text, bool secondary, bool atLeft = false)
+    private static void AppendLine(SpannableStringBuilder legend, string text, bool secondary)
     {
         if (legend.Length() > 0)
         {
@@ -768,11 +769,6 @@ public sealed class KeyPanel
 
         var start = legend.Length();
         legend.Append(text);
-        if (atLeft)
-        {
-            legend.SetSpan(new AlignmentSpanStandard(Layout.Alignment.AlignNormal!), start, legend.Length(), SpanTypes.ExclusiveExclusive);
-        }
-
         if (secondary)
         {
             legend.SetSpan(new RelativeSizeSpan(SecondaryLabelShare), start, legend.Length(), SpanTypes.ExclusiveExclusive);
