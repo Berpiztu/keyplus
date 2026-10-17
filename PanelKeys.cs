@@ -37,6 +37,7 @@ public static class PanelKeys
     public static readonly IReadOnlyList<IReadOnlyList<PanelKey>> Terminal =
     [
         [
+            new("Ctrl+A", Keycode.A, With: Held.Ctrl),
             new("Ctrl+C", Keycode.C, With: Held.Ctrl),
             new("Ctrl+V", Keycode.V, With: Held.Ctrl),
             new("Ctrl+Z", Keycode.Z, Repeats: true, With: Held.Ctrl),

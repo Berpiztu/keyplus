@@ -21,7 +21,7 @@ floating keyboard too; with no keyboard open it is out of sight.
 | File | What it holds |
 | --- | --- |
 | [PanelKeys.cs](PanelKeys.cs) | The layout (the editing shortcuts, then Termux's two rows of seven) and the meta state of held modifiers |
-| [KeyPanel.cs](KeyPanel.cs) | The strip's views: holding Ctrl, Alt and Shift, repeat, its controls (move, resize, fold) |
+| [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
 | [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
@@ -29,9 +29,9 @@ floating keyboard too; with no keyboard open it is out of sight.
 
 ## Using it
 
-- **Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in the top
-  row, beside **Del** (delete forward); Ctrl+Z, Ctrl+Y and Del repeat while
-  held.
+- **Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in
+  the top row, beside **Del** (delete forward); Ctrl+Z, Ctrl+Y and Del repeat
+  while held.
 - **Ctrl and Alt** hold for the next key: pressed once they stay filled, and
   are let go after the next key; pressed again they let go at once. The next
   key can be one of the strip's or a character typed on your own keyboard:
@@ -43,13 +43,16 @@ floating keyboard too; with no keyboard open it is out of sight.
   key and let go after it, since some editors select only when Shift itself
   went down.
 - **The arrows and pages** repeat while held.
-- **Docked or floating.** The strip starts docked: right above the keyboard,
-  as wide as it, in sight only while a keyboard is open. Drag **✥** and it
-  floats where you leave it, in sight all the time, keyboard or not, for the
-  places that lack only the arrows. Drag **⇲** to resize it: across for its
-  width, down for the size of its keys. A tap on **✥** docks it again. Where
-  it stands and its size are kept.
-- **▾** folds the strip into a small tab; the tab unfolds it.
+- **A window, docked or floating.** The keys are a small window with a title
+  bar. It starts docked: right above the keyboard, as wide as it, in sight
+  only while a keyboard is open. Drag the title bar and it floats where you
+  leave it, in sight all the time, keyboard or not, for the places that lack
+  only the arrows. Drag a corner (◤ ◥ ◣ ◢) to resize it: across for its
+  width, up or down for the size of its keys; the opposite corner stays put.
+  **⤓** in the title bar docks it again. Where it stands and its size are
+  kept.
+- **✕** closes the window into the **⌨** icon: a tap opens it again, a drag
+  moves it.
 
 ## Build and install
 

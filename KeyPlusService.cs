@@ -43,7 +43,7 @@ public sealed class KeyPlusService : AccessibilityService
     private Overlay? overlay;
     private PanelPlacement? placed;
 
-    /// <summary>Where the panel's window and size stood when a drag on ✥ or ⇲ started.</summary>
+    /// <summary>Where the panel's window and size stood when a drag on its title bar, icon or a grip started.</summary>
     private (int X, int Y, int Width, int Height, float Scale) dragStart;
 
     protected override void OnServiceConnected()
@@ -105,6 +105,7 @@ public sealed class KeyPlusService : AccessibilityService
         }
 
         var (_, windowManager, panel, placement) = overlay;
+        panel.Floating = placed.Floating;
         var display = windowManager.MaximumWindowMetrics.Bounds;
         int x, y, width;
         GravityFlags gravity;
@@ -141,7 +142,7 @@ public sealed class KeyPlusService : AccessibilityService
         windowManager.UpdateViewLayout(panel.Root, placement);
     }
 
-    /// <summary>✥ dragged: the panel floats, and follows the finger.</summary>
+    /// <summary>The title bar or the icon dragged: the panel floats, and follows the finger.</summary>
     private void OnMoving(KeyPanel.Drag drag, float dx, float dy)
     {
         if (StartFloating(drag) is not { } floating)
@@ -154,25 +155,35 @@ public sealed class KeyPlusService : AccessibilityService
         Dragged(drag, floating);
     }
 
-    /// <summary>⇲ dragged: the panel floats; across it gets wider or narrower, down its keys bigger or smaller.</summary>
-    private void OnResizing(KeyPanel.Drag drag, float dx, float dy)
+    /// <summary>
+    /// A corner's grip dragged: the panel floats; across it gets wider or
+    /// narrower, up or down its keys bigger or smaller, and the opposite corner
+    /// stays where it is.
+    /// </summary>
+    private void OnResizing(KeyPanel.Corner corner, KeyPanel.Drag drag, float dx, float dy)
     {
         if (StartFloating(drag) is not { } floating || overlay is null)
         {
             return;
         }
 
+        var fromLeft = (corner & KeyPanel.Corner.Left) != 0;
+        var fromTop = (corner & KeyPanel.Corner.Top) != 0;
         var minWidth = (int)(160 * Resources!.DisplayMetrics!.Density);
-        floating.Width = Math.Max(minWidth, dragStart.Width + (int)dx);
+        var height = Math.Max(1, dragStart.Height);
+        floating.Width = Math.Max(minWidth, dragStart.Width + (int)(fromLeft ? -dx : dx));
         floating.Scale = Math.Clamp(
-            dragStart.Scale * (dragStart.Height + dy) / Math.Max(1, dragStart.Height),
+            dragStart.Scale * (height + (fromTop ? -dy : dy)) / height,
             PanelPlacement.MinScale,
             PanelPlacement.MaxScale);
+        var grownHeight = (int)(height * floating.Scale / dragStart.Scale) - height;
+        floating.X = fromLeft ? dragStart.X - (floating.Width - dragStart.Width) : dragStart.X;
+        floating.Y = fromTop ? dragStart.Y - grownHeight : dragStart.Y;
         overlay.Panel.Scale = floating.Scale;
         Dragged(drag, floating);
     }
 
-    /// <summary>✥ tapped: the panel docks above the keyboard again.</summary>
+    /// <summary>⤓ pressed: the panel docks above the keyboard again.</summary>
     private void OnDockRequested()
     {
         if (placed is { Floating: true })
