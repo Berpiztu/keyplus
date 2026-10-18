@@ -29,6 +29,21 @@ public sealed class KeyWindowActivity : Activity
     private KeyPanel? panel;
     private PanelPlacement? placed;
 
+    /// <summary>Whether the window is in sight: not minimized nor closed.</summary>
+    public static bool InSight { get; private set; }
+
+    protected override void OnStart()
+    {
+        base.OnStart();
+        InSight = true;
+    }
+
+    protected override void OnStop()
+    {
+        InSight = false;
+        base.OnStop();
+    }
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
@@ -66,9 +81,16 @@ public sealed class KeyWindowActivity : Activity
         };
         panel.CloseRequested += Finish;
         panel.KeyboardToggle = service.ToggleKeyboard;
+
+        // Test: the keys attached into another app's window.
+        panel.Settings =
+        [
+            ("Pegar al teclado", () => service.AttachKeys(toKeyboard: true)),
+            ("Pegar a la app", () => service.AttachKeys(toKeyboard: false)),
+            ("Quitar lo pegado", service.DetachKeys),
+        ];
         SetContentView(panel.Root);
         service.WindowPanel = panel;
-        service.KeyWindow = this;
     }
 
     protected override void OnDestroy()
@@ -77,7 +99,6 @@ public sealed class KeyWindowActivity : Activity
         if (KeyPlusService.Current is { } service && service.WindowPanel == panel)
         {
             service.WindowPanel = null;
-            service.KeyWindow = null;
         }
 
         base.OnDestroy();

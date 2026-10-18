@@ -60,60 +60,158 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// <summary>The panel in the keys' own window, while it is open (a headset).</summary>
     public KeyPanel? WindowPanel { get; set; }
 
-    /// <summary>The keys' own window, while it is open (a headset): sent to the back when the keyboard closes.</summary>
-    public KeyWindowActivity? KeyWindow { get; set; }
-
-    /// <summary>Test on a headset: whether the keyboard is open, as the keys' window last followed it.</summary>
+    /// <summary>On a headset: whether the keyboard was open at the last windows change.</summary>
     private bool keyboardOpen;
 
-    /// <summary>Test on a headset: until when a keyboard closing is the keys' window taking the focus a moment, not the user's.</summary>
-    private long refocusUntil;
+    /// <summary>On a headset: until when the keyboard opening again is the field tapped back, not the user's, so the window is not brought again.</summary>
+    private long quietUntil;
 
     /// <summary>
-    /// Test on a headset: the keys' window comes with the keyboard and goes
-    /// with it. When the keyboard opens the window is brought to the front;
-    /// if that takes the focus and the keyboard closes, the field typed in is
-    /// tapped again, so its app has the focus back and the keyboard opens
-    /// again. A closing in the moment after is that, not the user's, so it
-    /// is let pass; else, the keyboard closed, the window goes to the back.
+    /// On a headset, docking: the keyboard opens, and the keys' window,
+    /// minimized by the user, is brought back to the front, the app that had
+    /// the focus keeping it. Which window had the focus is noted first, with
+    /// its field, which is tapped once the keys' window is brought, to give
+    /// the focus back. The window is never
+    /// minimized here, the user does that; nor opened anew once the user
+    /// closed it, for the headset would place a new window in the middle.
     /// </summary>
-    private void FollowKeyboard(bool open)
+    private void BringKeysWithKeyboard(bool open)
     {
-        if (open == keyboardOpen)
-        {
-            return;
-        }
-
-        var now = SystemClock.UptimeMillis();
-        if (!open && now < refocusUntil)
-        {
-            return;
-        }
-
+        var opened = open && !keyboardOpen;
         keyboardOpen = open;
-        if (!open)
+        var now = SystemClock.UptimeMillis();
+        // Only a window the user minimized is brought back: one in sight is
+        // left as it is, for bringing it would make it the headset's first.
+        if (!opened || WindowPanel is null || KeyWindowActivity.InSight || now < quietUntil)
         {
-            KeyWindow?.MoveTaskToBack(true);
-            Report("Keyboard closed: keys' window to the back");
             return;
         }
 
+        quietUntil = now + 2000;
+        var origin = FocusedWindow();
         var field = FindFocus(NodeFocus.Input);
-        refocusUntil = now + 1500;
         OpenKeyWindow();
-        Report("Keyboard open: keys' window to the front");
+        Report($"Keyboard open: keys' window to the front; focus in {Describe(origin)}");
+        // Always given back: on a headset the app may not take keys again
+        // until touched, though Android tells it still has the focus.
         new Handler(Looper.MainLooper!).PostDelayed(() =>
         {
-            if (FindKeyboard() is not null)
-            {
-                Report("Keys' window in front, keyboard still open");
-                return;
-            }
-
-            var tapped = field?.PerformAction(Android.Views.Accessibility.Action.Click) == true;
-            Report(tapped ? "Keyboard closed by the window: field tapped again" : "Keyboard closed by the window: no field to tap");
-        }, 400);
+            var given = field?.PerformAction(Android.Views.Accessibility.Action.Focus) == true
+                | field?.PerformAction(Android.Views.Accessibility.Action.Click) == true;
+            Report($"Focus {(given ? "given back to" : "could not be given back to")} {Describe(origin)}; Android says it is in {Describe(FocusedWindow())}");
+        }, 500);
     }
+
+    /// <summary>Test on a headset: keys attached into another app's window, and what draws them.</summary>
+    private SurfaceControlViewHost? attachedHost;
+    private SurfaceControl? attachedSurface;
+
+    /// <summary>
+    /// Test on a headset: the keys attached into another app's window, the
+    /// keyboard's or the focused app's, at its top, as wide as it: Android 14
+    /// lets an accessibility service hang an overlay of its own in any
+    /// window it sees, which then moves with that window.
+    /// </summary>
+    public void AttachKeys(bool toKeyboard)
+    {
+        DetachKeys();
+        if (!OperatingSystem.IsAndroidVersionAtLeast(34))
+        {
+            Report("Attaching keys to another app's window takes Android 14");
+            return;
+        }
+
+        var target = toKeyboard ? WindowOfType(AccessibilityWindowType.InputMethod) : FocusedWindow();
+        if (target is null)
+        {
+            Report(toKeyboard ? "No keyboard open to attach the keys to" : "No focused window to attach the keys to");
+            return;
+        }
+
+        var bounds = new Rect();
+        target.GetBoundsInScreen(bounds);
+        var display = GetSystemService(DisplayService).JavaCast<DisplayManager>()!.GetDisplay(target.DisplayId)!;
+        var context = CreateDisplayContext(display)!;
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, KeyPlusPreferences.ScreenOf(this, target.DisplayId)), Clipboard, SendKey, TypeText)
+        {
+            Dockable = false,
+            Resizable = false,
+        };
+        var width = Math.Max(1, bounds.Width());
+        panel.Root.Measure(
+            View.MeasureSpec.MakeMeasureSpec(width, MeasureSpecMode.Exactly),
+            View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
+        var height = Math.Max(1, panel.Root.MeasuredHeight);
+        try
+        {
+            var host = new SurfaceControlViewHost(context, display, new Binder());
+            host.SetView(panel.Root, width, height);
+            var surface = host.GetSurfacePackage()!.SurfaceControl!;
+            AttachAccessibilityOverlayToWindow(target.Id, surface);
+            new SurfaceControl.Transaction()
+                .SetVisibility(surface, true)!
+                .SetPosition(surface, 0, 0)!
+                .SetLayer(surface, int.MaxValue)!
+                .Apply();
+            attachedHost = host;
+            attachedSurface = surface;
+            Report($"Keys attached to {Describe(target)}, its bounds {bounds.ToShortString()}, keys {width}x{height}");
+        }
+        catch (Exception refused)
+        {
+            Report($"Keys not attached to {Describe(target)}: {refused.GetType().Name}: {refused.Message}");
+        }
+    }
+
+    /// <summary>Test on a headset: the keys attached into another app's window taken out.</summary>
+    public void DetachKeys()
+    {
+        if (attachedSurface is not null)
+        {
+            new SurfaceControl.Transaction().Reparent(attachedSurface, null)!.Apply();
+            Report("Attached keys taken out");
+        }
+
+        attachedHost?.Release();
+        attachedHost = null;
+        attachedSurface = null;
+    }
+
+    /// <summary>The first window of a type, on whichever display; none.</summary>
+    private AccessibilityWindowInfo? WindowOfType(AccessibilityWindowType type)
+    {
+        var displays = WindowsOnAllDisplays;
+        for (var i = 0; i < (displays?.Size() ?? 0); i++)
+        {
+            IList<AccessibilityWindowInfo> windows = JavaList<AccessibilityWindowInfo>.FromJniHandle(displays!.ValueAt(i)!.Handle, JniHandleOwnership.DoNotTransfer) ?? [];
+            if (windows.FirstOrDefault(window => window.Type == type) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The window that has the focus, on whichever display; none.</summary>
+    private AccessibilityWindowInfo? FocusedWindow()
+    {
+        var displays = WindowsOnAllDisplays;
+        for (var i = 0; i < (displays?.Size() ?? 0); i++)
+        {
+            IList<AccessibilityWindowInfo> windows = JavaList<AccessibilityWindowInfo>.FromJniHandle(displays!.ValueAt(i)!.Handle, JniHandleOwnership.DoNotTransfer) ?? [];
+            if (windows.FirstOrDefault(window => window.IsFocused) is { } focused)
+            {
+                return focused;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>A window as the line names it: its app and its title.</summary>
+    private static string Describe(AccessibilityWindowInfo? window) =>
+        window is null ? "no window" : $"{window.Root?.PackageName ?? "?"} '{window.Title}' (window {window.Id})";
 
     /// <summary>Each screen's layout: the phone upright, on its side, and DeX.</summary>
     private readonly Dictionary<KeyPlusPreferences.Screen, PanelPlacement> placements = [];
@@ -282,12 +380,11 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return;
         }
 
-        // On a headset the keys are in a window of their own, not here: it
-        // comes and goes with the keyboard.
+        // On a headset the keys are in a window of their own, not here.
         if (OnHeadset)
         {
             Close();
-            FollowKeyboard(FindKeyboard() is not null);
+            BringKeysWithKeyboard(FindKeyboard() is not null);
             return;
         }
 
