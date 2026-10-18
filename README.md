@@ -202,6 +202,26 @@ For the keyboard, on a phone or a headset:
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
    keyboard**.
 
+### Releasing
+
+`.\deploy-release.ps1` raises the build number, commits it, tags
+`v1.0.0.<build>` and pushes; [the Release workflow](.github/workflows/release.yml)
+builds both APKs at that version and publishes them on the repository's
+**Releases** page, to download on a phone or a headset and install there.
+
+Every APK, built here or there, is signed with the same key, or Android
+refuses to install it over the one before: `KEYPLUS_KEYSTORE` and
+`KEYPLUS_KEYSTORE_PASS`, else `private\android.keystore` and its
+`android.keystore.pass` (git ignores `private\`), made by the first
+`build-apk.ps1` that finds none. GitHub has it as two repository secrets:
+
+```powershell
+gh secret set ANDROID_KEYSTORE_BASE64 --body ([Convert]::ToBase64String([IO.File]::ReadAllBytes("private\android.keystore")))
+gh secret set ANDROID_KEYSTORE_PASS --body (Get-Content private\android.keystore.pass -Raw).Trim()
+```
+
+Back the two files up: without them no later APK updates the installed apps.
+
 ## Limits
 
 - Android 13 or later: before it, only a keyboard or root can send keys to

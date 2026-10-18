@@ -1,0 +1,85 @@
+name: Release
+
+# A release tag (v1.0.0.<build>), pushed by deploy-release.ps1, built and
+# published here: the two APKs, KeyPlus-Popup and Berpiztu-AI-Keyboard, at
+# exactly the version the tag's commit carries, signed with the same key as
+# every earlier one. Run by hand on a tag to build it again after a failure.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The NuGet packages of the last build with the same project, so a
+      # release downloads only what changed.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'version.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install the Android workload
+        run: dotnet workload install android
+
+      # The tag and version.props say the same version, or the release would
+      # carry APKs of another.
+      - name: Tag and version agree
+        run: |
+          $build = ([xml](Get-Content version.props)).Project.PropertyGroup.BuildNumber
+          if ("${{ github.ref_name }}" -ne "v1.0.0.$build") {
+            throw "The tag ${{ github.ref_name }} is not version.props' v1.0.0.$build."
+          }
+
+      # The same signing key as every earlier APK, or Android refuses the
+      # update: with no key the build would make a new one, so it stops
+      # instead.
+      - name: Signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          if (-not $env:KEYSTORE -or -not $env:KEYSTORE_PASS) {
+            throw "The repository secrets ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASS are needed (README.md, Releasing)."
+          }
+          $folder = Join-Path $env:RUNNER_TEMP "signing"
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path $folder "android.keystore"), [Convert]::FromBase64String($env:KEYSTORE))
+          "KEYPLUS_KEYSTORE=$(Join-Path $folder 'android.keystore')" >> $env:GITHUB_ENV
+          "KEYPLUS_KEYSTORE_PASS=$env:KEYSTORE_PASS" >> $env:GITHUB_ENV
+
+      - name: Build the APKs
+        run: .\build-apk.ps1 -NoBump
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $files = Get-ChildItem dist -Filter "*-$($tag.TrimStart('v')).apk" | ForEach-Object FullName
+          if ($files.Count -ne 2) { throw "Expected the two APKs of $tag in dist, found: $($files -join ', ')" }
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @files --clobber
+          } else {
+            gh release create $tag @files --title "KeyPlus $($tag.TrimStart('v'))" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Publishing $tag failed with exit code $LASTEXITCODE" }
