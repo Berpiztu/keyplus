@@ -32,7 +32,10 @@ para mover haz la barra titulo mas alta y pulsacion laga mueve
   Debug `dotnet build` only; they never run `build-apk.ps1`, `dotnet publish`
   or a Release build.
 - **English** for code, comments, docs and commit messages.
-- **The version is 1.0.0.x**, x the build number 
-  [version.props](version.props), which `build-apk.ps1` raises by one on every
-  APK it builds. It is also the Android version code, so every APK installs
-  over 
+- **Versions as wslc-ai-agent's.** The csproj holds the release's version,
+  major.minor.patch (`ApplicationDisplayVersion`), and its Android version
+  code, the version as one number (1.0.40 is 100040000); only
+  `deploy-release.ps1` raises them, to the next patch. A build made here,
+  `build-apk.ps1`'s, counts itself as a fourth part (1.0.40.3, version code
+  100040003) in `private\version.props`, which git ignores, so it changes
+  nothing tracked and the next release is above every build of this one. 

@@ -1,10 +1,12 @@
 name: Release
 
-# A release tag (v1.0.0.<build>), pushed by deploy-release.ps1, built and
-# published here: the two APKs, KeyPlus-Popup and Berpiztu-AI-Keyboard, each
-# built by a job of its own, side by side, at exactly the version the tag's
-# commit carries, signed with the same key as every earlier one; then one
-# job publishes both. Run by hand on a tag to build it again after a failure.
+# A release tag (v1.2.3), pushed by deploy-release.ps1, built and published
+# here instead of from a home connection, as wslc-ai-agent's: the two APKs,
+# KeyPlus-Popup.apk and Berpiztu-AI-Keyboard.apk, each built by a job of its
+# own, side by side and with caches of its own, at exactly the version the
+# tag's commit carries; then one job publishes both. A tag marked "built
+# locally" (deploy-release.ps1 -Local) is left alone. Run by hand on a tag to
+# build it again after a failure.
 on:
   push:
     tags: ['v*']
@@ -28,49 +30,69 @@ jobs:
       run:
         shell: pwsh
     # The .NET SDK in a folder of its own, its Android workload with it, kept
-    # in the cache: installing the workload is most of a release's time, and
-    # a cached SDK spares it. Raise the key's last number to start afresh
-    # (a newer SDK or workload).
+    # in this product's cache: installing the workload is most of a build's
+    # time. Raise the key's last number to start afresh (a newer SDK or
+    # workload).
     env:
       DOTNET_INSTALL_DIR: ${{ github.workspace }}\..\dotnet
     steps:
       - uses: actions/checkout@v4
 
+      - name: Built locally?
+        id: tag
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ("${{ github.ref_type }}" -ne "tag") { throw "Run this on a release tag (v1.2.3), not on $tag." }
+          git fetch --force origin "refs/tags/${tag}:refs/tags/${tag}"
+          $message = git tag -l --format='%(contents)' $tag
+          "local=$(if ($message -match 'built locally') { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+
       - id: sdk
+        if: steps.tag.outputs.local != 'true'
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}\..\dotnet
-          key: dotnet-10-android-${{ runner.os }}-1
+          key: dotnet-10-android-${{ runner.os }}-${{ matrix.product }}-1
 
       - uses: actions/setup-dotnet@v4
+        if: steps.tag.outputs.local != 'true'
         with:
           dotnet-version: 10.0.x
 
-      # The NuGet packages of the last build with the same project, so a
-      # release downloads only what changed.
       - uses: actions/cache@v4
+        if: steps.tag.outputs.local != 'true'
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
-          restore-keys: nuget-${{ runner.os }}-
+          key: nuget-${{ runner.os }}-${{ matrix.product }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-${{ matrix.product }}-
 
-      - name: Install the Android workload
-        if: steps.sdk.outputs.cache-hit != 'true'
+      # This product's last build, so a release builds again only what changed.
+      - uses: actions/cache@v4
+        if: steps.tag.outputs.local != 'true'
+        with:
+          path: obj\${{ matrix.product }}
+          key: obj-${{ runner.os }}-${{ matrix.product }}-${{ github.sha }}
+          restore-keys: obj-${{ runner.os }}-${{ matrix.product }}-
+
+      - name: Install workloads
+        if: steps.tag.outputs.local != 'true' && steps.sdk.outputs.cache-hit != 'true'
         run: dotnet workload install android
 
-      # The tag and version.props say the same version, or the release would
+      # The tag and the csproj say the same version, or the release would
       # carry APKs of another.
       - name: Tag and version agree
+        if: steps.tag.outputs.local != 'true'
         run: |
-          $build = ([xml](Get-Content version.props)).Project.PropertyGroup.BuildNumber
-          if ("${{ github.ref_name }}" -ne "v1.0.0.$build") {
-            throw "The tag ${{ github.ref_name }} is not version.props' v1.0.0.$build."
+          $version = ([xml](Get-Content Berpiztu.KeyPlus.csproj)).Project.PropertyGroup.ApplicationDisplayVersion | Where-Object { $_ -is [string] } | Select-Object -First 1
+          if ("${{ github.ref_name }}" -ne "v$version") {
+            throw "The tag ${{ github.ref_name }} is not the csproj's v$version."
           }
 
       # The same signing key as every earlier APK, or Android refuses the
       # update: with no key the build would make a new one, so it stops
       # instead.
       - name: Signing key
+        if: steps.tag.outputs.local != 'true'
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
@@ -85,9 +107,11 @@ jobs:
           "KEYPLUS_KEYSTORE_PASS=$env:KEYSTORE_PASS" >> $env:GITHUB_ENV
 
       - name: Build the APK
+        if: steps.tag.outputs.local != 'true'
         run: .\build-apk.ps1 -NoBump -Product ${{ matrix.product }}
 
       - uses: actions/upload-artifact@v4
+        if: steps.tag.outputs.local != 'true'
         with:
           name: apk-${{ matrix.product }}
           path: dist/*.apk
@@ -98,20 +122,30 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Built locally?
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          message=$(gh api "repos/${{ github.repository }}/git/refs/tags/${{ github.ref_name }}" --jq '.object.url' | xargs gh api --jq '.message // ""')
+          if echo "$message" | grep -q 'built locally'; then echo "local=true" >> "$GITHUB_OUTPUT"; else echo "local=false" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/download-artifact@v4
+        if: steps.tag.outputs.local != 'true'
         with:
           pattern: apk-*
           path: dist
           merge-multiple: true
 
       - name: Publish the release
+        if: steps.tag.outputs.local != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           tag="${{ github.ref_name }}"
-          files=(dist/*-${tag#v}.apk)
-          if [ ${#files[@]} -ne 2 ]; then echo "Expected the two APKs of $tag, found: ${files[*]}"; exit 1; fi
+          files=(dist/KeyPlus-Popup.apk dist/Berpiztu-AI-Keyboard.apk)
+          for file in "${files[@]}"; do [ -f "$file" ] || { echo "Missing $file"; exit 1; }; done
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else

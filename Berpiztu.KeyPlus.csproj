@@ -5,7 +5,11 @@
        is an accessibility service in a strip above whatever keyboard is
        open: Android 13 lets one write to the focused editor beside the
        user's own keyboard, which is why the minimum is API 33. -->
-  <Import Project="version.props" />
+
+  <!-- The versions this checkout's builds have reached (build-apk.ps1 bumps
+       them there, never here), so building APKs changes no tracked file,
+       whoever builds. Taken only when above the release's. -->
+  <Import Project="$(MSBuildThisFileDirectory)private\version.props" Condition="Exists('$(MSBuildThisFileDirectory)private\version.props')" />
 
   <PropertyGroup>
     <TargetFramework>net10.0-android</TargetFramework>
@@ -16,8 +20,16 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Berpiztu.KeyPlus</RootNamespace>
     <ApplicationId>ai.berpiztu.keyplus</ApplicationId>
-    <ApplicationVersion>$(BuildNumber)</ApplicationVersion>
-    <ApplicationDisplayVersion>1.0.0.$(BuildNumber)</ApplicationDisplayVersion>
+    <!-- The release's version, changed only when one is published
+         (deploy-release.ps1): ApplicationDisplayVersion is the Android
+         versionName, ApplicationVersion its versionCode, the version as one
+         number (1.0.40 is 100040000). A build of this checkout counts itself
+         as a fourth part (1.0.40.3, versionCode 100040003) in
+         private\version.props, taken here when above the release's. -->
+    <ApplicationDisplayVersion>1.0.40</ApplicationDisplayVersion>
+    <ApplicationVersion>100040000</ApplicationVersion>
+    <ApplicationDisplayVersion Condition="'$(KeyPlusLocalVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(KeyPlusLocalVersion)', '$(ApplicationDisplayVersion)'))">$(KeyPlusLocalVersion)</ApplicationDisplayVersion>
+    <ApplicationVersion Condition="'$(KeyPlusLocalBuild)' != '' And $(KeyPlusLocalBuild) &gt; $(ApplicationVersion)">$(KeyPlusLocalBuild)</ApplicationVersion>
     <!-- Only the APK, which is copied to the phone: no app bundle for a store,
          nor the bundletool step that turns one into APKs. -->
     <AndroidPackageFormats>apk</AndroidPackageFormats>

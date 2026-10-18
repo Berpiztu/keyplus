@@ -1,45 +1,211 @@
 <#
 .SYNOPSIS
-    Publish a release: raise the build number, commit, tag and push it;
-    GitHub Actions builds the two APKs and publishes the release
-    (.github/workflows/release.yml).
+    Publish a release: raise the release version above every build so far,
+    and commit, tag and push it; GitHub Actions builds the two APKs and
+    publishes the release (.github/workflows/release.yml). -Local builds and
+    uploads them from this machine instead.
 .DESCRIPTION
-    As wslc-ai-agent publishes its own:
-      1. On main, up to date with GitHub, with nothing left uncommitted.
-      2. Raises the build number in version.props by one (1.0.0.<build>).
-      3. Commits version.props, tags v1.0.0.<build> and pushes both.
-      4. GitHub Actions sees the tag, builds KeyPlus-Popup and
-         Berpiztu-AI-Keyboard at that version, signed with the repository's
-         key, and creates the GitHub release with the two APKs, to download
-         and install on a phone or a headset. Nothing is uploaded from here;
-         a failed build leaves the tag without a release: fix it and run the
-         workflow again on the tag.
+    As wslc-ai-agent's deploy-release.ps1. The version in the repository is
+    the last release's (the csproj's ApplicationDisplayVersion and its
+    Android versionCode, ApplicationVersion); everyday builds only count
+    themselves, as a fourth part of it in private\version.props. A release
+    raises the repository's:
+
+      1. Takes what this checkout holds: goes to main, from whatever branch
+         it was run on (one with commits of its own has to be pushed and in
+         a pull request, open or merged, first), and commits the changes not
+         committed yet, with a message it writes itself; new files are
+         listed and taken only when the person says so.
+      2. Brings main up to date (rebasing that commit on top). Then, for
+         each open pull request into main, waits for its checks and asks
+         whether to merge it (squash); one whose checks fail is reported and
+         left alone. main is brought up to date again with what was merged,
+         so the release carries it.
+      3. Writes the new version: the next patch after the last release's, or
+         -Version, however many local builds were made (theirs carry a
+         fourth part, 1.0.40.3, below 1.0.41); the versionCode is the
+         version as one number (1.0.41 is 100041000).
+      4. Commits the csproj, tags v<version> and pushes both.
+      5. GitHub Actions sees the tag and builds KeyPlus-Popup.apk and
+         Berpiztu-AI-Keyboard.apk at exactly the release's version, then
+         creates the GitHub release with both. Nothing is uploaded from this
+         machine. A failed build leaves the tag without a release: fix it and
+         run the workflow again on the tag.
+
+    With -Local: builds the two here first (a failure puts the version back
+    and commits nothing), then commits, tags (marked built locally, so the
+    workflow leaves it alone) and pushes; with -Publish it creates the
+    release and uploads the APKs from here.
+
+    The APKs are signed with the same key everywhere (packaging\Packaging.ps1):
+    here private\android.keystore, on GitHub the repository's secrets; a
+    release signed with another key cannot update the installed app.
+.PARAMETER Version
+    The release's version, x.y.z; it has to be above the current one.
+.PARAMETER Local
+    Build the APKs here and leave GitHub Actions out of it.
+.PARAMETER Publish
+    With -Local, also create the GitHub release (gh must be signed in) and
+    upload the APKs to it. Without -Local the workflow always does.
 .EXAMPLE
     .\deploy-release.ps1
+.EXAMPLE
+    .\deploy-release.ps1 -Version 1.1.0
+.EXAMPLE
+    .\deploy-release.ps1 -Local -Publish
 #>
-[CmdletBinding()]
-param()
+param(
+    [string]$Version,
+    [switch]$Local,
+    [switch]$Publish
+)
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $Root
+$RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $RepoRoot
+. (Join-Path $RepoRoot "packaging\Packaging.ps1")
 
-if ((git branch --show-current) -ne "main") { throw "A release is made from main." }
-if (git status --porcelain --untracked-files=no) { throw "Commit or put aside the changes first: a release carries what main holds." }
-git pull --rebase origin main
-if ($LASTEXITCODE -ne 0) { throw "git pull failed with exit code $LASTEXITCODE" }
+$Csproj = Join-Path $RepoRoot "Berpiztu.KeyPlus.csproj"
 
-$versionFile = Join-Path $Root "version.props"
-$versionText = Get-Content $versionFile -Raw
-$buildPattern = "(?<=<BuildNumber>)\d+(?=</BuildNumber>)"
-$build = [int]([regex]::Match($versionText, $buildPattern).Value) + 1
-Set-Content $versionFile ([regex]::Replace($versionText, $buildPattern, "$build")) -NoNewline
-$tag = "v1.0.0.$build"
+# 1. What this checkout holds goes into the release: the release is made on
+# main, and the changes not committed yet are carried there and committed,
+# with no message to write.
+$branch = (git branch --show-current)
+if ($branch -ne "main") {
+    $ahead = [int](git rev-list --count "main..HEAD")
+    if ($ahead -gt 0) {
+        # Commits of its own are safe to leave behind once GitHub has them in a pull
+        # request: an open one is offered below, a merged one comes with main.
+        $state = gh pr view $branch --json state --jq .state 2>$null
+        if ($state -eq "OPEN") {
+            git fetch --quiet origin $branch 2>$null
+            if ($LASTEXITCODE -ne 0 -or [int](git rev-list --count "origin/$branch..HEAD") -gt 0) { $state = "" }
+        }
+        if ($state -notin @("OPEN", "MERGED")) {
+            throw "The branch $branch has $ahead commit(s) main does not, and no pull request on GitHub holds them; push it and open a pull request (this script then offers it), or merge it into main, and run this again."
+        }
+        Write-Host "The branch $branch is pull request ($state) on GitHub: the release is made on main." -ForegroundColor Cyan
+    }
+    git switch main
+    if ($LASTEXITCODE -ne 0) { throw "Could not switch to main with these changes; commit or put them aside and run this again." }
+}
 
-git add version.props
-git commit -m "Release $tag"
+if (@(git status --porcelain).Count -gt 0) {
+    Write-Host "Changes not committed yet, which this release takes:" -ForegroundColor Cyan
+    git status --short --untracked-files=no
+    git add --update
+    $new = @(git ls-files --others --exclude-standard)
+    if ($new.Count -gt 0) {
+        Write-Host "New files, not in the repository yet:" -ForegroundColor Cyan
+        $new | ForEach-Object { Write-Host "  $_" }
+        $answer = Read-Host "Take these new files into the release too? (y/n)"
+        if ($answer -match '^(y|yes|s|si)$') { git add -- $new }
+    }
+    git diff --cached --quiet
+    if ($LASTEXITCODE -ne 0) {
+        $changed = @(git diff --cached --name-only)
+        $summary = ($changed | Select-Object -First 4) -join ", "
+        if ($changed.Count -gt 4) { $summary += " and $($changed.Count - 4) more" }
+        git commit -m "Changes released from this checkout: $summary"
+        if ($LASTEXITCODE -ne 0) { throw "git commit failed with exit code $LASTEXITCODE" }
+    }
+}
+
+# 2. The release is made from main as GitHub has it, with the open pull
+# requests the person chooses merged into it first. What was committed here
+# goes on top of it.
+function Sync-Main {
+    git pull --rebase
+    if ($LASTEXITCODE -ne 0) { throw "main could not be brought up to date (git pull --rebase); sort it out and run this again." }
+}
+
+Sync-Main
+$open = @(gh pr list --base main --state open --json number,title --jq '.[] | "\(.number)\t\(.title)"')
+if ($LASTEXITCODE -ne 0) { throw "gh could not list the open pull requests; is it signed in (gh auth status)?" }
+foreach ($line in $open) {
+    $number, $title = $line -split "`t", 2
+    Write-Host ""
+    Write-Host "Pull request #$number - $title" -ForegroundColor Cyan
+    Write-Host "Waiting for its checks..."
+    gh pr checks $number --watch --fail-fast | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Its checks did not pass: it is left out of this release." -ForegroundColor Yellow
+        continue
+    }
+    $answer = Read-Host "Its checks passed. Merge #$number into this release? (y/n)"
+    if ($answer -notmatch '^(y|yes|s|si)$') { continue }
+    gh pr merge $number --squash --delete-branch
+    if ($LASTEXITCODE -ne 0) { throw "#$number could not be merged; merge it on GitHub and run this again." }
+}
+if ($open.Count -gt 0) { Sync-Main }
+
+# 3. The new version: the next after the last release's, however many local
+# builds were made since (they carry its number with a fourth part, 1.0.40.3,
+# so 1.0.41 is above them all). The versionCode is the version as one number.
+$now = Get-KeyPlusTrackedValue $Csproj "ApplicationDisplayVersion"
+$codeNow = [int](Get-KeyPlusTrackedValue $Csproj "ApplicationVersion")
+
+if ($Version) {
+    $release = Get-KeyPlusReleasePart $Version
+    if ([version]$release -le [version](Get-KeyPlusReleasePart $now)) {
+        throw "-Version $release is not above $now, the last release; choose a higher one."
+    }
+} else {
+    $release = Get-NextPatchVersion $now
+}
+$code = Get-KeyPlusVersionCode $release
+if ($code -le $codeNow) {
+    throw "The versionCode $code of $release is not above the last release's, $codeNow."
+}
+$tag = "v$release"
+if (git tag --list $tag) {
+    throw "The tag $tag exists already; choose another version with -Version."
+}
+
+Write-Host "Release: $now -> $release (versionCode $code), tag $tag" -ForegroundColor Cyan
+Set-KeyPlusTrackedValue $Csproj "ApplicationDisplayVersion" $release
+Set-KeyPlusTrackedValue $Csproj "ApplicationVersion" "$code"
+
+# 4. Built here only with -Local, at exactly that version; any failure puts the file back.
+if ($Local) {
+    try {
+        & (Join-Path $RepoRoot "build-apk.ps1") -NoBump
+    } catch {
+        git checkout -- $Csproj
+        throw "The release was not made, and the version was put back: $($_.Exception.Message)"
+    }
+}
+
+# 5. The version committed, tagged and pushed. The tag of a release built here
+# says so: the release workflow leaves it alone.
+git add -- $Csproj
+git commit -m "Release $release (versionCode $code)"
 if ($LASTEXITCODE -ne 0) { throw "git commit failed with exit code $LASTEXITCODE" }
-git tag $tag
-git push origin main $tag
+$tagMessage = if ($Local) { "Release $release (built locally)" } else { "Release $release" }
+git tag -a $tag -m $tagMessage
+if ($LASTEXITCODE -ne 0) { throw "git tag failed with exit code $LASTEXITCODE" }
+git push
 if ($LASTEXITCODE -ne 0) { throw "git push failed with exit code $LASTEXITCODE" }
-Write-Host "Pushed ${tag}: GitHub Actions builds and publishes the release (gh run watch, or the Actions tab)." -ForegroundColor Green
+git push origin $tag
+if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed with exit code $LASTEXITCODE" }
+
+if (-not $Local) {
+    $repository = (gh repo view --json nameWithOwner --jq .nameWithOwner 2>$null)
+    Write-Host ""
+    Write-Host "Release $tag committed, tagged and pushed. GitHub Actions builds the APKs and publishes the release:" -ForegroundColor Green
+    Write-Host "  https://github.com/$repository/actions/workflows/release.yml"
+    return
+}
+
+$apks = @("KeyPlus-Popup.apk", "Berpiztu-AI-Keyboard.apk") | ForEach-Object { Join-Path $RepoRoot "dist\$_" }
+
+# 6. The GitHub release, when asked.
+if ($Publish) {
+    gh release create $tag @apks --title "KeyPlus $release" --generate-notes
+    if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE; the tag $tag is pushed, create the release by hand." }
+    Write-Host "Release $tag published with its two APKs." -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "Release $tag committed, tagged and pushed. Upload these to its GitHub release:" -ForegroundColor Green
+    $apks | ForEach-Object { Write-Host "  $_" }
+}

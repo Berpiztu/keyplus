@@ -162,8 +162,11 @@ a window that does.
 ## Build and install
 
 The rules for working on KeyPlus are in [rules.md](rules.md). Each
-`build-apk.ps1` raises the build number in [version.props](version.props),
-so every APK installs over the one before; commit it with the build.
+Versions are kept as wslc-ai-agent keeps its own: the csproj holds the
+release's (1.0.40, versionCode 100040000), and each `build-apk.ps1` counts
+itself as a fourth part (1.0.40.3, versionCode 100040003) in
+`private\version.props`, which git ignores, so every APK installs over the
+one before and building changes nothing tracked.
 
 Needs the .NET 10 SDK with the `android` workload
 (`dotnet workload install android`) and a phone with Android 13 or later.
@@ -174,8 +177,7 @@ dotnet build -p:KeyPlusProduct=Keyboard   # the keyboard's (Popup by default)
 .\debug.ps1 -Phone           # Debug build installed on the phone (cable or Wi-Fi), turned on and opened
 .\debug.ps1 -Emulator        # the same on an emulator, started if none runs
 .\deploy.ps1                 # Release APK built and installed on the phone, turned on, app opened
-.\build-apk.ps1              # both Release APKs, in dist\KeyPlus-Popup-1.0.0.<build>.apk
-                             #   and dist\Berpiztu-AI-Keyboard-1.0.0.<build>.apk
+.\build-apk.ps1              # both Release APKs, dist\KeyPlus-Popup.apk and dist\Berpiztu-AI-Keyboard.apk
 .\enable.ps1                 # KeyPlus turned on by adb: the popup's service, or the keyboard
 ```
 
@@ -186,7 +188,7 @@ computer: copy it to the device and open it there.
 
 Then on the phone, for the popup:
 
-1. Copy `dist\KeyPlus-Popup-1.0.0.<build>.apk` to it and open it to install
+1. Copy `dist\KeyPlus-Popup.apk` to it and open it to install
    it (Android asks to allow installing from the app that opens it).
 2. Open **KeyPlus** and choose **Open accessibility settings**.
 3. Turn on **KeyPlus keys**.
@@ -196,7 +198,7 @@ Then on the phone, for the popup:
 
 For the keyboard, on a phone or a headset:
 
-1. Copy `dist\Berpiztu-AI-Keyboard-1.0.0.<build>.apk` to it and open it to
+1. Copy `dist\Berpiztu-AI-Keyboard.apk` to it and open it to
    install it.
 2. Open **Berpiztu AI Keyboard** and choose **Open keyboard settings**.
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
@@ -204,16 +206,19 @@ For the keyboard, on a phone or a headset:
 
 ### Releasing
 
-`.\deploy-release.ps1` raises the build number, commits it, tags
-`v1.0.0.<build>` and pushes; [the Release workflow](.github/workflows/release.yml)
-builds both APKs at that version and publishes them on the repository's
-**Releases** page, to download on a phone or a headset and install there.
+`.\deploy-release.ps1`, as wslc-ai-agent's, raises the release's version
+to the next patch (or `-Version`), commits it, tags `v<version>` and pushes;
+[the Release workflow](.github/workflows/release.yml) builds each APK in a
+job of its own, with caches of its own, at that version, and publishes both
+on the repository's **Releases** page, to download on a phone or a headset
+and install there. `-Local` builds them here instead, `-Local -Publish`
+uploads them from here too.
 
 Every APK, built here or there, is signed with the same key, or Android
 refuses to install it over the one before: `KEYPLUS_KEYSTORE` and
 `KEYPLUS_KEYSTORE_PASS`, else `private\android.keystore` and its
 `android.keystore.pass` (git ignores `private\`), made by the first
-`build-apk.ps1` that finds none. GitHub has it as two repository secrets:
+`build-apk.ps1` that finds none ([packaging\Packaging.ps1](packaging/Packaging.ps1)). GitHub has it as two repository secrets:
 
 ```powershell
 gh secret set ANDROID_KEYSTORE_BASE64 --body ([Convert]::ToBase64String([IO.File]::ReadAllBytes("private\android.keystore")))
