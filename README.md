@@ -38,6 +38,20 @@ keyboard the title bar does not move it nor ⤓ dock it, for Android places
 it; in ✕'s place it has **⚙**, its settings, whose first is **Cambiar de
 teclado**, Android's keyboard picker.
 
+On a phone the keyboard shows what was copied in a row above the keys all
+the time, the newest first after the pinned ones: a tap pastes it, ✏ edits
+it right there, ✕ takes it out, and 📋 lists them all. Its **⚙** opens, in
+the keys' place and two to a row as Gboard's, **Mover**, **Redimensionar**,
+**Modo normal**, **Modo ventana** and **Cambiar de teclado**
+([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
+over the keyboard until **Hecho**: moving, it follows a finger held anywhere
+on it; resizing, the top and bottom bars size the keys and, in a window, the
+side ones its width, and **Restablecer** takes it back to its usual size.
+Modo normal docks it at the bottom, as wide as the screen, as high as Mover
+raised it; Modo ventana makes it a window of its own over the app, which
+keeps the whole screen and its touches outside the keyboard. Each screen
+and mode keeps its own place and size.
+
 The popup on a headset puts its keys in an app's window of its own
 ([KeyWindowActivity.cs](KeyWindowActivity.cs)), a panel the user places
 beside the keyboard, which never takes the focus and stays where it is left.
@@ -62,7 +76,8 @@ a window that does.
 | [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
-| [KeyPlusKeyboard.cs](KeyPlusKeyboard.cs) | The keyboard product: the same panel as a keyboard of its own |
+| [KeyPlusKeyboard.cs](KeyPlusKeyboard.cs) | The keyboard product: the same panel as a keyboard of its own, docked or in a window on a phone |
+| [KeyboardFrame.cs](KeyboardFrame.cs) | The frame ⚙'s Mover and Redimensionar lay over the keyboard |
 | [KeySender.cs](KeySender.cs) | Sending a key with its scan code and its modifiers pressed around it, for both products |
 | [ClipboardHistory.cs](ClipboardHistory.cs) | What was copied lately, texts and images, kept to paste again |
 | [ClipboardImages.cs](ClipboardImages.cs) | The keyboard's images handed to the app they are pasted into |

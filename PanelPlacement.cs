@@ -39,6 +39,7 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     private const string YKey = "y";
     private const string WidthKey = "width";
     private const string ScaleKey = "scale";
+    private const string LiftKey = "lift";
     private const string IconXKey = "iconX";
     private const string IconYKey = "iconY";
 
@@ -85,6 +86,13 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
         set => Current.Scale = value;
     }
 
+    /// <summary>How far Berpiztu AI Keyboard stands above the screen's bottom while docked, in pixels; 0, on it.</summary>
+    public int Lift
+    {
+        get => Current.Lift;
+        set => Current.Lift = value;
+    }
+
     /// <summary>
     /// Where the user left the icon, its left and top edges in pixels from the
     /// display's, apart from the window's; -1 until the icon is first dragged.
@@ -118,7 +126,8 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
                 .PutInt(Keyed(mode, XKey), layout.X)!
                 .PutInt(Keyed(mode, YKey), layout.Y)!
                 .PutInt(Keyed(mode, WidthKey), layout.Width)!
-                .PutFloat(Keyed(mode, ScaleKey), layout.Scale)!;
+                .PutFloat(Keyed(mode, ScaleKey), layout.Scale)!
+                .PutInt(Keyed(mode, LiftKey), layout.Lift)!;
         }
 
         editor.Apply();
@@ -141,12 +150,15 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
         public float Scale { get; set; }
 
+        public int Lift { get; set; }
+
         public static Layout Read(ISharedPreferences preferences, string mode) => new()
         {
             X = preferences.GetInt(Keyed(mode, XKey), preferences.GetInt(XKey, 0)),
             Y = preferences.GetInt(Keyed(mode, YKey), preferences.GetInt(YKey, 0)),
             Width = preferences.GetInt(Keyed(mode, WidthKey), preferences.GetInt(WidthKey, 0)),
             Scale = preferences.GetFloat(Keyed(mode, ScaleKey), preferences.GetFloat(ScaleKey, 1f)),
+            Lift = preferences.GetInt(Keyed(mode, LiftKey), 0),
         };
     }
 }

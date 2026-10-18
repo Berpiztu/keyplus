@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Content;
 using Android.InputMethodServices;
+using Android.Widget;
 using Android.Runtime;
 using Android.Views;
 using Android.Views.InputMethods;
@@ -16,10 +17,13 @@ namespace Berpiztu.KeyPlus;
 /// (Android XR) keeps the popup's window in front of the user's head, but
 /// lets the user place a keyboard. The panel types straight into the editor; ABC is the whole
 /// keyboard and Keys the strip's. Android sets where it stands and its width,
-/// so the title bar does not move it nor ⤓ dock it; A−, A+ and the grips size
-/// the keys, kept per screen and mode as the service's window keeps them, ▭
-/// makes it two rows, – folds it into the ⌨ icon, and ⚙, in ✕'s place,
-/// shows its settings, the keyboard picker first. It is a product of its own
+/// so ⤓ does not dock it; A− and A+ size the labels, ▭ makes it two rows,
+/// – folds it into the ⌨ icon, and ⚙, in ✕'s place, shows its settings in
+/// the keys' place, as Gboard does: on a phone Mover and Redimensionar (a
+/// frame over the keyboard, <see cref="KeyboardFrame"/>), Modo normal, docked
+/// at the bottom as wide as the screen, or Modo ventana, a window of its own
+/// over the app, and the keyboard picker. Place and size are kept per screen
+/// and mode, as the popup keeps them. It is a product of its own
 /// (-p:KeyPlusProduct=Keyboard); the popup is the other.
 /// </summary>
 [Service(Name = "ai.berpiztu.keyboard.KeyPlusKeyboard", Label = "@string/keyboard_label",
@@ -33,6 +37,21 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>The keys' size and the keyboard's height when a grip's drag started.</summary>
     private (float Scale, int Height) resizeStart;
+
+    /// <summary>
+    /// Off a headset, what the keyboard's window holds: the keyboard
+    /// (<see cref="box"/>), at the bottom, or, in Modo ventana, anywhere in a
+    /// room as tall as the screen, the app's touches passing through it
+    /// (<see cref="OnComputeInsets"/>).
+    /// </summary>
+    private FrameLayout? container;
+
+    /// <summary>The keys, and over them, while Mover or Redimensionar is on, the <see cref="frame"/>.</summary>
+    private FrameLayout? box;
+    private KeyboardFrame? frame;
+
+    /// <summary>Where the keyboard stood and how large it was when a drag on the frame or the title bar started.</summary>
+    private (int X, int Y, int Width, int Lift, float Scale, int Height) adjustStart;
 
     /// <summary>The texts copied lately, which 📋 lists.</summary>
     private ClipboardHistory? clipboard;
@@ -153,11 +172,261 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.SideKeys = false;
             panel.Root.LayoutChange += (_, _) => FillBox();
         }
+        else
+        {
+            // Sized and moved from ⚙: no grips.
+            panel.Resizable = false;
+            panel.Settings = PhoneSettings();
+            panel.Moving += (drag, dx, dy) =>
+            {
+                if (placed?.Floating == true)
+                {
+                    Adjust(KeyboardFrame.Part.Whole, drag, dx, dy);
+                }
+            };
+            frame = new KeyboardFrame(this);
+            frame.Dragged += Adjust;
+            frame.ResetRequested += ResetSize;
+            frame.DoneRequested += frame.Hide;
+            box = new FrameLayout(this);
+            box.AddView(panel.Root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+            box.AddView(frame, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+
+            // The frame as tall as the keys, not as the room it would stretch the box to.
+            panel.Root.LayoutChange += (_, change) =>
+            {
+                var height = change.Bottom - change.Top;
+                if (frame.LayoutParameters!.Height != height)
+                {
+                    frame.LayoutParameters.Height = height;
+                    frame.Post(frame.RequestLayout);
+                }
+            };
+            container = new FrameLayout(this);
+            container.AddView(box);
+
+            // The keys' height changes with their size and mode: in a window, kept inside the room.
+            box.LayoutChange += (_, _) =>
+            {
+                if (placed?.Floating == true)
+                {
+                    box.Post(Place);
+                }
+            };
+            Place();
+            KeepCopiedRow();
+        }
 
         panel.UsualSizeRequested += OnUsualSizeRequested;
         panel.ModeChanged += OnModeChanged;
-        return panel.Root;
+        return container ?? panel.Root;
     }
+
+    /// <summary>⚙ on a phone: Mover, Redimensionar, the two modes, the one in use ticked, and the keyboard picker.</summary>
+    private IReadOnlyList<(string Label, Action Chosen)> PhoneSettings()
+    {
+        var windowed = placed?.Floating == true;
+        return
+        [
+            ("✥ Mover", () => frame?.Show(resizing: false, sides: false)),
+            ("⤡ Redimensionar", () => frame?.Show(resizing: true, sides: placed?.Floating == true)),
+            ((windowed ? "" : "✓ ") + "Modo normal", () => SetWindowed(false)),
+            ((windowed ? "✓ " : "") + "Modo ventana", () => SetWindowed(true)),
+            ("Cambiar de teclado", () => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker()),
+        ];
+    }
+
+    /// <summary>
+    /// Modo ventana or Modo normal chosen. The first time in a window, it
+    /// opens three quarters of the screen wide, in the middle, at the bottom.
+    /// </summary>
+    private void SetWindowed(bool windowed)
+    {
+        if (panel is null || placed is null)
+        {
+            return;
+        }
+
+        if (windowed && placed.Width == 0)
+        {
+            var room = Room();
+            placed.Width = room.Width * 3 / 4;
+            placed.X = (room.Width - placed.Width) / 2;
+            placed.Y = room.Height;
+        }
+
+        placed.Floating = windowed;
+        placed.Save();
+        panel.Settings = PhoneSettings();
+        Place();
+    }
+
+    /// <summary>
+    /// The room the keyboard stands in: the screen's width, and its height
+    /// less the status and navigation bars; and the navigation bar's height
+    /// (Below), which the keyboard's window reaches under
+    /// and the keys keep clear of.
+    /// </summary>
+    private (int Width, int Height, int Below) Room()
+    {
+        var metrics = GetSystemService(WindowService).JavaCast<IWindowManager>()!.CurrentWindowMetrics;
+        var bars = metrics.WindowInsets.GetInsetsIgnoringVisibility(WindowInsets.Type.SystemBars());
+        return (metrics.Bounds.Width(), metrics.Bounds.Height() - bars.Top - bars.Bottom, bars.Bottom);
+    }
+
+    /// <summary>
+    /// The keyboard where it stands: docked, at the bottom as wide as the
+    /// screen, raised as far as Mover left it; in a window, where the user
+    /// left it and as wide, inside the room. Only what changed is laid out
+    /// again.
+    /// </summary>
+    private void Place()
+    {
+        if (container is null || box is null || placed is null)
+        {
+            return;
+        }
+
+        FrameLayout.LayoutParams layout;
+        var room = Room();
+        container.SetPadding(0, 0, 0, room.Below);
+        if (placed.Floating)
+        {
+            var width = Math.Clamp(placed.Width, Dp(PanelPlacement.MinWidthDp), room.Width);
+            layout = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Top | GravityFlags.Left)
+            {
+                LeftMargin = Math.Clamp(placed.X, 0, room.Width - width),
+                TopMargin = Math.Clamp(placed.Y, 0, Math.Max(0, room.Height - box.Height)),
+            };
+            container.SetMinimumHeight(room.Height + room.Below);
+            container.Background = null;
+        }
+        else
+        {
+            layout = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom)
+            {
+                BottomMargin = placed.Lift,
+            };
+            container.SetMinimumHeight(0);
+            container.SetBackgroundColor(KeyPanel.PanelColor);
+        }
+
+        if (box.LayoutParameters is FrameLayout.LayoutParams now
+            && now.Width == layout.Width && now.Gravity == layout.Gravity
+            && now.LeftMargin == layout.LeftMargin && now.TopMargin == layout.TopMargin && now.BottomMargin == layout.BottomMargin)
+        {
+            return;
+        }
+
+        box.LayoutParameters = layout;
+    }
+
+    /// <summary>
+    /// The keyboard in a window: the app behind keeps the whole screen, and
+    /// only the keyboard takes touches, the rest of its window passing them
+    /// to the app. Docked, as any keyboard.
+    /// </summary>
+    public override void OnComputeInsets(Insets? outInsets)
+    {
+        base.OnComputeInsets(outInsets);
+        if (outInsets is null || container is null || box is null || placed?.Floating != true || box.Height == 0)
+        {
+            return;
+        }
+
+        var at = new int[2];
+        container.GetLocationInWindow(at);
+        var below = at[1] + container.Height;
+        outInsets.ContentTopInsets = below;
+        outInsets.VisibleTopInsets = below;
+        outInsets.TouchableInsets = TouchableInsets.Region;
+        outInsets.TouchableRegion!.Set(at[0] + box.Left, at[1] + box.Top, at[0] + box.Right, at[1] + box.Bottom);
+    }
+
+    /// <summary>
+    /// A finger on the frame, or on the title bar of a keyboard in a window:
+    /// the whole moves it, in a window anywhere, docked up and down; the top
+    /// and bottom edges make the keys larger or smaller, the side ones the
+    /// window wider or narrower. Kept once the finger is lifted.
+    /// </summary>
+    private void Adjust(KeyboardFrame.Part part, KeyPanel.Drag drag, float dx, float dy)
+    {
+        if (panel is null || placed is null || box?.LayoutParameters is not FrameLayout.LayoutParams layout)
+        {
+            return;
+        }
+
+        panel.NoteDrag(drag, before: true);
+        if (drag == KeyPanel.Drag.Start)
+        {
+            adjustStart = (layout.LeftMargin, layout.TopMargin, box.Width, placed.Lift, panel.Scale, Math.Max(1, box.Height));
+        }
+
+        var start = adjustStart;
+        switch (part)
+        {
+            case KeyboardFrame.Part.Whole when placed.Floating:
+                (placed.X, placed.Y) = (start.X + (int)dx, start.Y + (int)dy);
+                break;
+            case KeyboardFrame.Part.Whole:
+                placed.Lift = Math.Clamp(start.Lift - (int)dy, 0, Room().Height / 2);
+                break;
+            case KeyboardFrame.Part.Top:
+                Resize(start.Height - dy);
+                placed.Y = start.Y + (int)dy;
+                break;
+            case KeyboardFrame.Part.Bottom:
+                Resize(start.Height + dy);
+                break;
+            case KeyboardFrame.Part.Left:
+                placed.Width = start.Width - (int)dx;
+                placed.X = start.X + (int)dx;
+                break;
+            case KeyboardFrame.Part.Right:
+                placed.Width = start.Width + (int)dx;
+                break;
+        }
+
+        Place();
+        panel.NoteDrag(drag, before: false);
+        if (drag == KeyPanel.Drag.End)
+        {
+            placed.Save();
+            KeepCopiedRow();
+        }
+
+        void Resize(float height)
+        {
+            placed.Scale = Math.Clamp(start.Scale * height / start.Height, PanelPlacement.MinScale, PanelPlacement.MaxScale);
+            panel.Scale = placed.Scale;
+        }
+    }
+
+    /// <summary>Restablecer: the keys at their usual size and, in a window, three quarters of the screen wide; docked, on the bottom again.</summary>
+    private void ResetSize()
+    {
+        if (panel is null || placed is null)
+        {
+            return;
+        }
+
+        placed.Scale = 1f;
+        panel.Scale = 1f;
+        if (placed.Floating)
+        {
+            placed.Width = Room().Width * 3 / 4;
+        }
+        else
+        {
+            placed.Lift = 0;
+        }
+
+        placed.Save();
+        Place();
+        KeepCopiedRow();
+    }
+
+    private int Dp(float value) => (int)((value * Resources!.DisplayMetrics!.Density) + 0.5f);
 
     /// <summary>The system feature of Android XR's spatial windows: a headset.</summary>
     private const string XrSpatialFeature = "android.software.xr.api.spatial";
@@ -211,6 +480,21 @@ public sealed class KeyPlusKeyboard : InputMethodService
         });
     }
 
+    /// <summary>
+    /// Off a headset, what was copied in a row above the keys all the time,
+    /// as tall as a row of keys, or as a text's two lines need where that is
+    /// more, so a thing copied is in sight at once: a tap pastes it, ✏ edits
+    /// it there. Not in ▭'s two small rows, which keep only the keys. Again
+    /// when the keys change size, once the drag ends.
+    /// </summary>
+    private void KeepCopiedRow()
+    {
+        if (panel is not null && !OnHeadset)
+        {
+            panel.ClipboardAbove = panel.Mode == PanelPlacement.CompactMode ? 0 : Math.Max(panel.RowHeight, panel.CopiedRowHeight);
+        }
+    }
+
     /// <summary>Never the whole screen with an editor of its own, as a keyboard is by default with the phone on its side.</summary>
     public override bool OnEvaluateFullscreenMode() => false;
 
@@ -242,6 +526,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (drag == KeyPanel.Drag.End)
         {
             placed.Save();
+            KeepCopiedRow();
         }
     }
 
@@ -256,6 +541,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         placed.Scale = 1f;
         placed.Save();
         panel.Scale = 1f;
+        KeepCopiedRow();
     }
 
     /// <summary>ABC, Keys or ▭ pressed: the keys take that mode's size.</summary>
@@ -268,6 +554,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
+        Place();
+        KeepCopiedRow();
     }
 
     private void SendKey(Keycode code, MetaKeyStates meta)

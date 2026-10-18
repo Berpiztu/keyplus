@@ -100,10 +100,10 @@ public sealed class KeyPanel
 
     // Opaque, the keys well apart from the ground: the window looks the same
     // over a white screen as over a black one.
-    private static readonly Color PanelColor = Color.Argb(0xFF, 0x12, 0x12, 0x12);
-    private static readonly Color KeyColor = Color.Argb(0xFF, 0x42, 0x42, 0x42);
-    private static readonly Color HeldColor = Color.Argb(0xFF, 0x4F, 0xC3, 0xF7);
-    private static readonly Color HeldTextColor = Color.Argb(0xFF, 0x10, 0x10, 0x10);
+    internal static readonly Color PanelColor = Color.Argb(0xFF, 0x12, 0x12, 0x12);
+    internal static readonly Color KeyColor = Color.Argb(0xFF, 0x42, 0x42, 0x42);
+    internal static readonly Color HeldColor = Color.Argb(0xFF, 0x4F, 0xC3, 0xF7);
+    internal static readonly Color HeldTextColor = Color.Argb(0xFF, 0x10, 0x10, 0x10);
     private static readonly Color RippleColor = Color.Argb(0x55, 0xFF, 0xFF, 0xFF);
     private static readonly Color DimTextColor = Color.Argb(0xFF, 0x9E, 0x9E, 0x9E);
 
@@ -225,6 +225,13 @@ public sealed class KeyPanel
     /// <summary>A fitting is waiting for the keys to be laid out.</summary>
     private bool fitPending;
 
+    /// <summary>The window is being moved or resized, and the labels wait for it to end to be fitted (<see cref="NoteDrag"/>).</summary>
+    private bool dragging;
+    private bool fitAfterDrag;
+
+    /// <summary>A headset (Android XR), whose touches give their raw place from the window (<see cref="OnScreen"/>).</summary>
+    private readonly bool onHeadset;
+
     /// <param name="send">Sends a key with the meta state of the modifiers held for it.</param>
     /// <param name="type">Types text, as the phone's keyboard does.</param>
     /// <param name="preferences">The layout of the display the panel is on.</param>
@@ -233,6 +240,7 @@ public sealed class KeyPanel
     {
         this.context = context;
         this.clipboard = clipboard;
+        onHeadset = context.PackageManager?.HasSystemFeature("android.software.xr.api.spatial") == true;
         sendOut = send;
         typeOut = type;
         this.preferences = preferences;
@@ -243,7 +251,7 @@ public sealed class KeyPanel
         var title = new View(context) { ContentDescription = "Drag to move the keys" };
         // The bar's free room is dragged at once, as a window's title is: a
         // headset's pinch (Galaxy XR) never holds still enough for a long press.
-        Draggable(title, (drag, dx, dy) => Moving?.Invoke(drag, dx, dy), tapped: null);
+        Draggable(title, ReportMoving, tapped: null);
 
         dock = TitleButton("⤓", "Docked: the keys show while a keyboard is open, where you left them; pressed again, they float, in sight all the time", () => DockRequested?.Invoke());
         var minimize = TitleButton("–", "Minimize the keys into an icon", () => SetFolded(true));
@@ -327,6 +335,17 @@ public sealed class KeyPanel
         clipboardItems = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         clipboardLine = new HorizontalScrollView(context) { Visibility = ViewStates.Gone };
         clipboardLine.AddView(clipboardItems, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+
+        // The cards are as wide as a third of the panel at most: filled again
+        // once the panel has its width, which it has not yet when the row is
+        // first asked for, before the keyboard is laid out.
+        clipboardLine.LayoutChange += (_, change) =>
+        {
+            if (change.Right - change.Left != change.OldRight - change.OldLeft && clipboardLine.Visibility == ViewStates.Visible)
+            {
+                clipboardLine.Post(FillClipboardLine);
+            }
+        };
         strip.AddView(clipboardLine, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
         // The editor as Gboard's: a card with its title, the text over a line,
         // and Cancelar and Guardar as words at its bottom right.
@@ -369,7 +388,7 @@ public sealed class KeyPanel
         tab.SetTextSize(ComplexUnitType.Sp, LabelSize);
         tab.ContentDescription = "Show the keys";
         tab.SetPadding(Dp(16), Dp(6), Dp(16), Dp(6));
-        Draggable(tab, (drag, dx, dy) => Moving?.Invoke(drag, dx, dy), OnIconTapped);
+        Draggable(tab, ReportMoving, OnIconTapped);
 
         root = new FrameLayout(context);
         root.AddView(strip);
@@ -538,8 +557,8 @@ public sealed class KeyPanel
 
     /// <summary>
     /// The height of a row of the copied texts, side by side, above the keys
-    /// and under the title bar, all the time, where a keyboard has room to
-    /// spare (Berpiztu AI Keyboard on a headset); 📋 still shows them all in
+    /// and under the title bar, all the time (Berpiztu AI Keyboard: on a
+    /// headset filling its box, on a phone a row of keys tall); 📋 still shows them all in
     /// the keys' place, with their options, as Gboard does. 0, none.
     /// </summary>
     public int ClipboardAbove
@@ -762,24 +781,46 @@ public sealed class KeyPanel
         Cover(clipboardView, clipboardButton);
     }
 
-    /// <summary>The settings in the keys' place, one row each: a tap does it and brings the keys back.</summary>
+    /// <summary>
+    /// The settings in the keys' place, from the first: a tap does it and
+    /// brings the keys back. Several, two to a row at a list's size, as
+    /// Gboard's; one or two, a row each across.
+    /// </summary>
     private void ShowSettings()
     {
         settingsRows.RemoveAllViews();
-        foreach (var (label, chosen) in settings)
+        var columns = settings.Count > 2 ? 2 : 1;
+        LinearLayout? line = null;
+        for (var i = 0; i < settings.Count; i++)
         {
-            var row = KeyView(label);
-            row.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
-            row.SetPadding(Dp(12), 0, Dp(12), 0);
-            row.SetTextSize(ComplexUnitType.Px, RowHeight * 0.4f);
-            row.Click += (_, _) =>
+            var (label, chosen) = settings[i];
+            var tile = KeyView(label);
+            tile.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
+            tile.SetPadding(Dp(12), 0, Dp(12), 0);
+            if (columns > 1)
+            {
+                tile.SetTextSize(ComplexUnitType.Sp, MenuTextSp);
+            }
+            else
+            {
+                tile.SetTextSize(ComplexUnitType.Px, RowHeight * 0.4f);
+            }
+
+            tile.Click += (_, _) =>
             {
                 Uncover();
                 chosen();
             };
-            settingsRows.AddView(row, KeyMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight - (2 * Dp(KeyMarginDp)))));
+            if (i % columns == 0)
+            {
+                line = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+                settingsRows.AddView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight));
+            }
+
+            line!.AddView(tile, KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f)));
         }
 
+        settingsView.ScrollTo(0, 0);
         Cover(settingsView, settingsButton);
     }
 
@@ -827,7 +868,8 @@ public sealed class KeyPanel
     /// <summary>
     /// What was copied in one row above the keys, the pinned first, then the
     /// newest, at the left: cards as in the list, a text on up to two lines
-    /// and up to a third of the row wide, each with a small ✏ (a text) over
+    /// and up to a third of the row wide, or twice as wide as the row is
+    /// tall where that is more (a keyboard in a narrow window), each with a small ✏ (a text) over
     /// a small ✕ beside it, to edit it right there or take it out. A tap
     /// pastes it, a long press opens its menu; the row scrolls across.
     /// </summary>
@@ -847,7 +889,7 @@ public sealed class KeyPanel
             var card = CopiedCard(entry, maxLines: 2, imageHeight: ViewGroup.LayoutParams.MatchParent, () => Paste(entry));
             if (card is TextView text)
             {
-                text.SetMaxWidth(Math.Max(height, root.Width / 3));
+                text.SetMaxWidth(Math.Max(2 * height, root.Width / 3));
             }
 
             clipboardItems.AddView(card, CardMargins(new LinearLayout.LayoutParams(entry.IsImage ? height * 3 / 2 : ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent)));
@@ -861,11 +903,18 @@ public sealed class KeyPanel
         var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
         if (!entry.IsImage)
         {
-            column.AddView(WordButton("✏", "Edit it right here", DimTextColor, () => Edit(entry)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+            column.AddView(Small(WordButton("✏", "Edit it right here", DimTextColor, () => Edit(entry))), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
         }
 
-        column.AddView(WordButton("✕", "Take it out of the list", DimTextColor, () => clipboard.Remove(entry)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+        column.AddView(Small(WordButton("✕", "Take it out of the list", DimTextColor, () => clipboard.Remove(entry))), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
         return column;
+
+        // A word button's padding is wider than this column: the sign alone, whole.
+        static TextView Small(TextView button)
+        {
+            button.SetPadding(0, 0, 0, 0);
+            return button;
+        }
     }
 
     /// <summary>The copied things again, wherever they show, after a change.</summary>
@@ -1148,6 +1197,27 @@ public sealed class KeyPanel
     /// </summary>
     public int RowHeight => Dp(56 * scale);
 
+    /// <summary>
+    /// The height a row of copied things needs for a text's two lines, as
+    /// Android lays them out, a pinned one's 📌 among them (its font's lines
+    /// are taller), with its card's padding and margins.
+    /// </summary>
+    public int CopiedRowHeight
+    {
+        get
+        {
+            var paint = new Android.Text.TextPaint(PaintFlags.AntiAlias)
+            {
+                TextSize = TypedValue.ApplyDimension(ComplexUnitType.Sp, CardTextSp, context.Resources!.DisplayMetrics),
+            };
+            const string twoLines = "📌 Ag\nAg";
+            var lines = Android.Text.StaticLayout.Builder.Obtain(twoLines, 0, twoLines.Length, paint, int.MaxValue / 2)!
+                .SetUseLineSpacingFromFallbacks(true)!
+                .Build()!;
+            return lines.Height + Dp(8 + 8) + Dp(4 + 4);
+        }
+    }
+
     /// <param name="side">Keys in a column at the right, one beside each row.</param>
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)
     {
@@ -1340,7 +1410,7 @@ public sealed class KeyPanel
 
         public void Begin(MotionEvent motion)
         {
-            var (x, y) = OnScreen(view, motion);
+            var (x, y) = panel.OnScreen(view, motion);
             (startX, startY, held, slid, corner) = (x, y, false, false, null);
             waiting = new Java.Lang.Runnable(Hold);
             panel.handler.PostDelayed(waiting, LongPressMs);
@@ -1348,7 +1418,7 @@ public sealed class KeyPanel
 
         public void Track(MotionEvent motion)
         {
-            var (x, y) = OnScreen(view, motion);
+            var (x, y) = panel.OnScreen(view, motion);
             var (dx, dy) = (x - startX, y - startY);
             if (held)
             {
@@ -1367,7 +1437,7 @@ public sealed class KeyPanel
             Cancel();
             if (held)
             {
-                var (x, y) = OnScreen(view, motion);
+                var (x, y) = panel.OnScreen(view, motion);
                 Report(Drag.End, x - startX, y - startY);
                 return false;
             }
@@ -1388,11 +1458,11 @@ public sealed class KeyPanel
         {
             if (corner is { } from)
             {
-                panel.Resizing?.Invoke(from, drag, dx, dy);
+                panel.ReportResizing(from, drag, dx, dy);
             }
             else
             {
-                panel.Moving?.Invoke(drag, dx, dy);
+                panel.ReportMoving(drag, dx, dy);
             }
         }
 
@@ -1633,19 +1703,25 @@ public sealed class KeyPanel
             | ((corner & Corner.Left) != 0 ? GravityFlags.Left : GravityFlags.Right);
         view.SetTextColor(DimTextColor);
         view.SetTextSize(ComplexUnitType.Sp, 10);
-        Draggable(view, (drag, dx, dy) => Resizing?.Invoke(corner, drag, dx, dy), tapped: null);
+        Draggable(view, (drag, dx, dy) => ReportResizing(corner, drag, dx, dy), tapped: null);
         grips.Add(view);
         return view;
     }
 
     /// <summary>
-    /// Where a touch is on the screen: the view's place on it and the touch's
-    /// place in the view. Not the event's raw place, which a headset (Galaxy
-    /// XR) gives from the window: the window moved under it, the raw place
-    /// moved back as much, and a dragged window shook where it was.
+    /// Where a touch is on the screen: the event's raw place; on a headset
+    /// (Galaxy XR), which gives the raw place from the window, so a dragged
+    /// window shook where it was, the view's place on the screen and the
+    /// touch's place in the view. Not that one elsewhere: the view's place
+    /// lags behind a window being dragged, and the window danced.
     /// </summary>
-    private static (float X, float Y) OnScreen(View view, MotionEvent motion)
+    private (float X, float Y) OnScreen(View view, MotionEvent motion)
     {
+        if (!onHeadset)
+        {
+            return (motion.RawX, motion.RawY);
+        }
+
         var location = new int[2];
         view.GetLocationOnScreen(location);
         return (location[0] + motion.GetX(), location[1] + motion.GetY());
@@ -1756,13 +1832,70 @@ public sealed class KeyPanel
             bar.RequestLayout();
         }
 
+        if (dragging)
+        {
+            fitAfterDrag = true;
+            return;
+        }
+
         SizeLabels();
         FitLegendsSoon();
     }
 
-    /// <summary>Fits the legends once the keys are laid out, after whatever made them change size.</summary>
+    /// <summary>
+    /// A drag moving the window, its title bar's, its icon's or a long
+    /// press's: told to whoever places the window, the labels left alone
+    /// meanwhile (<see cref="NoteDrag"/>).
+    /// </summary>
+    private void ReportMoving(Drag drag, float dx, float dy)
+    {
+        NoteDrag(drag, before: true);
+        Moving?.Invoke(drag, dx, dy);
+        NoteDrag(drag, before: false);
+    }
+
+    /// <summary>A drag resizing the window from a corner, told likewise.</summary>
+    private void ReportResizing(Corner corner, Drag drag, float dx, float dy)
+    {
+        NoteDrag(drag, before: true);
+        Resizing?.Invoke(corner, drag, dx, dy);
+        NoteDrag(drag, before: false);
+    }
+
+    /// <summary>
+    /// While the window is moved or resized the labels are not fitted again
+    /// at every step, which made the drag slow: once, when it ends, if
+    /// anything asked for it meanwhile. Told before and after each step of
+    /// the drag, by the panel's own grips and by whoever else sizes it
+    /// (Berpiztu AI Keyboard's Redimensionar).
+    /// </summary>
+    public void NoteDrag(Drag drag, bool before)
+    {
+        if (drag == Drag.Start && before)
+        {
+            dragging = true;
+        }
+        else if (drag == Drag.End && !before)
+        {
+            dragging = false;
+            if (fitAfterDrag)
+            {
+                fitAfterDrag = false;
+                SizeLabels();
+                FitLegendsSoon();
+            }
+        }
+    }
+
+    /// <summary>Fits the legends once the keys are laid out, after whatever made them change size; after a drag, once it ends.</summary>
     private void FitLegendsSoon()
     {
+        if (dragging)
+        {
+            fitAfterDrag = true;
+            return;
+        }
+
         if (fitPending)
         {
             return;

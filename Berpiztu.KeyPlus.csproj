@@ -65,7 +65,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
-    <Compile Remove="KeyPlusKeyboard.cs;ClipboardImages.cs;ScreenshotWatcher.cs" />
+    <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml" />
   </ItemGroup>
 
