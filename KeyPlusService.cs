@@ -67,22 +67,22 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     private long quietUntil;
 
     /// <summary>
-    /// On a headset, docking: the keyboard opens, and the keys' window,
-    /// minimized by the user, is brought back to the front, the app that had
-    /// the focus keeping it. Which window had the focus is noted first, with
+    /// On a headset, docking (⤓ filled): the keyboard opens, and the keys'
+    /// window, minimized or closed by the user, is brought back to the front
+    /// or opened again, the app that had the focus keeping it. Which window had the focus is noted first, with
     /// its field, which is tapped once the keys' window is brought, to give
-    /// the focus back. The window is never
-    /// minimized here, the user does that; nor opened anew once the user
-    /// closed it, for the headset would place a new window in the middle.
+    /// the focus back. The window is never minimized here, the user does
+    /// that.
     /// </summary>
     private void BringKeysWithKeyboard(bool open)
     {
         var opened = open && !keyboardOpen;
         keyboardOpen = open;
         var now = SystemClock.UptimeMillis();
-        // Only a window the user minimized is brought back: one in sight is
-        // left as it is, for bringing it would make it the headset's first.
-        if (!opened || WindowPanel is null || KeyWindowActivity.InSight || now < quietUntil)
+        // Docked (⤓ filled), a window the user minimized is brought back, and
+        // one closed opened again; one in sight is left as it is, for
+        // bringing it would make it the headset's first.
+        if (!opened || !KeyWindowActivity.Docked(this) || KeyWindowActivity.InSight || now < quietUntil)
         {
             return;
         }
@@ -106,11 +106,18 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     private SurfaceControlViewHost? attachedHost;
     private SurfaceControl? attachedSurface;
 
+    /// <summary>Test on a headset: where the attached keys stand in their window, and where a drag on their title bar started.</summary>
+    private (float X, float Y) attachedAt;
+    private (float X, float Y) attachedDragFrom;
+
     /// <summary>
     /// Test on a headset: the keys attached into another app's window, the
-    /// keyboard's or the focused app's, at its top, as wide as it: Android 14
-    /// lets an accessibility service hang an overlay of its own in any
-    /// window it sees, which then moves with that window.
+    /// keyboard's or the focused app's, half as wide as it, where they were
+    /// left in it last, at first its bottom left: Android 14 lets an
+    /// accessibility service hang an overlay of its own in any window it
+    /// sees, which then moves with that window. Their title bar dragged moves
+    /// them within that window, never out of it; where they are left is kept,
+    /// for the keyboard's and for an app's apart.
     /// </summary>
     public void AttachKeys(bool toKeyboard)
     {
@@ -132,12 +139,39 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         target.GetBoundsInScreen(bounds);
         var display = GetSystemService(DisplayService).JavaCast<DisplayManager>()!.GetDisplay(target.DisplayId)!;
         var context = CreateDisplayContext(display)!;
-        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, KeyPlusPreferences.ScreenOf(this, target.DisplayId)), Clipboard, SendKey, TypeText)
+        // The field typed in, which the attached keys give the focus back to
+        // before each key: touching them takes it.
+        var field = FindFocus(NodeFocus.Input);
+        var fieldWindow = FocusedWindow();
+        void Refocused(System.Action send)
+        {
+            var before = FocusedWindow();
+            if (field is null || fieldWindow is null || before?.Id == fieldWindow.Id)
+            {
+                send();
+                return;
+            }
+
+            field.Refresh();
+            var given = field.PerformAction(Android.Views.Accessibility.Action.Focus);
+            new Handler(Looper.MainLooper!).PostDelayed(() =>
+            {
+                Report($"Focus was in {Describe(before)}; {(given ? "given back to" : "could not be given back to")} {Describe(fieldWindow)}; now in {Describe(FocusedWindow())}");
+                send();
+            }, 80);
+        }
+
+        var panel = new KeyPanel(
+            context,
+            KeyPlusPreferences.ForScreen(this, KeyPlusPreferences.ScreenOf(this, target.DisplayId)),
+            Clipboard,
+            (code, meta) => Refocused(() => SendKey(code, meta)),
+            text => Refocused(() => TypeText(text)))
         {
             Dockable = false,
             Resizable = false,
         };
-        var width = Math.Max(1, bounds.Width());
+        var width = Math.Max(1, bounds.Width() / 2);
         panel.Root.Measure(
             View.MeasureSpec.MakeMeasureSpec(width, MeasureSpecMode.Exactly),
             View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
@@ -145,21 +179,69 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         try
         {
             var host = new SurfaceControlViewHost(context, display, new Binder());
-            host.SetView(panel.Root, width, height);
+            var unfocusable = SetUnfocusableView(host, panel.Root, width, height);
             var surface = host.GetSurfacePackage()!.SurfaceControl!;
             AttachAccessibilityOverlayToWindow(target.Id, surface);
+
+            // Within the window, never out of it.
+            var room = (X: Math.Max(0, bounds.Width() - width), Y: Math.Max(0, bounds.Height() - height));
+            (float X, float Y) Within(float x, float y) => (Math.Clamp(x, 0, room.X), Math.Clamp(y, 0, room.Y));
+            var preferences = KeyPlusPreferences.Global(this);
+            var key = toKeyboard ? "attached.keyboard" : "attached.app";
+            attachedAt = Within(preferences.GetFloat($"{key}.x", 0), preferences.GetFloat($"{key}.y", room.Y));
             new SurfaceControl.Transaction()
                 .SetVisibility(surface, true)!
-                .SetPosition(surface, 0, 0)!
+                .SetPosition(surface, attachedAt.X, attachedAt.Y)!
                 .SetLayer(surface, int.MaxValue)!
                 .Apply();
+            panel.Moving += (drag, dx, dy) =>
+            {
+                if (drag == KeyPanel.Drag.Start)
+                {
+                    attachedDragFrom = attachedAt;
+                }
+
+                attachedAt = Within(attachedDragFrom.X + dx, attachedDragFrom.Y + dy);
+                new SurfaceControl.Transaction().SetPosition(surface, attachedAt.X, attachedAt.Y)!.Apply();
+                if (drag == KeyPanel.Drag.End)
+                {
+                    preferences.Edit()!.PutFloat($"{key}.x", attachedAt.X)!.PutFloat($"{key}.y", attachedAt.Y)!.Apply();
+                    Report($"Attached keys left at {attachedAt.X:0},{attachedAt.Y:0} in their window");
+                }
+            };
             attachedHost = host;
             attachedSurface = surface;
-            Report($"Keys attached to {Describe(target)}, its bounds {bounds.ToShortString()}, keys {width}x{height}");
+            Report($"Keys attached to {Describe(target)}, its bounds {bounds.ToShortString()}, keys {width}x{height} at {attachedAt.X:0},{attachedAt.Y:0}, {unfocusable}");
         }
         catch (Exception refused)
         {
             Report($"Keys not attached to {Describe(target)}: {refused.GetType().Name}: {refused.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Test on a headset: the attached keys' view set in the window that
+    /// draws them, a window that never takes the focus, so the field typed in
+    /// keeps it and the keys reach it. The public setView makes a window that
+    /// takes the focus when touched; the one taking the window's settings,
+    /// where it can be told not to, is hidden in Android, so it is reached
+    /// through JNI, and where Android refuses, the public one is used; which
+    /// is said.
+    /// </summary>
+    private static string SetUnfocusableView(SurfaceControlViewHost host, View view, int width, int height)
+    {
+        var settings = new WindowManagerLayoutParams(width, height, WindowManagerTypes.Application, WindowManagerFlags.NotFocusable, Format.Transparent);
+        try
+        {
+            var type = JNIEnv.FindClass("android/view/SurfaceControlViewHost");
+            var setView = JNIEnv.GetMethodID(type, "setView", "(Landroid/view/View;Landroid/view/WindowManager$LayoutParams;)V");
+            JNIEnv.CallVoidMethod(host.Handle, setView, new JValue(view), new JValue(settings));
+            return "a window that never takes the focus";
+        }
+        catch (Exception refused)
+        {
+            host.SetView(view, width, height);
+            return $"hidden setView refused ({refused.GetType().Name}: {refused.Message}): a window that takes the focus";
         }
     }
 

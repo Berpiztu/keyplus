@@ -40,15 +40,21 @@ teclado**, Android's keyboard picker.
 
 The popup on a headset puts its keys in an app's window of its own
 ([KeyWindowActivity.cs](KeyWindowActivity.cs)), a panel the user places
-beside the keyboard, which never takes the focus; the service brings it to
-the front when the keyboard opens, taps the field again if that took its
-focus away, and sends it to the back when the keyboard closes. What was
-measured on the Galaxy XR: an accessibility overlay moves with the head, an
-application overlay stays still but cannot be moved, an app's window stays
-where the user leaves it but is never smaller than 220 × 220 dp, and none of
-them can follow the keyboard, whose place in space no app can read. Its ⌨ is
-a test: it hides the keyboard, brings it back, and shows what Android tells
-of the keyboard's window.
+beside the keyboard, which never takes the focus and stays where it is left.
+Docked (**⤓** filled), once the user minimized or closed it, the service
+brings it back, or opens it again, when the keyboard opens, and taps the
+field typed in, so its app keeps the focus; ⤓ not filled, it leaves the
+window alone. What was measured on the Galaxy XR: an accessibility overlay
+moves with the head; an application overlay stays still but cannot be moved;
+an app's window stays where the user leaves it but is never smaller than
+220 × 220 dp, and a minimized window, any app's, comes back where the
+headset chooses, not where it was; none of them can follow the keyboard,
+whose place in space no app can read. Two trials stay in that window: **⌨**
+hides the keyboard, brings it back and shows what Android tells of its
+window; **⚙** attaches keys into the keyboard's or the focused app's window
+(Android 14 lets an accessibility service do that), where they show and
+move but take the focus when touched, for the public way to draw them makes
+a window that does.
 
 | File | What it holds |
 | --- | --- |

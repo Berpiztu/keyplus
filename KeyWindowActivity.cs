@@ -32,6 +32,12 @@ public sealed class KeyWindowActivity : Activity
     /// <summary>Whether the window is in sight: not minimized nor closed.</summary>
     public static bool InSight { get; private set; }
 
+    /// <summary>Whether ⤓ is filled, docked: the window is brought back, or opened again, when the keyboard opens.</summary>
+    private const string DockedKey = "keysWindow.docked";
+
+    /// <summary>Whether the window is docked (⤓ filled), which it is until ⤓ says not.</summary>
+    public static bool Docked(Android.Content.Context context) => KeyPlusPreferences.Global(context).GetBoolean(DockedKey, true);
+
     protected override void OnStart()
     {
         base.OnStart();
@@ -63,8 +69,10 @@ public sealed class KeyWindowActivity : Activity
         placed = new PanelPlacement(preferences);
         panel = new KeyPanel(this, preferences, service.Clipboard, service.SendKey, service.TypeText)
         {
-            Dockable = false,
             Resizable = false,
+
+            // ⤓ is filled while docked, which the panel calls not floating.
+            Floating = !Docked(this),
         };
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
@@ -80,6 +88,12 @@ public sealed class KeyWindowActivity : Activity
             panel.Scale = 1f;
         };
         panel.CloseRequested += Finish;
+        panel.DockRequested += () =>
+        {
+            var docked = !Docked(this);
+            KeyPlusPreferences.Global(this).Edit()!.PutBoolean(DockedKey, docked)!.Apply();
+            panel.Floating = !docked;
+        };
         panel.KeyboardToggle = service.ToggleKeyboard;
 
         // Test: the keys attached into another app's window.
