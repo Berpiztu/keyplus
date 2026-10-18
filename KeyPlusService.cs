@@ -26,8 +26,10 @@ namespace Berpiztu.KeyPlus;
 /// while no keyboard is open. Floating (<see cref="PanelPlacement"/>), it
 /// stands where the user dragged it, at the width they gave it, all the time.
 /// It is the KeyPlus popup; Berpiztu AI Keyboard (KeyPlusKeyboard) is the
-/// other product, the one for a headset (Galaxy XR), which keeps this window
-/// before the user's eyes.
+/// other product. On a headset (Galaxy XR) the keys are not in an overlay,
+/// which the headset hangs on a layer that moves with the user's head, but in
+/// an app's window of their own (<see cref="KeyWindowActivity"/>), a panel the
+/// user places beside the keyboard; the service still sends them.
 /// </summary>
 [Service(Name = "ai.berpiztu.keyplus.KeyPlusService", Label = "@string/service_label",
     Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
@@ -45,6 +47,73 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
     private Overlay? overlay;
     private PanelPlacement? placed;
+
+    /// <summary>The system feature of Android XR's spatial windows: a headset.</summary>
+    private const string XrSpatialFeature = "android.software.xr.api.spatial";
+
+    /// <summary>Whether this is a headset, where the keys have a window of their own (<see cref="KeyWindowActivity"/>).</summary>
+    public bool OnHeadset => PackageManager?.HasSystemFeature(XrSpatialFeature) == true;
+
+    /// <summary>The service turned on, which the keys' own window sends through; none while it is off.</summary>
+    public static KeyPlusService? Current { get; private set; }
+
+    /// <summary>The panel in the keys' own window, while it is open (a headset).</summary>
+    public KeyPanel? WindowPanel { get; set; }
+
+    /// <summary>The keys' own window, while it is open (a headset): sent to the back when the keyboard closes.</summary>
+    public KeyWindowActivity? KeyWindow { get; set; }
+
+    /// <summary>Test on a headset: whether the keyboard is open, as the keys' window last followed it.</summary>
+    private bool keyboardOpen;
+
+    /// <summary>Test on a headset: until when a keyboard closing is the keys' window taking the focus a moment, not the user's.</summary>
+    private long refocusUntil;
+
+    /// <summary>
+    /// Test on a headset: the keys' window comes with the keyboard and goes
+    /// with it. When the keyboard opens the window is brought to the front;
+    /// if that takes the focus and the keyboard closes, the field typed in is
+    /// tapped again, so its app has the focus back and the keyboard opens
+    /// again. A closing in the moment after is that, not the user's, so it
+    /// is let pass; else, the keyboard closed, the window goes to the back.
+    /// </summary>
+    private void FollowKeyboard(bool open)
+    {
+        if (open == keyboardOpen)
+        {
+            return;
+        }
+
+        var now = SystemClock.UptimeMillis();
+        if (!open && now < refocusUntil)
+        {
+            return;
+        }
+
+        keyboardOpen = open;
+        if (!open)
+        {
+            KeyWindow?.MoveTaskToBack(true);
+            Report("Keyboard closed: keys' window to the back");
+            return;
+        }
+
+        var field = FindFocus(NodeFocus.Input);
+        refocusUntil = now + 1500;
+        OpenKeyWindow();
+        Report("Keyboard open: keys' window to the front");
+        new Handler(Looper.MainLooper!).PostDelayed(() =>
+        {
+            if (FindKeyboard() is not null)
+            {
+                Report("Keys' window in front, keyboard still open");
+                return;
+            }
+
+            var tapped = field?.PerformAction(Android.Views.Accessibility.Action.Click) == true;
+            Report(tapped ? "Keyboard closed by the window: field tapped again" : "Keyboard closed by the window: no field to tap");
+        }, 400);
+    }
 
     /// <summary>Each screen's layout: the phone upright, on its side, and DeX.</summary>
     private readonly Dictionary<KeyPlusPreferences.Screen, PanelPlacement> placements = [];
@@ -65,8 +134,18 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         locking.AddAction(Android.Content.Intent.ActionScreenOn);
         locking.AddAction(Android.Content.Intent.ActionUserPresent);
         RegisterReceiver(lockReceiver, locking, Android.Content.ReceiverFlags.NotExported);
+        Current = this;
+        if (OnHeadset)
+        {
+            OpenKeyWindow();
+        }
+
         Place();
     }
+
+    /// <summary>The keys' own window opened, on a headset, where the user places it beside the keyboard.</summary>
+    public void OpenKeyWindow() =>
+        StartActivity(new Android.Content.Intent(this, typeof(KeyWindowActivity)).AddFlags(Android.Content.ActivityFlags.NewTask));
 
     /// <summary>KeyPlus closed, or opened again by the app: the panel goes, or comes back.</summary>
     public void OnSharedPreferenceChanged(Android.Content.ISharedPreferences? preferences, string? key)
@@ -84,6 +163,72 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         if (e?.EventType == EventTypes.WindowsChanged)
         {
             Place();
+            ReportKeyboard();
+        }
+    }
+
+    /// <summary>Test on a headset: whether ⌨ waits to tell where the keyboard came back.</summary>
+    private bool reportPending;
+
+    /// <summary>
+    /// Test on a headset, ⌨ in the keys' window: hides the keyboard, and at
+    /// once lets it show again and taps the field that has the focus, so the
+    /// keyboard opens anew; once it is back, <see cref="ReportKeyboard"/> says
+    /// what Android tells of where it stands.
+    /// </summary>
+    public void ToggleKeyboard()
+    {
+        var controller = GetSoftKeyboardController()!;
+        controller.SetShowMode(AccessibilityServiceShowMode.Hidden);
+        Report("Keyboard hidden");
+        new Handler(Looper.MainLooper!).PostDelayed(() =>
+        {
+            controller.SetShowMode(AccessibilityServiceShowMode.Auto);
+            reportPending = true;
+            var field = FindFocus(NodeFocus.Input);
+            var tapped = field?.PerformAction(Android.Views.Accessibility.Action.Click) == true;
+            Report(tapped ? "Keyboard asked back: field tapped" : "Keyboard asked back: no focused field to tap");
+        }, 500);
+    }
+
+    /// <summary>
+    /// Once the keyboard is back after ⌨: everything Android tells an
+    /// accessibility service of the keyboard's window, on the keys' window's
+    /// line and in the log.
+    /// </summary>
+    private void ReportKeyboard()
+    {
+        if (!reportPending)
+        {
+            return;
+        }
+
+        var displays = WindowsOnAllDisplays;
+        for (var i = 0; i < (displays?.Size() ?? 0); i++)
+        {
+            IList<AccessibilityWindowInfo> windows = JavaList<AccessibilityWindowInfo>.FromJniHandle(displays!.ValueAt(i)!.Handle, JniHandleOwnership.DoNotTransfer) ?? [];
+            if (windows.FirstOrDefault(window => window.Type == AccessibilityWindowType.InputMethod) is not { } keyboard)
+            {
+                continue;
+            }
+
+            var bounds = new Rect();
+            keyboard.GetBoundsInScreen(bounds);
+            var region = new Region();
+            keyboard.GetRegionInScreen(region);
+            reportPending = false;
+            Report($"Keyboard back: bounds {bounds.ToShortString()} {bounds.Width()}x{bounds.Height()}, region {region.Bounds.ToShortString()}, layer {keyboard.Layer}, display {displays.KeyAt(i)}, id {keyboard.Id}, title '{keyboard.Title}', active {keyboard.IsActive}, focused {keyboard.IsFocused}");
+            return;
+        }
+    }
+
+    /// <summary>Test on a headset: a line on the keys' window and in the log.</summary>
+    private void Report(string text)
+    {
+        Log.Info(LogTag, text);
+        if (WindowPanel is { } panel)
+        {
+            panel.InfoText = $"{DateTime.Now:HH:mm:ss} {text}";
         }
     }
 
@@ -111,6 +256,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
     public override void OnDestroy()
     {
+        Current = null;
         KeyPlusPreferences.Global(this).UnregisterOnSharedPreferenceChangeListener(this);
         if (lockReceiver is not null)
         {
@@ -133,6 +279,15 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         if (KeyPlusPreferences.IsHidden(this))
         {
             Close();
+            return;
+        }
+
+        // On a headset the keys are in a window of their own, not here: it
+        // comes and goes with the keyboard.
+        if (OnHeadset)
+        {
+            Close();
+            FollowKeyboard(FindKeyboard() is not null);
             return;
         }
 
@@ -523,7 +678,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// </summary>
     private void OnCaretMoved(int oldStart, int newStart)
     {
-        if (overlay?.Panel is not { HoldsKeyModifier: true } panel || newStart != oldStart + 1)
+        if ((overlay?.Panel ?? WindowPanel) is not { HoldsKeyModifier: true } panel || newStart != oldStart + 1)
         {
             return;
         }
@@ -564,7 +719,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>Types text into the focused editor, as the phone's keyboard does.</summary>
-    private void TypeText(string text) => InputMethod?.CurrentInputConnection?.CommitText(text, 1, null);
+    public void TypeText(string text) => InputMethod?.CurrentInputConnection?.CommitText(text, 1, null);
 
     /// <summary>
     /// Sends a key, with the modifiers held, to the focused editor
@@ -572,7 +727,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// the copied texts first, for Android lets no accessibility service read
     /// the clipboard they copy it to.
     /// </summary>
-    private void SendKey(Keycode code, MetaKeyStates meta)
+    public void SendKey(Keycode code, MetaKeyStates meta)
     {
         if (InputMethod?.CurrentInputConnection is not { } connection)
         {
@@ -589,7 +744,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>The texts copied lately, which 📋 lists.</summary>
-    private ClipboardHistory Clipboard => clipboard ??= new ClipboardHistory(this);
+    public ClipboardHistory Clipboard => clipboard ??= new ClipboardHistory(this);
 
     private ClipboardHistory? clipboard;
 }

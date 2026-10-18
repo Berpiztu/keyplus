@@ -48,7 +48,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
-    <Compile Remove="KeyPlusService.cs;SelectionInputMethod.cs" />
+    <Compile Remove="KeyPlusService.cs;SelectionInputMethod.cs;KeyWindowActivity.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_accessibility.xml" />
   </ItemGroup>
 

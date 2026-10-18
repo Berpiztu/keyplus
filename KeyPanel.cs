@@ -195,6 +195,11 @@ public sealed class KeyPanel
     private readonly EditText editor;
     private ClipboardHistory.Entry? edited;
 
+    /// <summary>Test on a headset: ⌨ hides the keyboard and shows it again; the line says what Android tells of the keyboard's window.</summary>
+    private readonly TextView keyboardButton;
+    private readonly TextView infoLine;
+    private Action? keyboardToggle;
+
     /// <summary>✕, which closes the popup once asked; a keyboard has none (<see cref="Settings"/>).</summary>
     private readonly TextView closeButton;
 
@@ -254,6 +259,8 @@ public sealed class KeyPanel
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
         clipboardButton = TitleButton("📋", "Texts copied lately: tap one to paste it", () => Toggle(clipboardView!, ShowClipboard));
         settingsButton = TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings));
+        keyboardButton = TitleButton("⌨", "Hide the keyboard, or show it again", () => keyboardToggle?.Invoke());
+        keyboardButton.Visibility = ViewStates.Gone;
         settingsButton.Visibility = ViewStates.Gone;
         makeSmall = TitleButton("▭", "Two rows: the keys made small, with no title bar; hold PgUp to open them again", () => SetCompact(true));
 
@@ -264,6 +271,7 @@ public sealed class KeyPanel
         AddToTitleBar(larger, 36);
         AddToTitleBar(usual, 36);
         AddToTitleBar(makeSmall, 36);
+        AddToTitleBar(keyboardButton, 36);
         AddToTitleBar(clipboardButton, 36);
         AddToTitleBar(switchKeys, 44);
         AddToTitleBar(dock, 36);
@@ -306,6 +314,10 @@ public sealed class KeyPanel
         strip = new LinearLayout(context) { Orientation = Orientation.Vertical };
         strip.SetBackgroundColor(PanelColor);
         strip.SetPadding(Dp(KeyMarginDp), 0, Dp(KeyMarginDp), 0);
+        infoLine = new TextView(context) { Visibility = ViewStates.Gone };
+        infoLine.SetTextColor(Color.Yellow);
+        infoLine.SetTextSize(ComplexUnitType.Sp, 11);
+        strip.AddView(infoLine);
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         clipboardRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
@@ -470,6 +482,30 @@ public sealed class KeyPanel
     /// the room they are given (Berpiztu AI Keyboard on a headset), which
     /// sets their size itself.
     /// </summary>
+    /// <summary>Test on a headset: what ⌨ does, hiding the keyboard or showing it again; none, no ⌨.</summary>
+    public Action? KeyboardToggle
+    {
+        set
+        {
+            keyboardToggle = value;
+            keyboardButton.Visibility = value is null ? ViewStates.Gone : ViewStates.Visible;
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
+    /// <summary>Test on a headset: a line above the title bar with what Android tells of the keyboard's window; none, no line.</summary>
+    public string? InfoText
+    {
+        set
+        {
+            infoLine.Text = value;
+            infoLine.Visibility = value is null ? ViewStates.Gone : ViewStates.Visible;
+        }
+    }
+
     public bool Resizable
     {
         set

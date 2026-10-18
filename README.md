@@ -38,6 +38,18 @@ keyboard the title bar does not move it nor ⤓ dock it, for Android places
 it; in ✕'s place it has **⚙**, its settings, whose first is **Cambiar de
 teclado**, Android's keyboard picker.
 
+The popup on a headset puts its keys in an app's window of its own
+([KeyWindowActivity.cs](KeyWindowActivity.cs)), a panel the user places
+beside the keyboard, which never takes the focus; the service brings it to
+the front when the keyboard opens, taps the field again if that took its
+focus away, and sends it to the back when the keyboard closes. What was
+measured on the Galaxy XR: an accessibility overlay moves with the head, an
+application overlay stays still but cannot be moved, an app's window stays
+where the user leaves it but is never smaller than 220 × 220 dp, and none of
+them can follow the keyboard, whose place in space no app can read. Its ⌨ is
+a test: it hides the keyboard, brings it back, and shows what Android tells
+of the keyboard's window.
+
 | File | What it holds |
 | --- | --- |
 | [PanelKeys.cs](PanelKeys.cs) | The layouts (the editing shortcuts over Termux's two rows; the whole Spanish keyboard), the dead keys' accents, the meta state of held modifiers |

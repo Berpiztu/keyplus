@@ -89,6 +89,11 @@ public sealed class MainActivity : Activity
             "app's info below, choose ⋮ at the top right, then \"Allow restricted settings\", and try again."));
         content.AddView(Button("Open app info", () =>
             StartActivity(new Intent(Settings.ActionApplicationDetailsSettings, Android.Net.Uri.Parse($"package:{PackageName}")))));
+        if (KeyPlusService.Current?.OnHeadset ?? PackageManager!.HasSystemFeature("android.software.xr.api.spatial"))
+        {
+            content.AddView(Text("On a headset the keys have a window of their own: place it beside the keyboard."));
+            content.AddView(Button("Open the keys' window", () => StartActivity(new Intent(this, typeof(KeyWindowActivity)))));
+        }
 
 #endif
 
