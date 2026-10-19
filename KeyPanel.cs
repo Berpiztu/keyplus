@@ -72,6 +72,9 @@ public sealed class KeyPanel
     /// <summary>How near a corner of the window a long press starts to resize it rather than move it.</summary>
     private const int CornerReachDp = 48;
 
+    /// <summary>How near a corner a mouse's or a controller's pointer sizes the window from it, in dp: the diagonal arrows show there.</summary>
+    private const int PointerCornerDp = 24;
+
     /// <summary>The icon's label, in sp.</summary>
     private const float LabelSize = 16f;
 
@@ -109,6 +112,15 @@ public sealed class KeyPanel
 
     /// <summary>The copied things' cards, the menu held on one and the editor: a ground a little lighter than the window's.</summary>
     private static readonly Color CardColor = Color.Argb(0xFF, 0x2C, 0x2C, 0x2C);
+
+    /// <summary>The title bar's height where what was copied stands in it as chips, in dp: Gboard's, room for a chip to read and tap.</summary>
+    private const int ChipBarDp = 44;
+
+    /// <summary>A corner's grip's width, and the bar under the keys that holds the bottom two, in dp; as a finger takes them (<see cref="LargeGrips"/>).</summary>
+    private const int GripDp = 24;
+    private const int BottomBarDp = 14;
+    private const int LargeGripDp = 40;
+    private const int LargeBottomBarDp = 28;
 
     /// <summary>The copied things', their menu's and the editor's words, in sp: a list's, not the keys'.</summary>
     private const float CardTextSp = 15f;
@@ -158,6 +170,9 @@ public sealed class KeyPanel
 
     /// <summary>The grips at the four corners, and the bar along the bottom that holds two of them.</summary>
     private readonly List<View> grips = [];
+
+    /// <summary>Whether the window is sized by hand (<see cref="Resizable"/>): its grips, and its corners under a pointer.</summary>
+    private bool resizable = true;
     private readonly LinearLayout bottomBar;
     private readonly TextView tab;
     private readonly LinearLayout titleBar;
@@ -207,7 +222,28 @@ public sealed class KeyPanel
     private readonly TextView settingsButton;
     private readonly ScrollView settingsView;
     private readonly LinearLayout settingsRows;
-    private IReadOnlyList<(string Label, Action Chosen)> settings = [];
+    private IReadOnlyList<Setting> settings = [];
+
+    /// <summary>
+    /// What was copied as chips in the title bar's middle (<see cref="CopiedInTitleBar"/>),
+    /// a bar of its own in the title bar's place, with ⚙ at its right.
+    /// </summary>
+    private readonly LinearLayout chipBar;
+    private readonly LinearLayout chipItems;
+
+    /// <summary>ABC or Keys in the chips' bar, as in the title bar.</summary>
+    private readonly TextView chipSwitchKeys;
+    private readonly HorizontalScrollView chipScroll;
+    private bool copiedInTitleBar;
+
+    /// <summary>The chips wait to be made again, what was copied having changed while they were out of sight.</summary>
+    private bool chipsStale = true;
+
+    /// <summary>The editor's card stands outside the panel, where its host puts it (<see cref="EditorOutside"/>).</summary>
+    private bool editorOutside;
+
+    /// <summary>The question the title bar's place asks (<see cref="Ask"/>); none, the bar.</summary>
+    private string? asking;
 
     /// <summary>The height the copied texts keep above the keys all the time (<see cref="ClipboardAbove"/>); 0, none.</summary>
     private int clipboardAbove;
@@ -273,7 +309,7 @@ public sealed class KeyPanel
         makeSmall = TitleButton("▭", "Two rows: the keys made small, with no title bar; hold PgUp to open them again", () => SetCompact(true));
 
         titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        AddToTitleBar(Grip("◤", Corner.TopLeft), 24);
+        AddToTitleBar(Grip("◤", Corner.TopLeft), GripDp);
         titleBar.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         AddToTitleBar(smaller, 36);
         AddToTitleBar(larger, 36);
@@ -312,12 +348,28 @@ public sealed class KeyPanel
         closeBar.AddView(question, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         closeBar.AddView(yes, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         closeBar.AddView(no, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
-        AddToTitleBar(Grip("◥", Corner.TopRight), 24);
+        AddToTitleBar(Grip("◥", Corner.TopRight), GripDp);
+
+        // As Gboard's: buttons at both ends, what was copied between them. The
+        // room the chips leave free is held, as the buttons are, to move the
+        // window.
+        chipItems = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        HoldToMove(chipItems, resizes: false);
+        chipScroll = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false, FillViewport = true };
+        chipScroll.AddView(chipItems, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        chipSwitchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
+        chipBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+        chipBar.AddView(Grip("◤", Corner.TopLeft), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
+        chipBar.AddView(TitleButton("📋", "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard)), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
+        chipBar.AddView(chipScroll, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        chipBar.AddView(chipSwitchKeys, new LinearLayout.LayoutParams(Dp(52), ViewGroup.LayoutParams.MatchParent));
+        chipBar.AddView(TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings)), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
+        chipBar.AddView(Grip("◥", Corner.TopRight), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
 
         bottomBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        bottomBar.AddView(Grip("◣", Corner.BottomLeft), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
+        bottomBar.AddView(Grip("◣", Corner.BottomLeft), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
         bottomBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-        bottomBar.AddView(Grip("◢", Corner.BottomRight), new LinearLayout.LayoutParams(Dp(24), ViewGroup.LayoutParams.MatchParent));
+        bottomBar.AddView(Grip("◢", Corner.BottomRight), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
 
         strip = new LinearLayout(context) { Orientation = Orientation.Vertical };
         strip.SetBackgroundColor(PanelColor);
@@ -328,6 +380,7 @@ public sealed class KeyPanel
         strip.AddView(infoLine);
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
+        strip.AddView(chipBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         clipboardRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
         clipboardView = new ScrollView(context) { Visibility = ViewStates.Gone };
         clipboardView.AddView(clipboardRows);
@@ -382,7 +435,7 @@ public sealed class KeyPanel
 
         // Between the keys, a long press moves or resizes the window as on a key.
         HoldToMove(strip);
-        strip.AddView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(14)));
+        strip.AddView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(BottomBarDp)));
 
         tab = KeyView("⌨");
         tab.SetTextSize(ComplexUnitType.Sp, LabelSize);
@@ -390,7 +443,7 @@ public sealed class KeyPanel
         tab.SetPadding(Dp(16), Dp(6), Dp(16), Dp(6));
         Draggable(tab, ReportMoving, OnIconTapped);
 
-        root = new FrameLayout(context);
+        root = new PanelFrame(this, context);
         root.AddView(strip);
         root.AddView(tab);
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
@@ -496,11 +549,6 @@ public sealed class KeyPanel
         }
     }
 
-    /// <summary>
-    /// Whether the corners' grips resize the window: not where the keys fill
-    /// the room they are given (Berpiztu AI Keyboard on a headset), which
-    /// sets their size itself.
-    /// </summary>
     /// <summary>Test on a headset: what ⌨ does, hiding the keyboard or showing it again; none, no ⌨.</summary>
     public Action? KeyboardToggle
     {
@@ -525,10 +573,16 @@ public sealed class KeyPanel
         }
     }
 
+    /// <summary>
+    /// Whether the corners' grips resize the window: not where the keys fill
+    /// the room they are given (Berpiztu AI Keyboard on a headset), which
+    /// sets their size itself.
+    /// </summary>
     public bool Resizable
     {
         set
         {
+            resizable = value;
             foreach (var grip in grips)
             {
                 grip.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
@@ -557,8 +611,8 @@ public sealed class KeyPanel
 
     /// <summary>
     /// The height of a row of the copied texts, side by side, above the keys
-    /// and under the title bar, all the time (Berpiztu AI Keyboard: on a
-    /// headset filling its box, on a phone a row of keys tall); 📋 still shows them all in
+    /// and under the title bar, all the time, where a keyboard has room to
+    /// spare (Berpiztu AI Keyboard on a headset); 📋 still shows them all in
     /// the keys' place, with their options, as Gboard does. 0, none.
     /// </summary>
     public int ClipboardAbove
@@ -661,11 +715,186 @@ public sealed class KeyPanel
     private void Ask(string? text, Action? yes)
     {
         asked = yes;
+        asking = text;
         question.Text = text ?? "";
-        // Made small, the window has no title bar, nor any question in its place.
+        ShowBars();
+    }
+
+    /// <summary>
+    /// The bar in the title bar's place: a question asked, the chips of what
+    /// was copied (<see cref="CopiedInTitleBar"/>) while there is any and
+    /// nothing else is in the keys' place, or the title bar's buttons. Made
+    /// small, the window has none of them.
+    /// </summary>
+    private void ShowBars()
+    {
         var small = compact.Visibility == ViewStates.Visible;
-        titleBar.Visibility = text is null && !small ? ViewStates.Visible : ViewStates.Gone;
-        closeBar.Visibility = text is not null && !small ? ViewStates.Visible : ViewStates.Gone;
+        var chips = copiedInTitleBar && asking is null && covered is null && edited is null && clipboard.Entries.Count > 0;
+        titleBar.Visibility = asking is null && !small && !chips ? ViewStates.Visible : ViewStates.Gone;
+        chipBar.Visibility = chips && !small ? ViewStates.Visible : ViewStates.Gone;
+        closeBar.Visibility = asking is not null && !small ? ViewStates.Visible : ViewStates.Gone;
+        if (chipBar.Visibility == ViewStates.Visible && chipsStale)
+        {
+            FillChips();
+        }
+    }
+
+    /// <summary>
+    /// What was copied as chips in the title bar's middle, as Gboard has it:
+    /// while there is something copied they stand between 📋 at the left and
+    /// ABC and ⚙ at the right, in place of the title bar's other buttons,
+    /// which ⚙ brings back with the settings; with nothing copied, the
+    /// buttons (Berpiztu AI Keyboard on a phone). The bars are then as tall
+    /// as Gboard's.
+    /// </summary>
+    public bool CopiedInTitleBar
+    {
+        set
+        {
+            copiedInTitleBar = value;
+            ApplySizes();
+            ShowBars();
+        }
+    }
+
+    /// <summary>
+    /// The editor's card, Editar: for a keyboard that shows it above itself,
+    /// over the app, as Gboard does (<see cref="EditorOutside"/>).
+    /// </summary>
+    public View EditorCard => editorBar;
+
+    /// <summary>
+    /// The editor's card out of the panel, for its host to show above the
+    /// keys, over the app (Berpiztu AI Keyboard on a phone): the keys keep
+    /// their place and size while a copied text is edited, and the host is
+    /// told when it shows or goes (<see cref="EditingChanged"/>).
+    /// </summary>
+    public bool EditorOutside
+    {
+        set
+        {
+            editorOutside = value;
+            if (value)
+            {
+                strip.RemoveView(editorBar);
+            }
+        }
+    }
+
+    /// <summary>The editor's card showed or went.</summary>
+    public event Action? EditingChanged;
+
+    /// <summary>
+    /// The corners' grips as large as a finger takes them at once, their
+    /// signs larger, the bar under the keys taller (Berpiztu AI Keyboard on a
+    /// phone, where a drag on one sizes the keyboard from that corner).
+    /// </summary>
+    public bool LargeGrips
+    {
+        set
+        {
+            var width = value ? LargeGripDp : GripDp;
+            foreach (var grip in grips.OfType<TextView>())
+            {
+                grip.SetTextSize(ComplexUnitType.Sp, value ? 16 : 10);
+                grip.SetPadding(Dp(value ? 6 : 0), Dp(value ? 2 : 0), Dp(value ? 6 : 0), Dp(value ? 2 : 0));
+                if (grip.Parent != titleBar)
+                {
+                    grip.LayoutParameters!.Width = Dp(width);
+                }
+            }
+
+            for (var i = 0; i < titleParts.Count; i++)
+            {
+                if (grips.Contains(titleParts[i].View))
+                {
+                    titleParts[i] = (titleParts[i].View, width);
+                }
+            }
+
+            bottomBar.LayoutParameters!.Height = Dp(value ? LargeBottomBarDp : BottomBarDp);
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+
+            strip.RequestLayout();
+        }
+    }
+
+    /// <summary>A chip for each thing copied, the pinned first, then the newest; the row scrolls across.</summary>
+    private void FillChips()
+    {
+        chipsStale = false;
+        chipItems.RemoveAllViews();
+        foreach (var entry in clipboard.Entries)
+        {
+            var chip = Chip(entry);
+            var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent);
+            layout.SetMargins(Dp(4), Dp(5), Dp(4), Dp(5));
+            chipItems.AddView(chip, layout);
+        }
+
+        chipScroll.ScrollTo(0, 0);
+    }
+
+    /// <summary>
+    /// A thing copied as Gboard's chip: rounded, 📋 (📌 when pinned) and its
+    /// text's first line cut short, or the image small. A tap pastes it, a
+    /// long press opens its menu (Pegar, Fijar, Editar, Eliminar).
+    /// </summary>
+    private LinearLayout Chip(ClipboardHistory.Entry entry)
+    {
+        var chip = new LinearLayout(context)
+        {
+            Orientation = Orientation.Horizontal,
+            Background = Pill(CardColor),
+            ContentDescription = entry.IsImage ? "Paste the image" : $"Paste: {entry.Text}",
+        };
+        chip.SetGravity(GravityFlags.CenterVertical);
+        chip.SetPadding(Dp(12), 0, Dp(14), 0);
+        if (entry.IsImage)
+        {
+            var image = new ImageView(context) { Background = Card(), ClipToOutline = true };
+            image.SetScaleType(ImageView.ScaleType.CenterCrop);
+            image.SetImageBitmap(Thumbnail(clipboard.PathOf(entry), Dp(28)));
+            chip.AddView(image, new LinearLayout.LayoutParams(Dp(44), Dp(28)));
+        }
+        else
+        {
+            var sign = new TextView(context) { Text = entry.Pinned ? "📌" : "📋" };
+            sign.SetTextSize(ComplexUnitType.Sp, 14);
+            chip.AddView(sign);
+            var text = new TextView(context)
+            {
+                Text = entry.Text!.ReplaceLineEndings(" ").Trim(),
+                Ellipsize = Android.Text.TextUtils.TruncateAt.End,
+            };
+            text.SetTextColor(Color.White);
+            text.SetTextSize(ComplexUnitType.Sp, 14);
+            text.SetMaxLines(1);
+            text.SetMaxWidth(Dp(180));
+            var spaced = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent);
+            spaced.SetMargins(Dp(8), 0, 0, 0);
+            chip.AddView(text, spaced);
+        }
+
+        chip.Click += (_, _) => Paste(entry);
+        chip.LongClick += (_, e) =>
+        {
+            e.Handled = true;
+            ShowMenu(chip, entry, () => Paste(entry));
+        };
+        return chip;
+    }
+
+    /// <summary>A ground rounded at both ends, as Gboard's chips and settings are.</summary>
+    private GradientDrawable Pill(Color color)
+    {
+        var shape = new GradientDrawable();
+        shape.SetColor(color);
+        shape.SetCornerRadius(Dp(100));
+        return shape;
     }
 
     private void SetFolded(bool folded)
@@ -708,7 +937,14 @@ public sealed class KeyPanel
         SizeLabels();
         FitLegendsSoon();
         switchKeys.Text = whole ? "Keys" : "ABC";
+        chipSwitchKeys.Text = switchKeys.Text;
     }
+
+    /// <summary>
+    /// A setting ⚙ shows: its words and what it does; with a sign, it shows
+    /// as Gboard's (<see cref="ShowSettings"/>), the one in use marked.
+    /// </summary>
+    public sealed record Setting(string Label, Action Chosen, string? Sign = null, bool InUse = false);
 
     /// <summary>
     /// The settings ⚙ shows in the keys' place, each a row that does what it
@@ -716,7 +952,7 @@ public sealed class KeyPanel
     /// right in ✕'s place, for a keyboard is not closed but changed for
     /// another. None, no ⚙, and ✕ closes the popup.
     /// </summary>
-    public IReadOnlyList<(string Label, Action Chosen)> Settings
+    public IReadOnlyList<Setting> Settings
     {
         set
         {
@@ -755,6 +991,7 @@ public sealed class KeyPanel
         covered = (keys, cover, button);
         button.Background = KeyBackground(HeldColor);
         button.SetTextColor(HeldTextColor);
+        ShowBars();
     }
 
     /// <summary>The keys again, in place of the copied texts or the settings.</summary>
@@ -771,6 +1008,7 @@ public sealed class KeyPanel
         now.Button.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
         now.Button.SetTextColor(Color.White);
         covered = null;
+        ShowBars();
     }
 
     /// <summary>The copied things in the keys' place, a list that scrolls.</summary>
@@ -783,45 +1021,141 @@ public sealed class KeyPanel
 
     /// <summary>
     /// The settings in the keys' place, from the first: a tap does it and
-    /// brings the keys back. Several, two to a row at a list's size, as
-    /// Gboard's; one or two, a row each across.
+    /// brings the keys back. With their signs, as Gboard shows them: rounded
+    /// tiles, a sign and the words, two or three to a row as the width
+    /// allows, the one in use outlined; else a row each across.
     /// </summary>
     private void ShowSettings()
     {
         settingsRows.RemoveAllViews();
-        var columns = settings.Count > 2 ? 2 : 1;
-        LinearLayout? line = null;
-        for (var i = 0; i < settings.Count; i++)
+        if (settings.Count > 0 && settings.All(setting => setting.Sign is not null))
         {
-            var (label, chosen) = settings[i];
-            var tile = KeyView(label);
-            tile.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
-            tile.SetPadding(Dp(12), 0, Dp(12), 0);
-            if (columns > 1)
+            ShowSettingTiles();
+        }
+        else
+        {
+            foreach (var setting in settings)
             {
-                tile.SetTextSize(ComplexUnitType.Sp, MenuTextSp);
+                var row = KeyView(setting.Label);
+                row.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
+                row.SetPadding(Dp(12), 0, Dp(12), 0);
+                row.SetTextSize(ComplexUnitType.Px, RowHeight * 0.4f);
+                row.Click += (_, _) => Choose(setting);
+                settingsRows.AddView(row, KeyMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight - (2 * Dp(KeyMarginDp)))));
             }
-            else
-            {
-                tile.SetTextSize(ComplexUnitType.Px, RowHeight * 0.4f);
-            }
-
-            tile.Click += (_, _) =>
-            {
-                Uncover();
-                chosen();
-            };
-            if (i % columns == 0)
-            {
-                line = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-                settingsRows.AddView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight));
-            }
-
-            line!.AddView(tile, KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f)));
         }
 
         settingsView.ScrollTo(0, 0);
         Cover(settingsView, settingsButton);
+    }
+
+    /// <summary>
+    /// Gboard's settings: rows of rounded tiles, as many to a row as a
+    /// tile's least width allows, two at least and three at most, each row as
+    /// tall as the keys' place allows them all, up to Gboard's; the last
+    /// row's tiles share its whole width, so their words are never cut.
+    /// </summary>
+    private void ShowSettingTiles()
+    {
+        var columns = Math.Clamp(strip.Width / Dp(180), 2, 3);
+        var rows = (settings.Count + columns - 1) / columns;
+        var padding = Dp(6);
+        var room = Math.Max(ShownKeys.Height, RowHeight) - (2 * padding);
+        var lineHeight = Math.Min(Dp(52 + 12), room / rows);
+        settingsRows.SetPadding(padding, padding, padding, padding);
+        var wordsSp = SettingWordsSp(columns, padding);
+        LinearLayout? line = null;
+        for (var i = 0; i < settings.Count; i++)
+        {
+            if (i % columns == 0)
+            {
+                line = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+                settingsRows.AddView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, lineHeight));
+            }
+
+            line!.AddView(SettingTile(settings[i], wordsSp), TileMargins());
+        }
+
+        LinearLayout.LayoutParams TileMargins()
+        {
+            var layout = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f);
+            layout.SetMargins(Dp(6), Dp(4), Dp(6), Dp(4));
+            return layout;
+        }
+    }
+
+    /// <summary>
+    /// The settings' words' one size, in sp: a list's, or, where a tile is
+    /// too narrow for the longest, smaller a step at a time until it fits,
+    /// so no tile's words are cut and all are alike. A tile's room for its
+    /// words: its share of the row less its margins, padding and sign.
+    /// </summary>
+    private int SettingWordsSp(int columns, int padding)
+    {
+        // Each tile's own room: a full row's share, or the last row's, whose few tiles share it all.
+        var full = settings.Count - (settings.Count % columns);
+        var last = settings.Count - full;
+        var rooms = settings.Select((_, i) => WordsRoom(i < full ? columns : last)).ToArray();
+        var paint = new Android.Text.TextPaint(PaintFlags.AntiAlias);
+        var size = (int)MenuTextSp;
+        for (; size > SmallestSettingSp; size--)
+        {
+            paint.TextSize = TypedValue.ApplyDimension(ComplexUnitType.Sp, size, context.Resources!.DisplayMetrics);
+            if (settings.Select((setting, i) => paint.MeasureText(setting.Label) <= rooms[i]).All(fits => fits))
+            {
+                break;
+            }
+        }
+
+        return size;
+
+        int WordsRoom(int inRow)
+        {
+            var tileWidth = ((strip.Width - (2 * padding)) / inRow) - (2 * Dp(6));
+            return tileWidth - Dp(TilePaddingDp + 12) - Dp(TileSignDp) - Dp(TileGapDp);
+        }
+    }
+
+    /// <summary>The least the settings' words go down to, in sp.</summary>
+    private const int SmallestSettingSp = 8;
+
+    /// <summary>A setting tile's room before its sign, its sign's width and the gap before its words, in dp.</summary>
+    private const int TilePaddingDp = 14;
+    private const int TileSignDp = 24;
+    private const int TileGapDp = 8;
+
+    /// <summary>A setting as Gboard's tile: rounded, its sign and its words; the one in use outlined in the held keys' colour.</summary>
+    private LinearLayout SettingTile(Setting setting, int wordsSp)
+    {
+        var ground = Pill(KeyColor);
+        if (setting.InUse)
+        {
+            ground.SetStroke(Dp(2), HeldColor);
+        }
+
+        var tile = new LinearLayout(context) { Orientation = Orientation.Horizontal, Background = ground, ContentDescription = setting.Label };
+        tile.SetGravity(GravityFlags.CenterVertical);
+        tile.SetPadding(Dp(TilePaddingDp), 0, Dp(12), 0);
+        var sign = new TextView(context) { Text = setting.Sign, Gravity = GravityFlags.Center };
+        sign.SetTextColor(setting.InUse ? HeldColor : Color.White);
+        sign.SetTextSize(ComplexUnitType.Sp, 20);
+        tile.AddView(sign, new LinearLayout.LayoutParams(Dp(TileSignDp), ViewGroup.LayoutParams.WrapContent));
+        var words = new TextView(context) { Text = setting.Label, Gravity = GravityFlags.CenterVertical };
+        words.SetTextColor(Color.White);
+        words.SetMaxLines(1);
+        words.SetTextSize(ComplexUnitType.Sp, wordsSp);
+        var spaced = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f);
+        spaced.SetMargins(Dp(TileGapDp), 0, 0, 0);
+        tile.AddView(words, spaced);
+        tile.Click += (_, _) => Choose(setting);
+        return tile;
+    }
+
+    /// <summary>A setting chosen: the keys back, and it done.</summary>
+    private void Choose(Setting setting)
+    {
+        Uncover();
+        setting.Chosen();
     }
 
     /// <summary>
@@ -929,6 +1263,9 @@ public sealed class KeyPanel
         {
             FillClipboardLine();
         }
+
+        chipsStale = true;
+        ShowBars();
     }
 
     private TextView NothingCopied()
@@ -1091,7 +1428,15 @@ public sealed class KeyPanel
         editor.SetSelection(editor.Text?.Length ?? 0);
         var inRow = clipboardAbove > 0;
         editorBar.Orientation = inRow ? Orientation.Horizontal : Orientation.Vertical;
-        editorBar.LayoutParameters = CardMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, inRow ? clipboardAbove - Dp(8) : ViewGroup.LayoutParams.WrapContent));
+        if (!editorOutside)
+        {
+            editorBar.LayoutParameters = CardMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, inRow ? clipboardAbove - Dp(8) : ViewGroup.LayoutParams.WrapContent));
+        }
+
+        // As a card, one line that scrolls across, as Gboard's: the card never
+        // grows with the text, nor moves the keys. In the row, its lines.
+        editor.SetMaxLines(inRow ? 3 : 1);
+        editor.SetHorizontallyScrolling(!inRow);
         editorTitle.Visibility = inRow ? ViewStates.Gone : ViewStates.Visible;
         editor.LayoutParameters = inRow
             ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f)
@@ -1102,7 +1447,10 @@ public sealed class KeyPanel
         editorGap.Visibility = inRow ? ViewStates.Gone : ViewStates.Visible;
         clipboardLine.Visibility = inRow ? ViewStates.Gone : clipboardLine.Visibility;
         editorBar.Visibility = ViewStates.Visible;
+        editor.SetSelection(editor.Text?.Length ?? 0);
         editor.RequestFocus();
+        ShowBars();
+        EditingChanged?.Invoke();
     }
 
     /// <summary>The editor closed: the text edited kept in its place in the list (Guardar), or left as it was (Cancelar); the keys type into the field again.</summary>
@@ -1126,6 +1474,9 @@ public sealed class KeyPanel
             clipboardLine.Visibility = ViewStates.Visible;
             FillClipboardLine();
         }
+
+        ShowBars();
+        EditingChanged?.Invoke();
     }
 
     /// <summary>A key sent to the field, or, while a copied text is edited, to the editor, which moves, selects and deletes as a field does.</summary>
@@ -1196,27 +1547,6 @@ public sealed class KeyPanel
     /// keyboard's height, and the side column's keys stand level with the rows.
     /// </summary>
     public int RowHeight => Dp(56 * scale);
-
-    /// <summary>
-    /// The height a row of copied things needs for a text's two lines, as
-    /// Android lays them out, a pinned one's 📌 among them (its font's lines
-    /// are taller), with its card's padding and margins.
-    /// </summary>
-    public int CopiedRowHeight
-    {
-        get
-        {
-            var paint = new Android.Text.TextPaint(PaintFlags.AntiAlias)
-            {
-                TextSize = TypedValue.ApplyDimension(ComplexUnitType.Sp, CardTextSp, context.Resources!.DisplayMetrics),
-            };
-            const string twoLines = "📌 Ag\nAg";
-            var lines = Android.Text.StaticLayout.Builder.Obtain(twoLines, 0, twoLines.Length, paint, int.MaxValue / 2)!
-                .SetUseLineSpacingFromFallbacks(true)!
-                .Build()!;
-            return lines.Height + Dp(8 + 8) + Dp(4 + 4);
-        }
-    }
 
     /// <param name="side">Keys in a column at the right, one beside each row.</param>
     private LinearLayout Rows(IReadOnlyList<KeyBlock> layout, IReadOnlyList<PanelKey>? side = null)
@@ -1473,6 +1803,96 @@ public sealed class KeyPanel
                 panel.handler.RemoveCallbacks(waiting);
                 waiting = null;
             }
+        }
+    }
+
+    /// <summary>
+    /// The corner a mouse's or a controller's pointer is near, in the panel's
+    /// own place (<see cref="PanelFrame"/>), where the window can be sized;
+    /// none for a finger, which keeps the keys there, nor where the window
+    /// is not sized by hand or is its icon.
+    /// </summary>
+    private Corner? PointerCorner(MotionEvent motion)
+    {
+        if (!resizable || ShowsIcon || motion.GetToolType(0) == MotionEventToolType.Finger)
+        {
+            return null;
+        }
+
+        var reach = Dp(PointerCornerDp);
+        var (x, y) = (motion.GetX(), motion.GetY());
+        var left = x < reach;
+        var right = x > root.Width - reach;
+        var top = y < reach;
+        var bottom = y > root.Height - reach;
+        if (!(left || right) || !(top || bottom))
+        {
+            return null;
+        }
+
+        return (left ? Corner.Left : 0) | (top ? Corner.Top : 0);
+    }
+
+    /// <summary>
+    /// The panel's own frame. With a mouse or a controller's pointer (INAIR's
+    /// pod, a desktop), near a corner the pointer turns into the diagonal
+    /// arrows, and a press there sizes the window from that corner whatever
+    /// key is under it, as a desktop window's corner does. A finger keeps
+    /// the keys there, and the grips.
+    /// </summary>
+    private sealed class PanelFrame(KeyPanel panel, Context context) : FrameLayout(context)
+    {
+        private Corner? sizing;
+        private float startX;
+        private float startY;
+
+        public override PointerIcon? OnResolvePointerIcon(MotionEvent? e, int pointerIndex)
+        {
+            if (e is not null && panel.PointerCorner(e) is { } corner)
+            {
+                var arrows = corner is Corner.TopLeft or Corner.BottomRight
+                    ? PointerIconType.TopLeftDiagonalDoubleArrow
+                    : PointerIconType.TopRightDiagonalDoubleArrow;
+                return PointerIcon.GetSystemIcon(Context!, arrows);
+            }
+
+            return base.OnResolvePointerIcon(e, pointerIndex);
+        }
+
+        public override bool OnInterceptTouchEvent(MotionEvent? e)
+        {
+            if (e?.ActionMasked == MotionEventActions.Down && panel.PointerCorner(e) is { } corner)
+            {
+                sizing = corner;
+                (startX, startY) = panel.OnScreen(this, e);
+                panel.ReportResizing(corner, KeyPanel.Drag.Start, 0, 0);
+                return true;
+            }
+
+            return base.OnInterceptTouchEvent(e);
+        }
+
+        public override bool OnTouchEvent(MotionEvent? e)
+        {
+            if (sizing is not { } corner || e is null)
+            {
+                return base.OnTouchEvent(e);
+            }
+
+            var (x, y) = panel.OnScreen(this, e);
+            switch (e.ActionMasked)
+            {
+                case MotionEventActions.Move:
+                    panel.ReportResizing(corner, KeyPanel.Drag.Move, x - startX, y - startY);
+                    break;
+                case MotionEventActions.Up:
+                case MotionEventActions.Cancel:
+                    panel.ReportResizing(corner, KeyPanel.Drag.End, x - startX, y - startY);
+                    sizing = null;
+                    break;
+            }
+
+            return true;
         }
     }
 
@@ -1826,9 +2246,10 @@ public sealed class KeyPanel
         // The title bar as tall as the keys make it, between its least
         // height, still enough to hold and move the window by, and its usual
         // one: a keyboard made small keeps a title bar near its size.
-        foreach (var bar in new View[] { titleBar, closeBar })
+        var barDp = copiedInTitleBar ? ChipBarDp : TitleBarDp;
+        foreach (var bar in new View[] { titleBar, closeBar, chipBar })
         {
-            bar.LayoutParameters!.Height = Dp(Math.Clamp(TitleBarDp * scale, LeastTitleBarDp, TitleBarDp));
+            bar.LayoutParameters!.Height = Dp(Math.Clamp(barDp * scale, LeastTitleBarDp, barDp));
             bar.RequestLayout();
         }
 

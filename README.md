@@ -38,17 +38,25 @@ keyboard the title bar does not move it nor ⤓ dock it, for Android places
 it; in ✕'s place it has **⚙**, its settings, whose first is **Cambiar de
 teclado**, Android's keyboard picker.
 
-On a phone the keyboard shows what was copied in a row above the keys all
-the time, the newest first after the pinned ones: a tap pastes it, ✏ edits
-it right there, ✕ takes it out, and 📋 lists them all. Its **⚙** opens, in
-the keys' place and two to a row as Gboard's, **Mover**, **Redimensionar**,
-**Modo normal**, **Modo ventana** and **Cambiar de teclado**
-([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
+On a phone the keyboard's title bar is Gboard's: while something is copied,
+it shows the copied things as chips, the pinned first, then the newest,
+between **📋** at its left and **ABC** and **⚙** at its right; a tap pastes
+one, a long press opens its menu (Pegar, Fijar, Editar, Eliminar). Editar
+shows its card above the keyboard, over the app, as Gboard does: one line
+that scrolls across, so neither the card nor the keys change size with the
+text, and the keys type into it until Cancelar or Guardar. With
+nothing copied, or with ⚙ open, it shows the buttons. A long press on the
+bar's buttons, its free room or between the keys moves the keyboard. Its
+four corners have large grips, ◤ ◥ ◣ ◢: dragged, they size it from that
+corner, the keys larger or smaller, wider or narrower. ⚙ opens, in the keys' place and as Gboard's rounded tiles,
+**Mover**, **Redimensionar**, **Modo normal**, **Modo ventana** and
+**Cambiar de teclado** ([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
 over the keyboard until **Hecho**: moving, it follows a finger held anywhere
-on it; resizing, the top and bottom bars size the keys and, in a window, the
-side ones its width, and **Restablecer** takes it back to its usual size.
-Modo normal docks it at the bottom, as wide as the screen, as high as Mover
-raised it; Modo ventana makes it a window of its own over the app, which
+on it; resizing, the top and bottom bars size the keys and the side ones
+their width, and **Restablecer** takes it back to its usual size. Modo
+normal docks it at the bottom on a ground as wide as the screen, which the
+app gives way to as to any keyboard: the keys as wide as it, or narrower,
+for a finger to reach them, where Mover left them, across and up; Modo ventana makes it a window of its own over the app, which
 keeps the whole screen and its touches outside the keyboard. Each screen
 and mode keeps its own place and size.
 
@@ -144,7 +152,10 @@ a window that does.
   keyboard or not; a tap on a button does what the button is for. The
   ground between the keys moves it the same way. Drag a corner (◤ ◥ ◣ ◢) to
   resize it: across for its width, up or down for the size of its keys; the
-  opposite corner stays put. **⤓** in the title bar docks it again.
+  opposite corner stays put. With a mouse or a controller's pointer (INAIR's
+  pod), the pointer turns into the diagonal arrows near any corner, and a
+  press there resizes the window, whatever key is under it, as a desktop
+  window's corner does. **⤓** in the title bar docks it again.
 - **The labels.** Each key is a table of three by three cells: its shifted
   character in the top left, its plain one in the middle and its Alt Gr one
   in the bottom right, so none covers another however narrow the key. The
@@ -205,11 +216,26 @@ Then on the phone, for the popup:
 
 1. Copy `dist\KeyPlus-Popup.apk` to it and open it to install
    it (Android asks to allow installing from the app that opens it).
-2. Open **KeyPlus** and choose **Open accessibility settings**.
-3. Turn on **KeyPlus keys**.
-4. If Android says the setting is restricted (Android 13 and later do so for
+2. Open **KeyPlus** and choose **Turn on KeyPlus keys**, which opens
+   Android's switch for it; turn it on.
+3. If Android says the setting is restricted (Android 13 and later do so for
    apps not installed from a store), choose **Open app info** in KeyPlus,
    then **⋮ → Allow restricted settings**, and turn it on again.
+
+Where Settings has no such menu (INAIR's pod), or to have KeyPlus turn
+itself on, run these once after each new install (installing over the app
+keeps them), from a computer with `adb shell` before each, or in an ADB app
+on the device itself, such as Bugjaeger; **Copy the ADB commands** in
+KeyPlus copies them:
+
+```
+appops set ai.berpiztu.keyplus ACCESS_RESTRICTED_SETTINGS allow
+pm grant ai.berpiztu.keyplus android.permission.WRITE_SECURE_SETTINGS
+```
+
+Then **Turn on KeyPlus keys** turns the service on by itself, keeping the
+others that are on. `deploy.ps1` and `debug.ps1` run them too. Berpiztu
+AI Keyboard's screen has a box at its top to try the keys in.
 
 For the keyboard, on a phone or a headset:
 

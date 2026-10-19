@@ -48,6 +48,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>The keys, and over them, while Mover or Redimensionar is on, the <see cref="frame"/>.</summary>
     private FrameLayout? box;
+
+    /// <summary>Docked, the keyboard's ground, as wide as the screen, behind the keys and under them: beside keys made narrower, as far as Mover raised them, and the navigation bar's room.</summary>
+    private View? ground;
     private KeyboardFrame? frame;
 
     /// <summary>Where the keyboard stood and how large it was when a drag on the frame or the title bar started.</summary>
@@ -160,13 +163,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
         {
             Dockable = false,
             PasteImage = PasteImage,
-            Settings = [("Cambiar de teclado", () => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker())],
+            Settings = [new("Cambiar de teclado", ShowKeyboardPicker)],
         };
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
-        panel.Resizing += OnResizing;
         if (OnHeadset)
         {
+            panel.Resizing += OnResizing;
             // The keys sized to the headset's box, whatever its mode: no grips to size them.
             panel.Resizable = false;
             panel.SideKeys = false;
@@ -174,16 +177,22 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         else
         {
-            // Sized and moved from ⚙: no grips.
-            panel.Resizable = false;
+            // Moved and sized from ⚙, or a corner's grip dragged, a large one.
+            // What was copied in the title bar, as Gboard has it.
             panel.Settings = PhoneSettings();
-            panel.Moving += (drag, dx, dy) =>
-            {
-                if (placed?.Floating == true)
-                {
-                    Adjust(KeyboardFrame.Part.Whole, drag, dx, dy);
-                }
-            };
+            panel.CopiedInTitleBar = true;
+            panel.LargeGrips = true;
+            // A long press, on the bar's buttons, its free room or between the
+            // keys, moves the keyboard (docked, up and down); a corner's grip
+            // dragged, or a long press near a corner, sizes it from there, as
+            // Redimensionar does.
+            panel.Moving += (drag, dx, dy) => Adjust(KeyboardFrame.Part.Whole, drag, dx, dy);
+            panel.Resizing += (corner, drag, dx, dy) => Adjust(
+                ((corner & KeyPanel.Corner.Top) != 0 ? KeyboardFrame.Part.Top : KeyboardFrame.Part.Bottom)
+                | ((corner & KeyPanel.Corner.Left) != 0 ? KeyboardFrame.Part.Left : KeyboardFrame.Part.Right),
+                drag,
+                dx,
+                dy);
             frame = new KeyboardFrame(this);
             frame.Dragged += Adjust;
             frame.ResetRequested += ResetSize;
@@ -203,18 +212,20 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 }
             };
             container = new FrameLayout(this);
+            ground = new View(this);
+            ground.SetBackgroundColor(KeyPanel.PanelColor);
+            container.AddView(ground);
             container.AddView(box);
 
-            // The keys' height changes with their size and mode: in a window, kept inside the room.
-            box.LayoutChange += (_, _) =>
-            {
-                if (placed?.Floating == true)
-                {
-                    box.Post(Place);
-                }
-            };
+            // Editar's card above the keys, over the app, as Gboard's.
+            panel.EditorOutside = true;
+            container.AddView(panel.EditorCard);
+            panel.EditingChanged += () => container.Post(Place);
+
+            // The keys' height changes with their size and mode: in a window
+            // kept inside the room, and the editor's card kept above them.
+            box.LayoutChange += (_, _) => box.Post(Place);
             Place();
-            KeepCopiedRow();
         }
 
         panel.UsualSizeRequested += OnUsualSizeRequested;
@@ -222,19 +233,22 @@ public sealed class KeyPlusKeyboard : InputMethodService
         return container ?? panel.Root;
     }
 
-    /// <summary>⚙ on a phone: Mover, Redimensionar, the two modes, the one in use ticked, and the keyboard picker.</summary>
-    private IReadOnlyList<(string Label, Action Chosen)> PhoneSettings()
+    /// <summary>⚙ on a phone, as Gboard's tiles: Mover, Redimensionar, the two modes, the one in use marked, and the keyboard picker.</summary>
+    private IReadOnlyList<KeyPanel.Setting> PhoneSettings()
     {
         var windowed = placed?.Floating == true;
         return
         [
-            ("✥ Mover", () => frame?.Show(resizing: false, sides: false)),
-            ("⤡ Redimensionar", () => frame?.Show(resizing: true, sides: placed?.Floating == true)),
-            ((windowed ? "" : "✓ ") + "Modo normal", () => SetWindowed(false)),
-            ((windowed ? "✓ " : "") + "Modo ventana", () => SetWindowed(true)),
-            ("Cambiar de teclado", () => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker()),
+            new("Mover", () => frame?.Show(resizing: false, sides: false), "✥"),
+            new("Redimensionar", () => frame?.Show(resizing: true, sides: true), "⇲"),
+            new("Modo normal", () => SetWindowed(false), "⬓", InUse: !windowed),
+            new("Modo ventana", () => SetWindowed(true), "❐", InUse: windowed),
+            new("Cambiar de teclado", ShowKeyboardPicker, "🌐"),
         ];
     }
+
+    /// <summary>Android's keyboard picker, to change for another keyboard.</summary>
+    private void ShowKeyboardPicker() => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker();
 
     /// <summary>
     /// Modo ventana or Modo normal chosen. The first time in a window, it
@@ -276,78 +290,132 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>
     /// The keyboard where it stands: docked, at the bottom as wide as the
-    /// screen, raised as far as Mover left it; in a window, where the user
-    /// left it and as wide, inside the room. Only what changed is laid out
-    /// again.
+    /// screen, raised as far as Mover left it, its ground under it; in a
+    /// window, where the user left it and as wide, inside the room. Editar's
+    /// card, while it shows, above the keys and as wide, or under them where
+    /// a window has no room above. Only what changed is laid out again.
     /// </summary>
     private void Place()
     {
-        if (container is null || box is null || placed is null)
+        if (container is null || box is null || ground is null || panel is null || placed is null)
         {
             return;
         }
 
-        FrameLayout.LayoutParams layout;
         var room = Room();
-        container.SetPadding(0, 0, 0, room.Below);
+        var gap = Dp(8);
+        FrameLayout.LayoutParams keys, card, under;
         if (placed.Floating)
         {
             var width = Math.Clamp(placed.Width, Dp(PanelPlacement.MinWidthDp), room.Width);
-            layout = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Top | GravityFlags.Left)
+            var left = Math.Clamp(placed.X, 0, room.Width - width);
+            var top = Math.Clamp(placed.Y, 0, Math.Max(0, room.Height - box.Height));
+            keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Top | GravityFlags.Left)
             {
-                LeftMargin = Math.Clamp(placed.X, 0, room.Width - width),
-                TopMargin = Math.Clamp(placed.Y, 0, Math.Max(0, room.Height - box.Height)),
+                LeftMargin = left,
+                TopMargin = top,
             };
+            card = top >= Dp(EditorRoomDp)
+                ? new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom | GravityFlags.Left)
+                {
+                    LeftMargin = left,
+                    BottomMargin = room.Height - top + gap,
+                }
+                : new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Top | GravityFlags.Left)
+                {
+                    LeftMargin = left,
+                    TopMargin = top + box.Height + gap,
+                };
+            under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, GravityFlags.Bottom);
+            container.SetPadding(0, 0, 0, room.Below);
             container.SetMinimumHeight(room.Height + room.Below);
-            container.Background = null;
         }
         else
         {
-            layout = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom)
+            // As wide as the screen, or narrower where the user made it so, a
+            // finger to reach them: the ground stays as wide as the screen,
+            // and the app gives way to all of it, as to any keyboard.
+            var raised = placed.Lift + room.Below;
+            var width = placed.DockedWidth > 0 ? Math.Clamp(placed.DockedWidth, Dp(PanelPlacement.MinWidthDp), room.Width) : room.Width;
+            keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom | GravityFlags.Left)
             {
-                BottomMargin = placed.Lift,
+                LeftMargin = Math.Clamp(placed.DockedX, 0, room.Width - width),
+                BottomMargin = raised,
             };
+            card = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom)
+            {
+                LeftMargin = gap,
+                RightMargin = gap,
+                BottomMargin = raised + box.Height + gap,
+            };
+            under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, raised + box.Height, GravityFlags.Bottom);
+            container.SetPadding(0, 0, 0, 0);
             container.SetMinimumHeight(0);
-            container.SetBackgroundColor(KeyPanel.PanelColor);
         }
 
-        if (box.LayoutParameters is FrameLayout.LayoutParams now
-            && now.Width == layout.Width && now.Gravity == layout.Gravity
-            && now.LeftMargin == layout.LeftMargin && now.TopMargin == layout.TopMargin && now.BottomMargin == layout.BottomMargin)
+        Lay(box, keys);
+        Lay(panel.EditorCard, card);
+        Lay(ground, under);
+    }
+
+    /// <summary>The room above a keyboard in a window that Editar's card takes, in dp; with less, the card stands under it.</summary>
+    private const int EditorRoomDp = 140;
+
+    /// <summary>A view laid out anew only where its place changed, for laying out is what calls <see cref="Place"/> again.</summary>
+    private static void Lay(View view, FrameLayout.LayoutParams layout)
+    {
+        if (view.LayoutParameters is FrameLayout.LayoutParams now
+            && now.Width == layout.Width && now.Height == layout.Height && now.Gravity == layout.Gravity
+            && now.LeftMargin == layout.LeftMargin && now.TopMargin == layout.TopMargin
+            && now.RightMargin == layout.RightMargin && now.BottomMargin == layout.BottomMargin)
         {
             return;
         }
 
-        box.LayoutParameters = layout;
+        view.LayoutParameters = layout;
     }
 
     /// <summary>
-    /// The keyboard in a window: the app behind keeps the whole screen, and
-    /// only the keyboard takes touches, the rest of its window passing them
-    /// to the app. Docked, as any keyboard.
+    /// Only the keys, and Editar's card while it shows, take touches; the
+    /// rest of the keyboard's window passes them to the app. Docked, the app
+    /// gives way to the keys, not to the card, which stands over it, as
+    /// Gboard's; in a window, the app keeps the whole screen.
     /// </summary>
     public override void OnComputeInsets(Insets? outInsets)
     {
         base.OnComputeInsets(outInsets);
-        if (outInsets is null || container is null || box is null || placed?.Floating != true || box.Height == 0)
+        if (outInsets is null || container is null || box is null || panel is null || placed is null || box.Height == 0)
         {
             return;
         }
 
         var at = new int[2];
         container.GetLocationInWindow(at);
-        var below = at[1] + container.Height;
-        outInsets.ContentTopInsets = below;
-        outInsets.VisibleTopInsets = below;
+        var top = placed.Floating ? at[1] + container.Height : at[1] + box.Top;
+        outInsets.ContentTopInsets = top;
+        outInsets.VisibleTopInsets = top;
         outInsets.TouchableInsets = TouchableInsets.Region;
-        outInsets.TouchableRegion!.Set(at[0] + box.Left, at[1] + box.Top, at[0] + box.Right, at[1] + box.Bottom);
+        var region = outInsets.TouchableRegion!;
+        region.Set(at[0] + box.Left, at[1] + box.Top, at[0] + box.Right, at[1] + box.Bottom);
+        if (!placed.Floating && ground is not null)
+        {
+            // Docked, the ground beside and under the keys is the keyboard's too.
+            region.InvokeOp(at[0] + ground.Left, at[1] + ground.Top, at[0] + ground.Right, at[1] + ground.Bottom, Android.Graphics.Region.Op.Union!);
+        }
+        var card = panel.EditorCard;
+        if (card.Visibility == ViewStates.Visible)
+        {
+            region.InvokeOp(at[0] + card.Left, at[1] + card.Top, at[0] + card.Right, at[1] + card.Bottom, Android.Graphics.Region.Op.Union!);
+        }
     }
 
     /// <summary>
-    /// A finger on the frame, or on the title bar of a keyboard in a window:
-    /// the whole moves it, in a window anywhere, docked up and down; the top
-    /// and bottom edges make the keys larger or smaller, the side ones the
-    /// window wider or narrower. Kept once the finger is lifted.
+    /// A finger on the frame, a corner's grip or a long press on the
+    /// keyboard: the whole moves it, in a window anywhere, docked across and
+    /// up and down; the top and bottom edges make the keys larger or smaller,
+    /// the side ones the keys wider or narrower (docked, within the
+    /// keyboard's ground, as wide as the screen), a corner both. Kept once
+    /// the finger is lifted.
     /// </summary>
     private void Adjust(KeyboardFrame.Part part, KeyPanel.Drag drag, float dx, float dy)
     {
@@ -359,32 +427,42 @@ public sealed class KeyPlusKeyboard : InputMethodService
         panel.NoteDrag(drag, before: true);
         if (drag == KeyPanel.Drag.Start)
         {
-            adjustStart = (layout.LeftMargin, layout.TopMargin, box.Width, placed.Lift, panel.Scale, Math.Max(1, box.Height));
+            adjustStart = (box.Left, layout.TopMargin, box.Width, placed.Lift, panel.Scale, Math.Max(1, box.Height));
         }
 
         var start = adjustStart;
-        switch (part)
+        if (part.HasFlag(KeyboardFrame.Part.Whole))
         {
-            case KeyboardFrame.Part.Whole when placed.Floating:
+            if (placed.Floating)
+            {
                 (placed.X, placed.Y) = (start.X + (int)dx, start.Y + (int)dy);
-                break;
-            case KeyboardFrame.Part.Whole:
+            }
+            else
+            {
                 placed.Lift = Math.Clamp(start.Lift - (int)dy, 0, Room().Height / 2);
-                break;
-            case KeyboardFrame.Part.Top:
-                Resize(start.Height - dy);
-                placed.Y = start.Y + (int)dy;
-                break;
-            case KeyboardFrame.Part.Bottom:
-                Resize(start.Height + dy);
-                break;
-            case KeyboardFrame.Part.Left:
-                placed.Width = start.Width - (int)dx;
-                placed.X = start.X + (int)dx;
-                break;
-            case KeyboardFrame.Part.Right:
-                placed.Width = start.Width + (int)dx;
-                break;
+                placed.DockedX = start.X + (int)dx;
+            }
+        }
+
+        if (part.HasFlag(KeyboardFrame.Part.Top))
+        {
+            Resize(start.Height - dy);
+            placed.Y = start.Y + (int)dy;
+        }
+
+        if (part.HasFlag(KeyboardFrame.Part.Bottom))
+        {
+            Resize(start.Height + dy);
+        }
+
+        if (part.HasFlag(KeyboardFrame.Part.Left))
+        {
+            SetWidth(start.Width - (int)dx, start.X + (int)dx);
+        }
+
+        if (part.HasFlag(KeyboardFrame.Part.Right))
+        {
+            SetWidth(start.Width + (int)dx, start.X);
         }
 
         Place();
@@ -392,7 +470,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (drag == KeyPanel.Drag.End)
         {
             placed.Save();
-            KeepCopiedRow();
         }
 
         void Resize(float height)
@@ -400,9 +477,22 @@ public sealed class KeyPlusKeyboard : InputMethodService
             placed.Scale = Math.Clamp(start.Scale * height / start.Height, PanelPlacement.MinScale, PanelPlacement.MaxScale);
             panel.Scale = placed.Scale;
         }
+
+        // In a window, the window's width; docked, the keys' within the ground.
+        void SetWidth(int width, int left)
+        {
+            if (placed.Floating)
+            {
+                (placed.Width, placed.X) = (width, left);
+            }
+            else
+            {
+                (placed.DockedWidth, placed.DockedX) = (width, left);
+            }
+        }
     }
 
-    /// <summary>Restablecer: the keys at their usual size and, in a window, three quarters of the screen wide; docked, on the bottom again.</summary>
+    /// <summary>Restablecer: the keys at their usual size and, in a window, three quarters of the screen wide; docked, as wide as the screen and on the bottom again.</summary>
     private void ResetSize()
     {
         if (panel is null || placed is null)
@@ -418,12 +508,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         else
         {
-            placed.Lift = 0;
+            (placed.Lift, placed.DockedX, placed.DockedWidth) = (0, 0, 0);
         }
 
         placed.Save();
         Place();
-        KeepCopiedRow();
     }
 
     private int Dp(float value) => (int)((value * Resources!.DisplayMetrics!.Density) + 0.5f);
@@ -480,21 +569,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
         });
     }
 
-    /// <summary>
-    /// Off a headset, what was copied in a row above the keys all the time,
-    /// as tall as a row of keys, or as a text's two lines need where that is
-    /// more, so a thing copied is in sight at once: a tap pastes it, ✏ edits
-    /// it there. Not in ▭'s two small rows, which keep only the keys. Again
-    /// when the keys change size, once the drag ends.
-    /// </summary>
-    private void KeepCopiedRow()
-    {
-        if (panel is not null && !OnHeadset)
-        {
-            panel.ClipboardAbove = panel.Mode == PanelPlacement.CompactMode ? 0 : Math.Max(panel.RowHeight, panel.CopiedRowHeight);
-        }
-    }
-
     /// <summary>Never the whole screen with an editor of its own, as a keyboard is by default with the phone on its side.</summary>
     public override bool OnEvaluateFullscreenMode() => false;
 
@@ -526,7 +600,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (drag == KeyPanel.Drag.End)
         {
             placed.Save();
-            KeepCopiedRow();
         }
     }
 
@@ -541,7 +614,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
         placed.Scale = 1f;
         placed.Save();
         panel.Scale = 1f;
-        KeepCopiedRow();
     }
 
     /// <summary>ABC, Keys or ▭ pressed: the keys take that mode's size.</summary>
@@ -555,7 +627,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
         Place();
-        KeepCopiedRow();
     }
 
     private void SendKey(Keycode code, MetaKeyStates meta)

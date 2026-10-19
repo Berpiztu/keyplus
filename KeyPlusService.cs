@@ -48,6 +48,38 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     private Overlay? overlay;
     private PanelPlacement? placed;
 
+    /// <summary>
+    /// Displays that refused the panel's window lately, and when: an app's
+    /// own display (INAIR's pod: its launcher's status bar's, among others).
+    /// Not tried again for a while, for building the panel only to have it
+    /// refused, at each windows change, held the main thread long enough to
+    /// hang the app's own screen. Never the default display, where a refusal
+    /// is a service being turned off and on at once.
+    /// </summary>
+    private readonly Dictionary<int, long> refusedDisplays = [];
+
+    /// <summary>How long a display that refused the window is left alone, in milliseconds.</summary>
+    private const long RefusedDisplayMs = 60_000;
+
+    /// <summary>The main thread's, where the panel is placed.</summary>
+    private readonly Handler handler = new(Looper.MainLooper!);
+
+    /// <summary>A placing is waiting for the windows changes that came together to end (<see cref="PlaceSoon"/>).</summary>
+    private bool placePending;
+
+    /// <summary>
+    /// The windows are being looked at, away from the main thread (<see cref="Place"/>),
+    /// and whether to look again once that is done, for they changed meanwhile.
+    /// </summary>
+    private bool looking;
+    private bool lookAgain;
+
+    /// <summary>Looking at the windows or placing the panel slower than this is said in the log, in milliseconds.</summary>
+    private const long SlowMs = 200;
+
+    /// <summary>What the windows on every display show: the keyboard open, if any, and the display of the app in use.</summary>
+    private readonly record struct Sighting(Keyboard? Keyboard, int? FocusedDisplayId);
+
     /// <summary>The system feature of Android XR's spatial windows: a headset.</summary>
     private const string XrSpatialFeature = "android.software.xr.api.spatial";
 
@@ -342,7 +374,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     {
         if (e?.EventType == EventTypes.WindowsChanged)
         {
-            Place();
+            PlaceSoon();
             ReportKeyboard();
         }
     }
@@ -456,13 +488,106 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>
+    /// The panel placed once the windows changes that came together are
+    /// over: INAIR's pod sends them by the dozen (its status bar, its
+    /// launcher), and placing at each held the main thread, the app's screen
+    /// with it, until Android said it was not responding.
+    /// </summary>
+    private void PlaceSoon()
+    {
+        if (placePending)
+        {
+            return;
+        }
+
+        placePending = true;
+        handler.Post(() =>
+        {
+            placePending = false;
+            Place();
+        });
+    }
+
+    /// <summary>
+    /// Places the panel where the windows say (<see cref="PlaceNow"/>). They
+    /// are looked at away from the main thread: Android may take seconds to
+    /// tell the windows of every display (5 s on INAIR's pod, at each look),
+    /// and the panel, the app's screen with it, would not answer meanwhile.
+    /// Changes while looking are looked at once more, after. On a headset,
+    /// as it always was, on the main thread.
+    /// </summary>
+    private void Place()
+    {
+        if (OnHeadset)
+        {
+            PlaceNow(Look());
+            return;
+        }
+
+        if (looking)
+        {
+            lookAgain = true;
+            return;
+        }
+
+        looking = true;
+        Task.Run(() =>
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            Sighting seen;
+            try
+            {
+                seen = Look();
+            }
+            catch (Exception failed) when (failed is Java.Lang.Exception or InvalidOperationException)
+            {
+                Log.Warn(LogTag, $"The windows could not be looked at: {failed.Message}");
+                seen = default;
+            }
+
+            var lookMs = timer.ElapsedMilliseconds;
+            if (lookMs > SlowMs)
+            {
+                // Whether the focused display's windows alone come sooner.
+                var focusedOnly = System.Diagnostics.Stopwatch.StartNew();
+                _ = Windows;
+                Log.Warn(LogTag, $"Looking at every display's windows took {lookMs} ms; the focused display's alone {focusedOnly.ElapsedMilliseconds} ms");
+            }
+
+            handler.Post(() =>
+            {
+                looking = false;
+                var placing = System.Diagnostics.Stopwatch.StartNew();
+                PlaceNow(seen);
+                if (placing.ElapsedMilliseconds > SlowMs)
+                {
+                    Log.Warn(LogTag, $"Placing the panel took {placing.ElapsedMilliseconds} ms");
+                }
+
+                if (lookAgain)
+                {
+                    lookAgain = false;
+                    Place();
+                }
+            });
+        });
+    }
+
+    /// <summary>The windows on every display, read once: the keyboard open and the display of the app in use.</summary>
+    private Sighting Look()
+    {
+        var displays = WindowsOnAllDisplays;
+        return new Sighting(FindKeyboard(displays), FocusedDisplayId(displays));
+    }
+
+    /// <summary>
     /// Puts the panel where it stands: docked, right above the keyboard, as wide
     /// as it or as a tab at its right, or as the icon alone at the display's
     /// bottom right while no keyboard is open, for the icon is always in sight;
     /// floating, where the user left it, on the keyboard's display, or on the
     /// one it is on while no keyboard is open.
     /// </summary>
-    private void Place()
+    private void PlaceNow(Sighting seen)
     {
         if (KeyPlusPreferences.IsHidden(this))
         {
@@ -474,12 +599,16 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         if (OnHeadset)
         {
             Close();
-            BringKeysWithKeyboard(FindKeyboard() is not null);
+            BringKeysWithKeyboard(seen.Keyboard is not null);
             return;
         }
 
-        var keyboard = FindKeyboard();
-        var displayId = keyboard?.DisplayId ?? overlay?.DisplayId ?? FocusedDisplayId() ?? Display.DefaultDisplay;
+        var keyboard = seen.Keyboard;
+
+        // The keyboard's display, the window's, the focused one's or the
+        // default, the first that has not refused the window lately.
+        var displayId = new[] { keyboard?.DisplayId, overlay?.DisplayId, seen.FocusedDisplayId, Display.DefaultDisplay }
+            .First(id => id is { } shown && !Refused(shown))!.Value;
         var screen = KeyPlusPreferences.ScreenOf(this, displayId);
         placed = PlacementFor(screen);
         if (overlay?.DisplayId != displayId || overlay.Screen != screen)
@@ -752,13 +881,16 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>
-    /// The keyboard open now, on whichever display: the one on a display whose
-    /// window has the focus when there are several, or none.
+    /// The keyboard open now, on whichever display: one on a display of its
+    /// own, with no app's window (INAIR's pod shows the keyboard so, on its
+    /// display 8, and leaves an empty place for it on the app's display); else
+    /// the one on a display whose window has the focus when there are
+    /// several; or none.
     /// </summary>
-    private Keyboard? FindKeyboard()
+    private static Keyboard? FindKeyboard(SparseArray? displays)
     {
-        Keyboard? found = null;
-        var displays = WindowsOnAllDisplays;
+        Keyboard? first = null;
+        Keyboard? focused = null;
         for (var i = 0; i < (displays?.Size() ?? 0); i++)
         {
             var displayId = displays!.KeyAt(i);
@@ -771,31 +903,53 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
             var bounds = new Rect();
             keyboard.GetBoundsInScreen(bounds);
-            found ??= new Keyboard(displayId, bounds);
-            if (windows.Any(window => window.IsFocused))
+            var found = new Keyboard(displayId, bounds);
+            if (windows.All(window => window.Type != AccessibilityWindowType.Application))
             {
-                return new Keyboard(displayId, bounds);
+                return found;
+            }
+
+            first ??= found;
+            if (focused is null && windows.Any(window => window.IsFocused))
+            {
+                focused = found;
             }
         }
 
-        return found;
+        return focused ?? first;
     }
 
-    /// <summary>The display whose window has the focus, where a floating panel opens while no keyboard is.</summary>
-    private int? FocusedDisplayId()
+    /// <summary>
+    /// The display of the app in use, where the panel opens while no
+    /// keyboard is: the one whose focused window is an app's. Not one whose
+    /// focused window is the system's alone: INAIR's pod, whose glasses show
+    /// each app on a display of its own, keeps its status bar focused on
+    /// another, which takes no window of ours. Where no app has the focus,
+    /// the first display with a focused window.
+    /// </summary>
+    private static int? FocusedDisplayId(SparseArray? displays)
     {
-        var displays = WindowsOnAllDisplays;
+        int? anyFocused = null;
         for (var i = 0; i < (displays?.Size() ?? 0); i++)
         {
             IList<AccessibilityWindowInfo> windows = JavaList<AccessibilityWindowInfo>.FromJniHandle(displays!.ValueAt(i)!.Handle, JniHandleOwnership.DoNotTransfer) ?? [];
-            if (windows.Any(window => window.IsFocused))
+            if (windows.Any(window => window.IsFocused && window.Type == AccessibilityWindowType.Application))
             {
                 return displays.KeyAt(i);
             }
+
+            if (anyFocused is null && windows.Any(window => window.IsFocused))
+            {
+                anyFocused = displays.KeyAt(i);
+            }
         }
 
-        return null;
+        return anyFocused;
     }
+
+    /// <summary>Whether a display refused the panel's window lately (<see cref="refusedDisplays"/>).</summary>
+    private bool Refused(int displayId) =>
+        refusedDisplays.TryGetValue(displayId, out var at) && SystemClock.ElapsedRealtime() - at < RefusedDisplayMs;
 
     /// <summary>Opens the panel's window on a display, with a screen's layout, out of sight until placed.</summary>
     private Overlay? Open(int displayId, KeyPlusPreferences.Screen screen)
@@ -840,6 +994,11 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             // (turned off and on at once): no window now; the next windows
             // change, on the connection that stays, opens it.
             Log.Warn(LogTag, $"No window on display {displayId}: {refused.Message}");
+            if (displayId != Display.DefaultDisplay)
+            {
+                refusedDisplays[displayId] = SystemClock.ElapsedRealtime();
+            }
+
             return null;
         }
 

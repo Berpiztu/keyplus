@@ -18,14 +18,15 @@ namespace Berpiztu.KeyPlus;
 /// </summary>
 public sealed class KeyboardFrame : FrameLayout
 {
-    /// <summary>What a finger holds: the whole keyboard, to move it, or one of its edges, to size it.</summary>
+    /// <summary>What a finger holds: the whole keyboard, to move it, or its edges, one or a corner's two, to size it.</summary>
+    [Flags]
     public enum Part
     {
-        Whole,
-        Top,
-        Bottom,
-        Left,
-        Right,
+        Whole = 1,
+        Top = 2,
+        Bottom = 4,
+        Left = 8,
+        Right = 16,
     }
 
     /// <summary>How thick an edge's bar is to take hold of, in dp.</summary>

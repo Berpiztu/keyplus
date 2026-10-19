@@ -117,8 +117,9 @@ function Test-ServiceBound {
 # The service on again where installing turned it off: Android stops the app,
 # and its accessibility service with it. Left alone while it is still bound;
 # else taken out of the list, the app stopped (a service marked crashed is not
-# bound again while its process lives on) and put back; and where it still is
-# not on, said, for then only the switch in Settings brings it back.
+# bound again while its process lives on), opened again and the service put
+# back; and where it still is not on, said, with the commands to do it by
+# hand, for then only those or the switch in Settings bring it back.
 function Enable-KeyPlusService {
     param([string]$Target)
 
@@ -126,6 +127,10 @@ function Enable-KeyPlusService {
     # Android 13 and later keep an app installed outside a store from being
     # an accessibility service until they are.
     Invoke-Adb @("-s", $Target, "shell", "appops", "set", $PopupPackageId, "ACCESS_RESTRICTED_SETTINGS", "allow") | Out-Null
+
+    # The secure settings granted too, so the app's own "Turn on KeyPlus keys"
+    # turns the service on again later without a computer.
+    Invoke-Adb @("-s", $Target, "shell", "pm", "grant", $PopupPackageId, "android.permission.WRITE_SECURE_SETTINGS") | Out-Null
     if (Test-ServiceBound $Target) {
         return
     }
@@ -135,6 +140,11 @@ function Enable-KeyPlusService {
     $others = @($listed -split ":" | Where-Object { $_ -and $_ -ne "null" -and $_ -notlike "$PopupPackageId/*" })
     Invoke-Adb @("-s", $Target, "shell", "settings", "put", "secure", "enabled_accessibility_services", $(if ($others.Count -gt 0) { $others -join ":" } else { '""' })) | Out-Null
     Invoke-Adb @("-s", $Target, "shell", "am", "force-stop", $PopupPackageId) | Out-Null
+
+    # The app opened before its service is put back: INAIR's pod binds no
+    # service of an app that is not running ("binder service error").
+    Invoke-Adb @("-s", $Target, "shell", "monkey", "-p", $PopupPackageId, "-c", "android.intent.category.LAUNCHER", "1") | Out-Null
+    Start-Sleep -Seconds 2
     Invoke-Adb @("-s", $Target, "shell", "settings", "put", "secure", "enabled_accessibility_services", ((@($others) + $service) -join ":")) | Out-Null
     Invoke-Adb @("-s", $Target, "shell", "settings", "put", "secure", "accessibility_enabled", "1") | Out-Null
     $bound = $false
@@ -145,7 +155,11 @@ function Enable-KeyPlusService {
     if ($bound) {
         Write-Host "KeyPlus keys turned on again in $Target's accessibility settings" -ForegroundColor DarkGray
     } else {
-        Write-Host "KeyPlus keys is off on ${Target}: turn it off and on in Settings > Accessibility > Installed apps > KeyPlus keys (allow restricted settings in its app info first if Android asks)." -ForegroundColor Yellow
+        Write-Host "KeyPlus keys is off on ${Target}: turn it off and on in Settings > Accessibility > Installed apps > KeyPlus keys (allow restricted settings in its app info first if Android asks), or by hand, keeping the services listed before it:" -ForegroundColor Yellow
+        Write-Host "  adb -s $Target shell appops set $PopupPackageId ACCESS_RESTRICTED_SETTINGS allow"
+        Write-Host "  adb -s $Target shell monkey -p $PopupPackageId -c android.intent.category.LAUNCHER 1"
+        Write-Host "  adb -s $Target shell settings put secure enabled_accessibility_services `"$((@($others) + $service) -join ':')`""
+        Write-Host "  adb -s $Target shell settings put secure accessibility_enabled 1"
     }
 }
 
@@ -157,14 +171,26 @@ function Test-Headset {
 }
 
 # Berpiztu AI Keyboard turned on in the device's keyboard list and made the
-# one in use. ✕ in its title bar goes back to the keyboard used before.
+# one in use. A keyboard just installed reaches Android's list a moment later
+# (INAIR's pod): asked again, a second apart, until it is the one in use; if
+# it never is, the commands to do it by hand are said. ⚙'s Cambiar de teclado
+# goes back to another keyboard.
 function Enable-KeyPlusKeyboard {
     param([string]$Target)
-    Invoke-Adb @("-s", $Target, "shell", "ime", "enable", $KeyboardId) | Out-Null
-    Invoke-Adb @("-s", $Target, "shell", "ime", "set", $KeyboardId) | Out-Null
-    $current = ((Invoke-Adb @("-s", $Target, "shell", "settings", "get", "secure", "default_input_method")) -join "").Trim()
-    if ($current -notlike "$KeyboardPackageId/*") { throw "Berpiztu AI Keyboard could not be made the keyboard in use on ${Target}: it is $current." }
-    Write-Host "Berpiztu AI Keyboard is the keyboard in use on $Target" -ForegroundColor DarkGray
+    $current = ""
+    for ($i = 0; $i -lt 5; $i++) {
+        Invoke-Adb @("-s", $Target, "shell", "ime", "enable", $KeyboardId) | Out-Null
+        Invoke-Adb @("-s", $Target, "shell", "ime", "set", $KeyboardId) | Out-Null
+        $current = ((Invoke-Adb @("-s", $Target, "shell", "settings", "get", "secure", "default_input_method")) -join "").Trim()
+        if ($current -like "$KeyboardPackageId/*") {
+            Write-Host "Berpiztu AI Keyboard is the keyboard in use on $Target" -ForegroundColor DarkGray
+            return
+        }
+
+        Start-Sleep -Seconds 1
+    }
+
+    throw "Berpiztu AI Keyboard could not be made the keyboard in use on ${Target}: it is $current. By hand:`n  adb -s $Target shell ime enable $KeyboardId`n  adb -s $Target shell ime set $KeyboardId"
 }
 
 # The product to install on a device: the one named; on a headset the

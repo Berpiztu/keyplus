@@ -40,6 +40,8 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     private const string WidthKey = "width";
     private const string ScaleKey = "scale";
     private const string LiftKey = "lift";
+    private const string DockedXKey = "dockedX";
+    private const string DockedWidthKey = "dockedWidth";
     private const string IconXKey = "iconX";
     private const string IconYKey = "iconY";
 
@@ -94,6 +96,23 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     }
 
     /// <summary>
+    /// Berpiztu AI Keyboard's keys while docked, narrower than the screen so
+    /// a finger reaches them: their left edge, in pixels from the screen's,
+    /// and their width; 0, as wide as the screen. Apart from the window's.
+    /// </summary>
+    public int DockedX
+    {
+        get => Current.DockedX;
+        set => Current.DockedX = value;
+    }
+
+    public int DockedWidth
+    {
+        get => Current.DockedWidth;
+        set => Current.DockedWidth = value;
+    }
+
+    /// <summary>
     /// Where the user left the icon, its left and top edges in pixels from the
     /// display's, apart from the window's; -1 until the icon is first dragged.
     /// </summary>
@@ -127,7 +146,9 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
                 .PutInt(Keyed(mode, YKey), layout.Y)!
                 .PutInt(Keyed(mode, WidthKey), layout.Width)!
                 .PutFloat(Keyed(mode, ScaleKey), layout.Scale)!
-                .PutInt(Keyed(mode, LiftKey), layout.Lift)!;
+                .PutInt(Keyed(mode, LiftKey), layout.Lift)!
+                .PutInt(Keyed(mode, DockedXKey), layout.DockedX)!
+                .PutInt(Keyed(mode, DockedWidthKey), layout.DockedWidth)!;
         }
 
         editor.Apply();
@@ -152,6 +173,10 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
         public int Lift { get; set; }
 
+        public int DockedX { get; set; }
+
+        public int DockedWidth { get; set; }
+
         public static Layout Read(ISharedPreferences preferences, string mode) => new()
         {
             X = preferences.GetInt(Keyed(mode, XKey), preferences.GetInt(XKey, 0)),
@@ -159,6 +184,8 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
             Width = preferences.GetInt(Keyed(mode, WidthKey), preferences.GetInt(WidthKey, 0)),
             Scale = preferences.GetFloat(Keyed(mode, ScaleKey), preferences.GetFloat(ScaleKey, 1f)),
             Lift = preferences.GetInt(Keyed(mode, LiftKey), 0),
+            DockedX = preferences.GetInt(Keyed(mode, DockedXKey), 0),
+            DockedWidth = preferences.GetInt(Keyed(mode, DockedWidthKey), 0),
         };
     }
 }

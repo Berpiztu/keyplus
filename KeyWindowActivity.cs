@@ -99,9 +99,9 @@ public sealed class KeyWindowActivity : Activity
         // Test: the keys attached into another app's window.
         panel.Settings =
         [
-            ("Pegar al teclado", () => service.AttachKeys(toKeyboard: true)),
-            ("Pegar a la app", () => service.AttachKeys(toKeyboard: false)),
-            ("Quitar lo pegado", service.DetachKeys),
+            new("Pegar al teclado", () => service.AttachKeys(toKeyboard: true)),
+            new("Pegar a la app", () => service.AttachKeys(toKeyboard: false)),
+            new("Quitar lo pegado", service.DetachKeys),
         ];
         SetContentView(panel.Root);
         service.WindowPanel = panel;
