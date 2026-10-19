@@ -54,6 +54,20 @@
     <IntermediateOutputPath>obj\$(KeyPlusProduct)\$(Configuration)\</IntermediateOutputPath>
   </PropertyGroup>
 
+  <!-- Debug builds signed with KeyPlus's own key where this checkout has it
+       (private\android.keystore, its password alone in the .pass file
+       beside it), as the release APKs are (packaging\Packaging.ps1): either
+       installs over the other, with no uninstalling, and the device keeps
+       what it allowed the app. Without it, Android's debug key. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' And Exists('$(MSBuildThisFileDirectory)private\android.keystore') And Exists('$(MSBuildThisFileDirectory)private\android.keystore.pass')">
+    <KeyPlusDebugKeyPass>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)private\android.keystore.pass').Trim())</KeyPlusDebugKeyPass>
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(MSBuildThisFileDirectory)private\android.keystore</AndroidSigningKeyStore>
+    <AndroidSigningStorePass>$(KeyPlusDebugKeyPass)</AndroidSigningStorePass>
+    <AndroidSigningKeyAlias>keyplus</AndroidSigningKeyAlias>
+    <AndroidSigningKeyPass>$(KeyPlusDebugKeyPass)</AndroidSigningKeyPass>
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
     <ApplicationId>ai.berpiztu.keyboard</ApplicationId>
     <DefineConstants>$(DefineConstants);KEYBOARD</DefineConstants>

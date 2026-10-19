@@ -43,7 +43,12 @@ $apk = Get-Item (Join-Path $Root "dist\$(if ($Product -eq "Keyboard") { "Berpizt
 if (-not $apk) { throw "No $Product APK in dist: run it without -NoBuild, or build-apk.ps1." }
 
 Write-Host "Installing $($apk.Name) on $target..." -ForegroundColor Cyan
-$answer = (Invoke-Adb @("-s", $target, "install", "-r", $apk.FullName)) -join " "
+# adb's errors too: the reason a install fails is said there.
+$answer = (& $Adb @("-s", $target, "install", "-r", $apk.FullName) 2>&1 | ForEach-Object { "$_" }) -join " "
+if ($answer -match "INSTALL_FAILED_UPDATE_INCOMPATIBLE") {
+    $packageId = Get-PackageId $Product
+    throw "The app on $target is signed with another key (a Debug build from before Debug builds took KeyPlus's key, or another machine's), so Android will not install over it. Uninstall it, then run this again; it gives the app back its permissions:`n  adb -s $target uninstall $packageId"
+}
 if ($answer -notmatch "Success") { throw "adb install failed: $answer" }
 
 Enable-KeyPlus $target $Product

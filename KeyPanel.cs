@@ -173,6 +173,9 @@ public sealed class KeyPanel
 
     /// <summary>Whether the window is sized by hand (<see cref="Resizable"/>): its grips, and its corners under a pointer.</summary>
     private bool resizable = true;
+
+    /// <summary>The corner each grip sizes the window from, for its sign (<see cref="LargeGrips"/>).</summary>
+    private readonly Dictionary<TextView, Corner> gripCorners = [];
     private readonly LinearLayout bottomBar;
     private readonly TextView tab;
     private readonly LinearLayout titleBar;
@@ -785,9 +788,12 @@ public sealed class KeyPanel
     public event Action? EditingChanged;
 
     /// <summary>
-    /// The corners' grips as large as a finger takes them at once, their
-    /// signs larger, the bar under the keys taller (Berpiztu AI Keyboard on a
-    /// phone, where a drag on one sizes the keyboard from that corner).
+    /// The corners' grips as large as a finger, or a headset's pointer, takes
+    /// them at once, the bar under the keys taller, and their signs the
+    /// diagonal arrows of a window's corner, ⤡ and ⤢, which say a drag there
+    /// makes it larger or smaller (Berpiztu AI Keyboard on a phone, the popup;
+    /// INAIR's pod hands its pointer to an app as a finger, with no arrows of
+    /// its own over a corner). Else the small triangles.
     /// </summary>
     public bool LargeGrips
     {
@@ -796,8 +802,9 @@ public sealed class KeyPanel
             var width = value ? LargeGripDp : GripDp;
             foreach (var grip in grips.OfType<TextView>())
             {
-                grip.SetTextSize(ComplexUnitType.Sp, value ? 16 : 10);
-                grip.SetPadding(Dp(value ? 6 : 0), Dp(value ? 2 : 0), Dp(value ? 6 : 0), Dp(value ? 2 : 0));
+                var corner = gripCorners[grip];
+                grip.Text = value ? "" : corner switch { Corner.TopLeft => "◤", Corner.TopRight => "◥", Corner.BottomLeft => "◣", _ => "◢" };
+                grip.Background = value ? new ResizeArrow(falling: corner is Corner.TopLeft or Corner.BottomRight, Dp(18), Dp(2)) : null;
                 if (grip.Parent != titleBar)
                 {
                     grip.LayoutParameters!.Width = Dp(width);
@@ -2116,15 +2123,59 @@ public sealed class KeyPanel
     }
 
     /// <summary>A corner's grip: drawn faintly, resizing from that corner when dragged.</summary>
+    /// <summary>
+    /// A window corner's resize arrow, drawn: a diagonal line with a head at
+    /// each end, so large as asked whatever the font (the ⤡ and ⤢ characters
+    /// came out a few pixels small); falling from the top left to the bottom
+    /// right, or rising.
+    /// </summary>
+    private sealed class ResizeArrow(bool falling, int size, int stroke) : Drawable
+    {
+        private readonly Paint paint = new(PaintFlags.AntiAlias)
+        {
+            Color = Color.White,
+            StrokeWidth = stroke,
+            StrokeCap = Paint.Cap.Round,
+        };
+
+        public override void Draw(Canvas canvas)
+        {
+            paint.SetStyle(Paint.Style.Stroke);
+            var middle = Bounds;
+            var half = size / 2f;
+            var (cx, cy) = (middle.ExactCenterX(), middle.ExactCenterY());
+            var (startX, startY) = (cx - half, falling ? cy - half : cy + half);
+            var (endX, endY) = (cx + half, falling ? cy + half : cy - half);
+            canvas.DrawLine(startX, startY, endX, endY, paint);
+            var head = size / 3f;
+            var down = falling ? 1 : -1;
+            canvas.DrawLine(startX, startY, startX + head, startY, paint);
+            canvas.DrawLine(startX, startY, startX, startY + (down * head), paint);
+            canvas.DrawLine(endX, endY, endX - head, endY, paint);
+            canvas.DrawLine(endX, endY, endX, endY - (down * head), paint);
+        }
+
+        public override void SetAlpha(int alpha) => paint.Alpha = alpha;
+
+        public override void SetColorFilter(ColorFilter? colorFilter) => paint.SetColorFilter(colorFilter);
+
+        /// <summary>Drawn with transparent edges.</summary>
+        public override int Opacity => (int)Format.Translucent;
+    }
+
+    /// <summary>A small grip's sign drawn into its corner.</summary>
+    private static GravityFlags GripGravity(Corner corner) =>
+        ((corner & Corner.Top) != 0 ? GravityFlags.Top : GravityFlags.Bottom)
+        | ((corner & Corner.Left) != 0 ? GravityFlags.Left : GravityFlags.Right);
+
     private TextView Grip(string label, Corner corner)
     {
-        var view = new TextView(context) { Text = label, ContentDescription = "Resize the keys" };
-        view.Gravity = ((corner & Corner.Top) != 0 ? GravityFlags.Top : GravityFlags.Bottom)
-            | ((corner & Corner.Left) != 0 ? GravityFlags.Left : GravityFlags.Right);
+        var view = new TextView(context) { Text = label, ContentDescription = "Resize the keys", Gravity = GripGravity(corner) };
         view.SetTextColor(DimTextColor);
         view.SetTextSize(ComplexUnitType.Sp, 10);
         Draggable(view, (drag, dx, dy) => ReportResizing(corner, drag, dx, dy), tapped: null);
         grips.Add(view);
+        gripCorners[view] = corner;
         return view;
     }
 

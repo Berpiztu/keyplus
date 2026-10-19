@@ -245,6 +245,16 @@ For the keyboard, on a phone or a headset:
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
    keyboard**.
 
+Where Android's choice will not take it (INAIR's pod), **Copy the ADB
+commands** copies what an ADB app on the device runs once (`ime enable`,
+`ime set` and the secure settings granted); then **Make it the keyboard in
+use** does it by itself. `deploy.ps1` and `debug.ps1` grant that too. The
+same screen sets where the keyboard stands, on every screen: **Pop-up** puts
+it in a window of its own over the app, or docks it again, at once; **Reset
+the keyboard**, after asking, brings it back as first installed, docked at
+the bottom as wide as the screen at its usual size, for one lost in a window
+too small for it.
+
 ### Releasing
 
 `.\deploy-release.ps1`, as wslc-ai-agent's, raises the release's version

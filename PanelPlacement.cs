@@ -136,6 +136,13 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
         }
     }
 
+    /// <summary>Whether the window floats on a screen, set from outside it (Berpiztu AI Keyboard's app).</summary>
+    public static void SetFloating(ISharedPreferences preferences, bool floating) =>
+        preferences.Edit()!.PutBoolean(WindowFloatingKey, floating)!.Apply();
+
+    /// <summary>The preference <see cref="Floating"/> is kept in, which Berpiztu AI Keyboard watches.</summary>
+    public const string FloatingPreference = WindowFloatingKey;
+
     public void Save()
     {
         var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!.PutBoolean(WindowFloatingKey, Floating)!;

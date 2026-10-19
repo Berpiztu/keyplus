@@ -962,7 +962,10 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText);
+        // Large corner grips with arrows, as the keyboard's: a headset's
+        // pointer (INAIR's pod) reaches the window as a finger, and small
+        // triangles were all but out of its reach.
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText) { LargeGrips = true };
         panel.FoldedChanged += Place;
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;

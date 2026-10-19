@@ -148,7 +148,8 @@ function Enable-KeyPlusService {
     Invoke-Adb @("-s", $Target, "shell", "settings", "put", "secure", "enabled_accessibility_services", ((@($others) + $service) -join ":")) | Out-Null
     Invoke-Adb @("-s", $Target, "shell", "settings", "put", "secure", "accessibility_enabled", "1") | Out-Null
     $bound = $false
-    for ($i = 0; $i -lt 5 -and -not $bound; $i++) {
+    # INAIR's pod binds it some seconds after the app opens: waited for up to 15.
+    for ($i = 0; $i -lt 15 -and -not $bound; $i++) {
         Start-Sleep -Seconds 1
         $bound = Test-ServiceBound $Target
     }
@@ -178,6 +179,9 @@ function Test-Headset {
 function Enable-KeyPlusKeyboard {
     param([string]$Target)
     $current = ""
+    # The secure settings granted, so the app's "Make it the keyboard in use"
+    # does this by itself later, without a computer.
+    Invoke-Adb @("-s", $Target, "shell", "pm", "grant", $KeyboardPackageId, "android.permission.WRITE_SECURE_SETTINGS") | Out-Null
     for ($i = 0; $i -lt 5; $i++) {
         Invoke-Adb @("-s", $Target, "shell", "ime", "enable", $KeyboardId) | Out-Null
         Invoke-Adb @("-s", $Target, "shell", "ime", "set", $KeyboardId) | Out-Null

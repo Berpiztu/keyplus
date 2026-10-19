@@ -158,6 +158,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         panel?.StopRepeat();
         var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
+        Watch(preferences);
         placed = new PanelPlacement(preferences);
         panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText)
         {
@@ -250,23 +251,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Android's keyboard picker, to change for another keyboard.</summary>
     private void ShowKeyboardPicker() => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker();
 
-    /// <summary>
-    /// Modo ventana or Modo normal chosen. The first time in a window, it
-    /// opens three quarters of the screen wide, in the middle, at the bottom.
-    /// </summary>
+    /// <summary>Modo ventana or Modo normal chosen.</summary>
     private void SetWindowed(bool windowed)
     {
         if (panel is null || placed is null)
         {
             return;
-        }
-
-        if (windowed && placed.Width == 0)
-        {
-            var room = Room();
-            placed.Width = room.Width * 3 / 4;
-            placed.X = (room.Width - placed.Width) / 2;
-            placed.Y = room.Height;
         }
 
         placed.Floating = windowed;
@@ -307,9 +297,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
         FrameLayout.LayoutParams keys, card, under;
         if (placed.Floating)
         {
+            // The first time in a window, from ⚙ or from the app's Pop-up: three
+            // quarters of the screen wide, in the middle, at the bottom.
+            if (placed.Width == 0)
+            {
+                placed.Width = room.Width * 3 / 4;
+                placed.X = (room.Width - placed.Width) / 2;
+                placed.Y = room.Height;
+            }
+
             var width = Math.Clamp(placed.Width, Dp(PanelPlacement.MinWidthDp), room.Width);
             var left = Math.Clamp(placed.X, 0, room.Width - width);
-            var top = Math.Clamp(placed.Y, 0, Math.Max(0, room.Height - box.Height));
+            var top = Math.Clamp(placed.Y, 0, Math.Max(0, room.Height - Tall(width)));
             keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Top | GravityFlags.Left)
             {
                 LeftMargin = left,
@@ -356,6 +355,25 @@ public sealed class KeyPlusKeyboard : InputMethodService
         Lay(box, keys);
         Lay(panel.EditorCard, card);
         Lay(ground, under);
+    }
+
+    /// <summary>
+    /// The keyboard's height: as laid out, or, not laid out yet (made in a
+    /// window from the start), as it will be at that width. Placed by a
+    /// height of 0, it stood on the room's bottom edge, was given no room,
+    /// stayed 0 tall, and was never seen.
+    /// </summary>
+    private int Tall(int width)
+    {
+        if (box!.Height > 0)
+        {
+            return box.Height;
+        }
+
+        box.Measure(
+            View.MeasureSpec.MakeMeasureSpec(width, MeasureSpecMode.Exactly),
+            View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
+        return box.MeasuredHeight;
     }
 
     /// <summary>The room above a keyboard in a window that Editar's card takes, in dp; with less, the card stands under it.</summary>
@@ -516,6 +534,46 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     private int Dp(float value) => (int)((value * Resources!.DisplayMetrics!.Density) + 0.5f);
+
+    /// <summary>The screen's preferences the keyboard open now was made from, watched for the app's Pop-up and Reset.</summary>
+    private ISharedPreferences? watched;
+    private PreferencesWatch? watch;
+
+    private void Watch(ISharedPreferences preferences)
+    {
+        watch ??= new PreferencesWatch(this);
+        watched?.UnregisterOnSharedPreferenceChangeListener(watch);
+        watched = preferences;
+        preferences.RegisterOnSharedPreferenceChangeListener(watch);
+    }
+
+    /// <summary>
+    /// The app's Pop-up turned on or off, or its Reset: the keyboard made
+    /// again from what is kept now, at once. Its own changes, already in
+    /// sight, are left alone.
+    /// </summary>
+    private void OnPreferenceChanged(ISharedPreferences preferences, string? key)
+    {
+        var reset = key is null;
+        var popupChanged = key == PanelPlacement.FloatingPreference && placed is not null
+            && new PanelPlacement(preferences).Floating != placed.Floating;
+        if (reset || popupChanged)
+        {
+            panel?.Root.Post(() => SetInputView(OnCreateInputView()));
+        }
+    }
+
+    /// <summary>Tells the keyboard of its screen's preferences changing (kept as a field: Android holds its listeners weakly).</summary>
+    private sealed class PreferencesWatch(KeyPlusKeyboard keyboard) : Java.Lang.Object, ISharedPreferencesOnSharedPreferenceChangeListener
+    {
+        public void OnSharedPreferenceChanged(ISharedPreferences? sharedPreferences, string? key)
+        {
+            if (sharedPreferences is not null)
+            {
+                keyboard.OnPreferenceChanged(sharedPreferences, key);
+            }
+        }
+    }
 
     /// <summary>The system feature of Android XR's spatial windows: a headset.</summary>
     private const string XrSpatialFeature = "android.software.xr.api.spatial";

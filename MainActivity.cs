@@ -10,9 +10,7 @@ using Android.Widget;
 using FeedbackFlags = Android.AccessibilityServices.FeedbackFlags;
 
 [assembly: Application(Label = Berpiztu.KeyPlus.MainActivity.AppLabel)]
-#if !KEYBOARD
 [assembly: UsesPermission(Berpiztu.KeyPlus.MainActivity.WriteSecureSettings)]
-#endif
 
 namespace Berpiztu.KeyPlus;
 
@@ -37,14 +35,29 @@ public sealed class MainActivity : Activity
 
     private TextView? status;
 
-#if !KEYBOARD
     /// <summary>
     /// Android's secure settings, where the accessibility services that are
-    /// on are listed: no app holds it by itself, but adb grants it, once,
-    /// from a computer or from an ADB app on the device itself (Bugjaeger),
-    /// and then the app turns its service on by itself (<see cref="TurnOn"/>).
+    /// on and the keyboards are listed: no app holds it by itself, but adb
+    /// grants it, once, from a computer or from an ADB app on the device
+    /// itself (Bugjaeger), and then the app turns itself on.
     /// </summary>
     public const string WriteSecureSettings = "android.permission.WRITE_SECURE_SETTINGS";
+
+#if KEYBOARD
+    /// <summary>
+    /// What an ADB app on the device itself runs, where Android's keyboard
+    /// picker will not take Berpiztu AI Keyboard (INAIR's pod): turned on,
+    /// made the keyboard in use, and the secure settings granted so the app
+    /// does it by itself later (<see cref="UseKeyboard"/>).
+    /// </summary>
+    private string AdbCommands =>
+        $"ime enable {KeyboardId}\n" +
+        $"ime set {KeyboardId}\n" +
+        $"pm grant {PackageName} {WriteSecureSettings}";
+
+    /// <summary>The keyboard as Android names it.</summary>
+    private string KeyboardId => new ComponentName(PackageName!, $"{PackageName}.KeyPlusKeyboard").FlattenToShortString()!;
+#else
 
     /// <summary>
     /// What an ADB app on the device itself runs, once after each new
@@ -79,11 +92,34 @@ public sealed class MainActivity : Activity
         status = Text("");
         content.AddView(status);
 
+        content.AddView(Button("Make it the keyboard in use", UseKeyboard));
+        content.AddView(Text(
+            "With the commands below run once in an ADB app on this device (Bugjaeger, for one), the button above " +
+            "makes Berpiztu AI Keyboard the keyboard in use by itself, where Android's own choice will not take it. " +
+            "Without them, turn it on in the keyboard settings, then choose it."));
+        content.AddView(Button("Copy the ADB commands", () =>
+        {
+            ((ClipboardManager)GetSystemService(ClipboardService)!).PrimaryClip = ClipData.NewPlainText("Berpiztu AI Keyboard ADB commands", AdbCommands);
+            Toast.MakeText(this, "Copied: paste them into the ADB app's shell", ToastLength.Long)!.Show();
+        }));
         content.AddView(Button("Open keyboard settings", () =>
             StartActivity(new Intent(Settings.ActionInputMethodSettings))));
-        content.AddView(Text("Turn on \"Berpiztu AI Keyboard\" there, then choose it below."));
         content.AddView(Button("Choose the keyboard", () =>
             ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker()));
+
+        // Where the keyboard stands, set from here too: a keyboard lost in a
+        // window too small for it (INAIR's pod) is brought back.
+        popup = new CheckBox(this) { Text = "Pop-up: the keyboard in a window of its own, over the app" };
+        popup.SetTextSize(Android.Util.ComplexUnitType.Sp, 16);
+        popup.CheckedChange += (_, e) => SetPopup(e.IsChecked);
+        var spaced = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
+        spaced.SetMargins(0, 0, 0, (int)(16 * Resources.DisplayMetrics.Density));
+        content.AddView(popup, spaced);
+        content.AddView(Button("Reset the keyboard", () => new AlertDialog.Builder(this)
+            .SetMessage("¿Teclado como recién instalado? Vuelve abajo, a todo lo ancho, con su tamaño normal.")!
+            .SetPositiveButton("Sí", (_, _) => ResetKeyboard())!
+            .SetNegativeButton("No", (_, _) => { })!
+            .Show()));
         content.AddView(Text(
             "Android puts no screenshot on the clipboard: it saves it among your photos. Let the keyboard " +
             "read them, and each screenshot you take from then on joins the copied texts above the keys, to paste."));
@@ -162,6 +198,8 @@ public sealed class MainActivity : Activity
     private void ShowStatus()
     {
 #if KEYBOARD
+        var here = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
+        popup!.Checked = new PanelPlacement(KeyPlusPreferences.ForScreen(this, here)).Floating;
         status!.Text = (IsKeyboardOn()
             ? "Berpiztu AI Keyboard is on: choose it as the keyboard to type with it."
             : "Berpiztu AI Keyboard is off.")
@@ -174,6 +212,62 @@ public sealed class MainActivity : Activity
     }
 
 #if KEYBOARD
+    /// <summary>Pop-up: the keyboard in a window of its own, or docked; shown as the screen this app is on keeps it.</summary>
+    private CheckBox? popup;
+
+    /// <summary>The screens a layout is kept for, each with its own place and size.</summary>
+    private static readonly KeyPlusPreferences.Screen[] Screens = Enum.GetValues<KeyPlusPreferences.Screen>();
+
+    /// <summary>
+    /// Pop-up chosen or not, for every screen: the keyboard open now takes
+    /// it at once (KeyPlusKeyboard watches it).
+    /// </summary>
+    private void SetPopup(bool windowed)
+    {
+        foreach (var screen in Screens)
+        {
+            PanelPlacement.SetFloating(KeyPlusPreferences.ForScreen(this, screen), windowed);
+        }
+    }
+
+    /// <summary>
+    /// Every screen's place, size, mode and labels forgotten: the keyboard
+    /// as first installed, docked at the bottom as wide as the screen at its
+    /// usual size. The keyboard open now takes it at once.
+    /// </summary>
+    private void ResetKeyboard()
+    {
+        foreach (var screen in Screens)
+        {
+            KeyPlusPreferences.ForScreen(this, screen).Edit()!.Clear()!.Apply();
+        }
+
+        ShowStatus();
+    }
+
+    /// <summary>
+    /// Berpiztu AI Keyboard made the keyboard in use: by the app itself where
+    /// it may write the secure settings (<see cref="WriteSecureSettings"/>),
+    /// the keyboards already on kept; else Android's choice of keyboard.
+    /// </summary>
+    private void UseKeyboard()
+    {
+        if (CheckSelfPermission(WriteSecureSettings) != Android.Content.PM.Permission.Granted)
+        {
+            ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker();
+            return;
+        }
+
+        var enabled = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledInputMethods) ?? "";
+        if (!enabled.Split(':').Any(keyboard => keyboard.Split(';')[0] == KeyboardId))
+        {
+            Settings.Secure.PutString(ContentResolver, Settings.Secure.EnabledInputMethods, enabled.Length == 0 ? KeyboardId : $"{enabled}:{KeyboardId}");
+        }
+
+        Settings.Secure.PutString(ContentResolver, Settings.Secure.DefaultInputMethod, KeyboardId);
+        ShowStatus();
+    }
+
     /// <summary>Whether KeyPlus's keyboard is turned on in the keyboard list.</summary>
     private bool IsKeyboardOn() =>
         (((InputMethodManager)GetSystemService(InputMethodService)!).EnabledInputMethodList ?? [])
