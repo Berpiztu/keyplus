@@ -311,3 +311,16 @@ is signed in as in its `submitters.txt`. GitHub Actions only asks;
   layout is Spanish; with another layout it is whatever that key is there.
 - Google Play reviews accessibility services closely; installed from the
   APK, nothing of that applies.
+
+## For AI agents: DOX
+
+This repository is documented for AI agents with **DOX**, from
+[Iosub-ai/dox](https://github.com/Iosub-ai/dox), our fork of
+[agent0ai/dox](https://github.com/agent0ai/dox): a hierarchy of `AGENTS.md`
+files, one at the root with the project's rules and index, and one in each
+folder with a contract of its own ([doc/](doc/AGENTS.md)). An agent reads
+them from the root down before it edits, and keeps them current after.
+
+DOX is by [Agent Zero](https://www.agent-zero.ai/), under the
+[MIT License](https://github.com/Iosub-ai/dox?tab=License-1-ov-file):
+Copyright (c) 2026 Agent Zero.
