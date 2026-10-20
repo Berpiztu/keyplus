@@ -265,6 +265,16 @@ on the repository's **Releases** page, to download on a phone or a headset
 and install there. `-Local` builds them here instead, `-Local -Publish`
 uploads them from here too.
 
+Every release has its notes, written before it is made, in
+`docs/release-notes/<version>.md` (`docs/release-notes/1.0.42.md` for the tag
+`v1.0.42`): Markdown, for the person about to install it, whole and in one
+voice, a patch's holding everything its minor version brought with what it
+adds. The release's page opens with them, above the list GitHub writes
+itself. `deploy-release.ps1` looks for the file before anything else and
+stops when the version has none, before committing, merging or pushing
+anything; once `main` is up to date it stops again if the file is not in
+the repository yet.
+
 Every APK, built here or there, is signed with the same key, or Android
 refuses to install it over the one before: `KEYPLUS_KEYSTORE` and
 `KEYPLUS_KEYSTORE_PASS`, else `private\android.keystore` and its

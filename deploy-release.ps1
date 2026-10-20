@@ -70,6 +70,28 @@ Test-SecurityWatch -Ref main
 
 $Csproj = Join-Path $RepoRoot "Berpiztu.KeyPlus.csproj"
 
+# The release's version: -Version, or the next patch after the last release's,
+# however many local builds were made since (they carry its number with a
+# fourth part, 1.0.40.3, so 1.0.41 is above them all).
+function Get-KeyPlusNextRelease {
+    $now = Get-KeyPlusTrackedValue $Csproj "ApplicationDisplayVersion"
+    if (-not $Version) { return Get-NextPatchVersion $now }
+    $release = Get-KeyPlusReleasePart $Version
+    if ([version]$release -le [version](Get-KeyPlusReleasePart $now)) {
+        throw "-Version $release is not above $now, the last release; choose a higher one."
+    }
+    return $release
+}
+
+# 0. Every release has its notes, so nothing is done without them: no
+# commit, no merge, no push. Looked for here, before anything else, and again
+# once main is up to date, when they must be in the repository too.
+$planned = Get-KeyPlusNextRelease
+if (-not (Get-KeyPlusReleaseNotes $planned)) {
+    throw "docs\release-notes\$planned.md is not there: every release has its notes, all its minor version brings with what is new. Write them and run this again; nothing was committed, merged or pushed."
+}
+Write-Host "Release notes found: docs\release-notes\$planned.md" -ForegroundColor Cyan
+
 # 1. What this checkout holds goes into the release: the release is made on
 # main, and the changes not committed yet are carried there and committed,
 # with no message to write.
@@ -142,20 +164,10 @@ foreach ($line in $open) {
 }
 if ($open.Count -gt 0) { Sync-Main }
 
-# 3. The new version: the next after the last release's, however many local
-# builds were made since (they carry its number with a fourth part, 1.0.40.3,
-# so 1.0.41 is above them all). The versionCode is the version as one number.
+# 3. The new version, as main now holds it. The versionCode is the version as one number.
 $now = Get-KeyPlusTrackedValue $Csproj "ApplicationDisplayVersion"
 $codeNow = [int](Get-KeyPlusTrackedValue $Csproj "ApplicationVersion")
-
-if ($Version) {
-    $release = Get-KeyPlusReleasePart $Version
-    if ([version]$release -le [version](Get-KeyPlusReleasePart $now)) {
-        throw "-Version $release is not above $now, the last release; choose a higher one."
-    }
-} else {
-    $release = Get-NextPatchVersion $now
-}
+$release = Get-KeyPlusNextRelease
 $code = Get-KeyPlusVersionCode $release
 if ($code -le $codeNow) {
     throw "The versionCode $code of $release is not above the last release's, $codeNow."
@@ -166,6 +178,17 @@ if (git tag --list $tag) {
 }
 
 Write-Host "Release: $now -> $release (versionCode $code), tag $tag" -ForegroundColor Cyan
+# What the release's page opens with: docs\release-notes\<version>.md, which
+# every release has, a patch's holding all its minor brought as well.
+$notes = @(Get-KeyPlusReleaseNotes $release)
+if ($notes.Count -eq 0) {
+    throw "docs\release-notes\$release.md is not there: every release has its notes. Write them, commit them and run this again."
+}
+if (-not (git ls-files -- $notes[1])) {
+    # GitHub builds the release from the tag's commit: a file that is only here would not be on its page.
+    throw "$($notes[1]) is not in the repository; commit it and run this again."
+}
+Write-Host "Its page on GitHub opens with $($notes[1])." -ForegroundColor Cyan
 Set-KeyPlusTrackedValue $Csproj "ApplicationDisplayVersion" $release
 Set-KeyPlusTrackedValue $Csproj "ApplicationVersion" "$code"
 
@@ -208,7 +231,7 @@ $apks = @("KeyPlus-Popup.apk", "Berpiztu-AI-Keyboard.apk") | ForEach-Object { Jo
 
 # 6. The GitHub release, when asked.
 if ($Publish) {
-    gh release create $tag @apks --title "KeyPlus $release" --generate-notes
+    gh release create $tag @apks --title "KeyPlus $release" --generate-notes @notes
     if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit code $LASTEXITCODE; the tag $tag is pushed, create the release by hand." }
     Write-Host "Release $tag published with its two APKs." -ForegroundColor Green
 } else {

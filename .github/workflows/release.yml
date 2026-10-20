@@ -146,8 +146,12 @@ jobs:
           tag="${{ github.ref_name }}"
           files=(dist/KeyPlus-Popup.apk dist/Berpiztu-AI-Keyboard.apk)
           for file in "${files[@]}"; do [ -f "$file" ] || { echo "Missing $file"; exit 1; }; done
+          # What the version brings, written beside the code (docs/release-notes/<version>.md),
+          # goes first on the release's page, above the list GitHub writes itself.
+          notes=()
+          if [ -f "docs/release-notes/${tag#v}.md" ]; then notes=(--notes-file "docs/release-notes/${tag#v}.md"); fi
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "KeyPlus ${tag#v}" --generate-notes
+            gh release create "$tag" "${files[@]}" --title "KeyPlus ${tag#v}" --generate-notes "${notes[@]}"
           fi

@@ -114,7 +114,7 @@ Default section order:
   - `deploy.ps1`: Release APK built and installed by adb
   - `build-apk.ps1`: Release APKs into `dist/KeyPlus-Popup.apk` and `dist/Berpiztu-AI-Keyboard.apk`
   - `enable.ps1`: turns the popup's service or the keyboard on by adb
-  - `deploy-release.ps1`: raises the version, commits, tags `v<version>` and pushes
+  - `deploy-release.ps1`: raises the version, commits, tags `v<version>` and pushes; stops before anything when `docs/release-notes/<version>.md` is missing, and again before the tag when it is not committed; the release's page opens with it
   - `packaging/Packaging.ps1`: version and signing-key helpers for `build-apk.ps1` and `deploy-release.ps1`
   - `packaging/SecurityWatch.ps1`: a copy of Berpiztu/security-watch's `client/SecurityWatch.ps1`, never edited here (a change is made there and copied); `Packaging.ps1` loads it as project `keyplus`
 - security-watch: `build-apk.ps1` asks it first (`Test-SecurityWatch`) and stops on a library with a vulnerability moderate or worse, the .NET runtime included, asking whether to go on when it cannot be reached; once built it sends the checkout's list of libraries when it changed, for `main` and release tags, as an issue opened by whoever `gh` is signed in as (`Send-SecurityWatchInventory`); `deploy-release.ps1` asks for `main` before releasing and sends the release's list when it tags it; GitHub Actions only asks; `debug.ps1` and `deploy.ps1` do neither

@@ -31,6 +31,17 @@ function Get-NextPatchVersion {
     return ($parts[0..2] -join '.')
 }
 
+function Get-KeyPlusReleaseNotes {
+    <#
+    What a release brings, written beside the code as docs\release-notes\<version>.md:
+    the arguments that put it on the release's page (gh release create), or
+    none when that version has no such file.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Version)
+    $notes = Join-Path (Get-KeyPlusRepoRoot) "docs\release-notes\$Version.md"
+    if (Test-Path -LiteralPath $notes) { "--notes-file"; $notes }
+}
+
 function Get-KeyPlusReleasePart {
     <# A version's first three parts, major.minor.patch: the release it is or counts from. #>
     param([Parameter(Mandatory = $true)][string]$Version)
