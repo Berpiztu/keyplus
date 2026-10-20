@@ -14,7 +14,7 @@
 .EXAMPLE
     .\enable.ps1
 .EXAMPLE
-    .\enable.ps1 -Pair 192.168.2.210:39643 -Code 348264
+    .\enable.ps1 -Pair 192.168.1.20:37000 -Code 123456
 #>
 [CmdletBinding()]
 param(

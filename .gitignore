@@ -5,3 +5,8 @@ obj/
 *.keystore
 dist/
 private/
+# The owner's captures (photos, videos) of the phone, never published.
+doc/clicbo/
+*.mp4
+*.jpg
+*.jpeg
