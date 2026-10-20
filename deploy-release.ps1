@@ -65,6 +65,9 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 . (Join-Path $RepoRoot "packaging\Packaging.ps1")
 
+# No release while security-watch says main uses a vulnerable library.
+Test-SecurityWatch -Ref main
+
 $Csproj = Join-Path $RepoRoot "Berpiztu.KeyPlus.csproj"
 
 # 1. What this checkout holds goes into the release: the release is made on
@@ -188,6 +191,10 @@ git push
 if ($LASTEXITCODE -ne 0) { throw "git push failed with exit code $LASTEXITCODE" }
 git push origin $tag
 if ($LASTEXITCODE -ne 0) { throw "git push of $tag failed with exit code $LASTEXITCODE" }
+
+# The release's list of libraries goes to security-watch from here: GitHub
+# Actions only asks.
+Send-SecurityWatchInventory -Ref ([pscustomobject]@{ Name = $tag; Type = "release" })
 
 if (-not $Local) {
     $repository = (gh repo view --json nameWithOwner --jq .nameWithOwner 2>$null)

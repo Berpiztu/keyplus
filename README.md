@@ -278,6 +278,19 @@ gh secret set ANDROID_KEYSTORE_PASS --body (Get-Content private\android.keystore
 
 Back the two files up: without them no later APK updates the installed apps.
 
+### Security: security-watch
+
+`build-apk.ps1` asks [Berpiztu/security-watch](https://github.com/Berpiztu/security-watch)
+first: a library it uses with a known vulnerability, moderate or worse, the
+.NET runtime the APKs carry included, stops the build, naming it and the
+version that fixes it; a lower one is a warning. When security-watch cannot
+be reached it asks whether to go on. Once built, it sends the list of
+libraries of `main` when it changed, as an issue opened with your `gh`
+sign-in, and `deploy-release.ps1` sends each release's when it tags it. No
+token: `keyplus` is in security-watch's `projects.txt`, and the account `gh`
+is signed in as in its `submitters.txt`. GitHub Actions only asks;
+`debug.ps1` and `deploy.ps1` do neither.
+
 ## Limits
 
 - Android 13 or later: before it, only a keyboard or root can send keys to

@@ -229,3 +229,9 @@ function Resolve-KeyPlusAndroidSigning {
     if (-not $keyPass) { $keyPass = $storePass }
     return [pscustomobject]@{ Keystore = $keystore; StorePass = $storePass; Alias = $alias; KeyPass = $keyPass }
 }
+
+# security-watch: asked before every build, told after one. SecurityWatch.ps1
+# is a copy of Berpiztu/security-watch's client/SecurityWatch.ps1, the same in
+# every project; this one is keyplus.
+$SecurityWatchProject = "keyplus"
+. (Join-Path $PSScriptRoot "SecurityWatch.ps1")

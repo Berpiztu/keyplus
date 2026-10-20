@@ -35,6 +35,11 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 . (Join-Path $RepoRoot "packaging\Packaging.ps1")
 
+# security-watch first: a library this build would use with a known
+# vulnerability, moderate or worse, the .NET runtime included, stops it
+# before anything is built.
+Test-SecurityWatch
+
 $Csproj = Join-Path $RepoRoot "Berpiztu.KeyPlus.csproj"
 $Tfm = "net10.0-android"
 
@@ -65,3 +70,6 @@ foreach ($keyPlusProduct in $products) {
     Copy-Item -LiteralPath $apk.FullName -Destination $destination -Force
     Write-Host "$destination ready ($([math]::Round($apk.Length / 1MB, 1)) MB), versionName $($version.Display) / versionCode $($version.Build); signed with $($signing.Keystore)" -ForegroundColor Green
 }
+
+# Built: security-watch gets this checkout's list of libraries when it changed.
+Send-SecurityWatchInventory
