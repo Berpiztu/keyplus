@@ -130,6 +130,12 @@ jobs:
           message=$(gh api "repos/${{ github.repository }}/git/refs/tags/${{ github.ref_name }}" --jq '.object.url' | xargs gh api --jq '.message // ""')
           if echo "$message" | grep -q 'built locally'; then echo "local=true" >> "$GITHUB_OUTPUT"; else echo "local=false" >> "$GITHUB_OUTPUT"; fi
 
+      # The release's notes, the only file of the repository this job needs.
+      - uses: actions/checkout@v4
+        if: steps.tag.outputs.local != 'true'
+        with:
+          sparse-checkout: docs/release-notes
+
       - uses: actions/download-artifact@v4
         if: steps.tag.outputs.local != 'true'
         with:
