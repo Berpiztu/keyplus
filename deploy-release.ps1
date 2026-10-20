@@ -65,8 +65,8 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 . (Join-Path $RepoRoot "packaging\Packaging.ps1")
 
-# No release while security-watch says main uses a vulnerable library.
-Test-SecurityWatch -Ref main
+# No release of a list security-watch has not checked, nor of one it says is vulnerable: build first.
+Test-SecurityWatch -Ref main -Release
 
 $Csproj = Join-Path $RepoRoot "Berpiztu.KeyPlus.csproj"
 
