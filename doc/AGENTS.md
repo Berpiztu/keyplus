@@ -14,6 +14,7 @@
 - `diseño.md`: key labels, the three-by-three legend table, analysis and plan, followed by the owner's notes in Spanish
 - `compact-keys.md`: Keys in two rows as Termux lays them out, the owner's request of 17 October 2026, the drawings and the details to confirm
 - `dise.md`: the owner's raw sketch of the legend grid
+- `first-open.md`: review of how Berpiztu AI Keyboard opens the first time on a phone (findings, causes in the code, proposals to confirm), the list to fix from
 - `clicbo/`: the owner's local phone captures (photos, videos) of Gboard's clipboard beside KeyPlus, the reference for the copied-things UI; git ignores it, as it ignores every `.jpg`, `.jpeg` and `.mp4`
 
 ## Work Guidance

@@ -162,7 +162,44 @@ public sealed class KeyPanel
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
     private readonly LinearLayout terminal;
-    private readonly LinearLayout wholeKeyboard;
+
+    /// <summary>The whole keyboard (ABC): as made, or as the screen's design has it, made again when it changes.</summary>
+    private LinearLayout wholeKeyboard;
+
+    /// <summary>The screen's design of the whole keyboard; none, the keyboard as made (KeyboardDesign).</summary>
+    private KeyboardDesign? design;
+
+    /// <summary>Whether the whole keyboard's keys are being dragged into place (⚙ → Diseñar) rather than typed with.</summary>
+    private bool designing;
+
+    /// <summary>Every key and hole the design shows, with its id (a hole's negative), its row and its place in it: Entrar standing tall is there for both of its rows; the keys aside in row -1.</summary>
+    private readonly List<(int Id, int Row, int Index, View View)> designKeys = [];
+
+    /// <summary>The design's rows as shown, each with its index, to find the row a key is let go on: Entrar's two rows each by their own views.</summary>
+    private readonly List<(int Row, View View)> designRows = [];
+
+    /// <summary>
+    /// Each key of the design made once and moved from row to row as it is
+    /// dragged: made again at every drop, seventy keys a time, the views and
+    /// their listeners left for the collector between Java and .NET held the
+    /// keyboard still past Android's five seconds.
+    /// </summary>
+    private readonly Dictionary<int, TextView> designViews = [];
+
+    /// <summary>While designing, above the keys: what to do, Restablecer and Hecho.</summary>
+    private readonly LinearLayout designBar;
+
+    /// <summary>The key being dragged, the picture of it that follows the finger or pointer, and where it was taken within it.</summary>
+    private (int Id, View Key, ImageView Picture, float GrabX, float GrabY)? dragged;
+
+    /// <summary>Whether the key held has moved further than a tap: let go, it is put there; else it is marked.</summary>
+    private bool dragMoved;
+
+    /// <summary>Where the key held was touched, on the screen.</summary>
+    private (float X, float Y) dragStart;
+
+    /// <summary>The key marked by a tap while designing, which − and + make narrower or wider.</summary>
+    private int? selectedKey;
 
     /// <summary>Keys made small: two rows, no title bar.</summary>
     private readonly LinearLayout compact;
@@ -429,8 +466,12 @@ public sealed class KeyPanel
         settingsView.AddView(settingsRows);
         strip.AddView(settingsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
         clipboard.Changed += RefillClipboard;
+        asideKeys = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        designBar = DesignBar();
+        strip.AddView(designBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         terminal = Rows(PanelKeys.Terminal);
-        wholeKeyboard = Rows(PanelKeys.Spanish, PanelKeys.SpanishSide);
+        design = KeyboardDesign.Read(preferences);
+        wholeKeyboard = WholeKeyboard();
         compact = Rows(PanelKeys.Compact);
         strip.AddView(terminal);
         strip.AddView(wholeKeyboard);
@@ -606,7 +647,14 @@ public sealed class KeyPanel
     /// </summary>
     public bool SideKeys
     {
-        set => sideColumn!.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+        set
+        {
+            // A design has no column: its keys are in its rows.
+            if (sideColumn is not null)
+            {
+                sideColumn.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+            }
+        }
     }
 
     /// <summary>The height of the keys in sight, which grows with <see cref="Scale"/> alone; none while the window is its icon or 📋 shows the copied texts.</summary>
@@ -931,6 +979,11 @@ public sealed class KeyPanel
     {
         StopRepeat();
         Uncover();
+        if (!whole)
+        {
+            EndDesign();
+        }
+
         small &= !whole;
         terminal.Visibility = !whole && !small ? ViewStates.Visible : ViewStates.Gone;
         wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
@@ -1607,6 +1660,538 @@ public sealed class KeyPanel
         return withSide;
     }
 
+    /// <summary>The whole keyboard as the screen's design has it, or as made.</summary>
+    private LinearLayout WholeKeyboard() =>
+        design is null ? Rows(PanelKeys.Spanish, PanelKeys.SpanishSide) : DesignedRows(design);
+
+    /// <summary>
+    /// The whole keyboard's keys dragged into place (⚙ → Diseñar): the
+    /// whole keyboard shown, as the screen's design has it, or as made.
+    /// </summary>
+    public void Design()
+    {
+        if (wholeKeyboard.Visibility != ViewStates.Visible)
+        {
+            SetWholeKeyboard(true);
+        }
+
+        design ??= KeyboardDesign.Usual();
+        ShowDesign();
+        designing = true;
+        designBar.Visibility = ViewStates.Visible;
+    }
+
+    /// <summary>
+    /// While designing, above the keys: the keys taken out, side by side,
+    /// where a key dragged off the keys lands and whence it is dragged back;
+    /// under them Ajustar, Restablecer and Hecho.
+    /// </summary>
+    private LinearLayout DesignBar()
+    {
+        var bar = new LinearLayout(context) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone };
+        var aside = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false };
+        aside.AddView(asideKeys, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        bar.AddView(aside, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(DesignAsideDp)));
+        var buttons = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        buttons.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        buttons.AddView(DesignButton("−", "The marked key a quarter narrower", () => ResizeSelected(wider: false)),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        buttons.AddView(DesignButton("+", "The marked key a quarter wider", () => ResizeSelected(wider: true)),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        buttons.AddView(DesignButton("+ Fila", "A new empty row at the top", AddDesignRow),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        buttons.AddView(DesignButton("Repartir", "The holes closed, every key the same size, the longest row as wide as the keyboard", SpreadDesign),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        buttons.AddView(DesignButton("Restablecer", "The keyboard as it was made, on this screen",
+            () => Ask("¿Teclado como venía?", ResetDesign)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        buttons.AddView(DesignButton("Hecho", "Type with the keys again", EndDesign),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        bar.AddView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(DesignButtonsDp)));
+        return bar;
+    }
+
+    /// <summary>The keys taken out, side by side, while designing: the design's own row -1.</summary>
+    private readonly LinearLayout asideKeys;
+
+    /// <summary>The keys taken out, as small keys that drag back; none yet, what to do.</summary>
+    private void FillAside()
+    {
+        asideKeys.RemoveAllViews();
+        designKeys.RemoveAll(key => key.Row == AsideRow);
+        if (design is not { Removed.Count: > 0 })
+        {
+            var hint = new TextView(context) { Text = "Arrastra aquí arriba las teclas que sobren", Gravity = GravityFlags.CenterVertical };
+            hint.SetTextColor(DimTextColor);
+            hint.SetTextSize(ComplexUnitType.Sp, 13);
+            hint.SetPadding(Dp(12), 0, Dp(12), 0);
+            asideKeys.AddView(hint, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+            return;
+        }
+
+        foreach (var id in design.Removed)
+        {
+            var key = KeyboardDesign.Key(id);
+            var view = KeyView(key.Label.Length > 0 ? key.Label : "Espacio");
+            view.SetTextSize(ComplexUnitType.Sp, 13);
+            view.SetPadding(Dp(8), 0, Dp(8), 0);
+            view.Touch += (_, e) =>
+            {
+                e.Handled = true;
+                DesignTouch(view, e.Event!);
+            };
+            asideKeys.AddView(view, KeyMargins(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent)));
+            designKeys.Add((id, AsideRow, asideKeys.ChildCount - 1, view));
+        }
+    }
+
+    /// <summary>The row the keys taken out stand in, while designing.</summary>
+    private const int AsideRow = -1;
+
+    private const int DesignAsideDp = 40;
+    private const int DesignButtonsDp = 36;
+
+    /// <summary>Repartir: the holes and empty rows gone, every key the same size, the longest row as wide as the keyboard; kept for the screen.</summary>
+    private void SpreadDesign() => ChangeDesign(shown => shown.Spread());
+
+    /// <summary>+ Fila: a new empty row at the top; kept for the screen.</summary>
+    private void AddDesignRow() => ChangeDesign(shown => shown.AddRow());
+
+    /// <summary>The design changed, kept for the screen and shown.</summary>
+    private void ChangeDesign(Action<KeyboardDesign> change)
+    {
+        if (design is null)
+        {
+            return;
+        }
+
+        change(design);
+        design.Save(preferences);
+        ShowDesign();
+    }
+
+    private TextView DesignButton(string label, string description, Action pressed)
+    {
+        var button = new TextView(context)
+        {
+            Text = label,
+            Gravity = GravityFlags.Center,
+            ContentDescription = description,
+            Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
+        };
+        button.SetTextColor(Color.White);
+        button.SetTextSize(ComplexUnitType.Sp, 14);
+        button.SetPadding(Dp(10), 0, Dp(10), 0);
+        button.Click += (_, _) => pressed();
+        return button;
+    }
+
+    private void EndDesign()
+    {
+        if (!designing)
+        {
+            return;
+        }
+
+        designing = false;
+        designBar.Visibility = ViewStates.Gone;
+        selectedKey = null;
+        ShowSelection();
+    }
+
+    /// <summary>A key tapped while designing: marked, or no longer marked if it was.</summary>
+    private void Select(int id)
+    {
+        selectedKey = selectedKey == id ? null : id;
+        ShowSelection();
+    }
+
+    /// <summary>
+    /// The marked key filled as a held key is, the others as keys are, after
+    /// the modifiers are shown held or not: else a marked Mayús, Ctrl or Alt
+    /// was painted over and did not look marked.
+    /// </summary>
+    private void ShowSelection()
+    {
+        ShowHeld();
+        foreach (var (id, view) in designViews)
+        {
+            if (id == selectedKey)
+            {
+                view.Background = KeyBackground(HeldColor);
+                view.SetTextColor(HeldTextColor);
+            }
+            else if (!KeyboardDesign.Key(id).IsModifier)
+            {
+                view.Background = KeyBackground(KeyColor);
+                view.SetTextColor(Color.White);
+            }
+        }
+    }
+
+    /// <summary>− or +: the marked key a quarter narrower or wider, nothing else moved; kept for the screen.</summary>
+    private void ResizeSelected(bool wider)
+    {
+        if (selectedKey is { } id)
+        {
+            ChangeDesign(shown => shown.Resize(id, wider));
+        }
+    }
+
+    /// <summary>Restablecer: the screen's keyboard as made, still being designed.</summary>
+    private void ResetDesign()
+    {
+        KeyboardDesign.Forget(preferences);
+        design = KeyboardDesign.Usual();
+        ShowDesign();
+    }
+
+    /// <summary>
+    /// The whole keyboard made again as the design has it now: the old one's
+    /// keys taken out of every list that sizes, marks or labels them.
+    /// </summary>
+    private void ShowDesign()
+    {
+        var old = wholeKeyboard;
+        var kept = new HashSet<View>(designViews.Values);
+        var gone = new HashSet<View>(Descendants(old).Where(view => !kept.Contains(view)));
+        characterKeys.RemoveAll(key => gone.Contains(key.View));
+        labelKeys.RemoveAll(key => gone.Contains(key.View));
+        fnKeys.RemoveAll(key => gone.Contains(key.View));
+        modifierKeys.RemoveAll(key => gone.Contains(key.View));
+        rowViews.RemoveAll(gone.Contains);
+        sideKeys.RemoveAll(gone.Contains);
+        if (sideColumn is not null && gone.Contains(sideColumn))
+        {
+            sideColumn = null;
+        }
+
+        var at = strip.IndexOfChild(old);
+        strip.RemoveViewAt(at);
+        wholeKeyboard = WholeKeyboard();
+        wholeKeyboard.Visibility = old.Visibility;
+        strip.AddView(wholeKeyboard, at);
+        ApplySizes();
+        SizeLabels();
+        ShowSelection();
+        FitLegendsSoon();
+    }
+
+    private static IEnumerable<View> Descendants(View view)
+    {
+        yield return view;
+        if (view is ViewGroup group)
+        {
+            for (var i = 0; i < group.ChildCount; i++)
+            {
+                foreach (var child in Descendants(group.GetChildAt(i)!))
+                {
+                    yield return child;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The design's rows, each key as wide as its weight of
+    /// <see cref="KeyboardDesign.Width"/> whatever was moved: a shorter row's
+    /// room left empty at its right, a longer one running past the edge
+    /// (<see cref="AtWidth"/>); Entrar as tall as two rows where both have
+    /// it, the keys before it on its left and those after it on its right.
+    /// The keys taken out, above, while designing.
+    /// </summary>
+    private LinearLayout DesignedRows(KeyboardDesign shown)
+    {
+        designKeys.Clear();
+        designRows.Clear();
+        var rows = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        for (var r = 0; r < shown.Rows.Count; r++)
+        {
+            if (shown.TallWith(r) is not { } pair)
+            {
+                var keys = shown.Rows[r];
+                var row = AtWidth(DesignedRow(r, keys, 0), shown.WeightOf(keys), shown.Width, ViewGroup.LayoutParams.MatchParent);
+                rows.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight));
+                rowViews.Add(row);
+                designRows.Add((r, row));
+                continue;
+            }
+
+            var tall = KeyboardDesign.TallId;
+            var block = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+            if (pair.Before > 0)
+            {
+                block.AddView(TwoRows(r, pair.Upper[..pair.UpperAt], pair.Lower[..pair.LowerAt], pair.Before, 0, 0),
+                    new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, pair.Before));
+            }
+
+            var tallView = DesignView(tall);
+            block.AddView(tallView, KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, shown.WeightOf(tall))));
+            designKeys.Add((tall, r, pair.UpperAt, tallView));
+            designKeys.Add((tall, r + 1, pair.LowerAt, tallView));
+            if (pair.After > 0)
+            {
+                block.AddView(TwoRows(r, pair.Upper[(pair.UpperAt + 1)..], pair.Lower[(pair.LowerAt + 1)..], pair.After, pair.UpperAt + 1, pair.LowerAt + 1),
+                    new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, pair.After));
+            }
+
+            rows.AddView(AtWidth(block, pair.Weight, shown.Width, ViewGroup.LayoutParams.WrapContent));
+            r++;
+        }
+
+        FillAside();
+        return rows;
+    }
+
+    /// <summary>
+    /// A row, or Entrar's two, as wide as its keys' <paramref name="weight"/>
+    /// of the keyboard's <paramref name="width"/>: its room left empty at its
+    /// right; or, wider than the keyboard, running past its edge and cut
+    /// there, until Ajustar. The keys are never made smaller by it.
+    /// </summary>
+    private View AtWidth(LinearLayout content, float weight, float width, int height)
+    {
+        if (weight <= width + 0.01f)
+        {
+            AddRoom(content, width - weight);
+            return content;
+        }
+
+        var frame = new FrameLayout(context);
+        frame.AddView(content, new FrameLayout.LayoutParams(0, height));
+        frame.LayoutChange += (_, e) =>
+        {
+            var wide = (int)Math.Round((e.Right - e.Left) * weight / width);
+            if (content.LayoutParameters!.Width != wide)
+            {
+                content.LayoutParameters.Width = wide;
+                content.Post(content.RequestLayout);
+            }
+        };
+        return frame;
+    }
+
+    /// <summary>
+    /// Two rows' cells on one side of Entrar standing tall, each row as wide
+    /// as <paramref name="width"/>, a shorter one's room empty; the first of
+    /// each at <paramref name="upperFrom"/> and <paramref name="lowerFrom"/> of its row.
+    /// </summary>
+    private LinearLayout TwoRows(int first, List<int> upper, List<int> lower, float width, int upperFrom, int lowerFrom)
+    {
+        var both = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        foreach (var (index, cells, from) in new[] { (first, upper, upperFrom), (first + 1, lower, lowerFrom) })
+        {
+            var row = DesignedRow(index, cells, from);
+            AddRoom(row, width - design!.WeightOf(cells));
+            both.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, RowHeight));
+            rowViews.Add(row);
+            designRows.Add((index, row));
+        }
+
+        return both;
+    }
+
+    /// <summary>One row's cells side by side: its keys, and its holes as empty room; the first at <paramref name="from"/> of the design's row.</summary>
+    private LinearLayout DesignedRow(int index, List<int> cells, int from)
+    {
+        var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        for (var i = 0; i < cells.Count; i++)
+        {
+            var cell = cells[i];
+            View view;
+            if (KeyboardDesign.IsHole(cell))
+            {
+                view = new View(context);
+                row.AddView(view, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, design!.WeightOf(cell)));
+            }
+            else
+            {
+                view = DesignView(cell);
+                row.AddView(view, KeyMargins(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, design!.WeightOf(cell))));
+            }
+
+            designKeys.Add((cell, index, from + i, view));
+        }
+
+        return row;
+    }
+
+    /// <summary>A row's room no key takes: empty, at its right.</summary>
+    private void AddRoom(LinearLayout row, float weight)
+    {
+        if (weight > 0.01f)
+        {
+            row.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, weight));
+        }
+    }
+
+    /// <summary>
+    /// While designing, a key of the design held: a picture of it follows the
+    /// finger or pointer, and where it is let go it goes, in that row before
+    /// the keys right of it; let go above the keys, it is taken out. False,
+    /// the key types as ever.
+    /// </summary>
+    private bool DesignTouch(View view, MotionEvent motion)
+    {
+        if (!designing)
+        {
+            return false;
+        }
+
+        var held = designKeys.FirstOrDefault(key => key.View == view && !KeyboardDesign.IsHole(key.Id));
+        if (held.View is null)
+        {
+            return false;
+        }
+
+        var origin = new int[2];
+        root.GetLocationOnScreen(origin);
+        switch (motion.ActionMasked)
+        {
+            case MotionEventActions.Down:
+                var at = new int[2];
+                view.GetLocationOnScreen(at);
+                var bitmap = Android.Graphics.Bitmap.CreateBitmap(Math.Max(view.Width, 1), Math.Max(view.Height, 1), Android.Graphics.Bitmap.Config.Argb8888!)!;
+                view.Draw(new Android.Graphics.Canvas(bitmap));
+                var picture = new ImageView(context) { Alpha = 0.85f, Elevation = Dp(8) };
+                picture.SetImageBitmap(bitmap);
+                root.AddView(picture, new FrameLayout.LayoutParams(view.Width, view.Height));
+                picture.SetX(at[0] - origin[0]);
+                picture.SetY(at[1] - origin[1]);
+                view.Alpha = 0.3f;
+                dragged = (held.Id, view, picture, motion.RawX - at[0], motion.RawY - at[1]);
+                (dragMoved, dragStart) = (false, (motion.RawX, motion.RawY));
+
+                // The keys aside scroll across: the drag is the key's, not the scroll's.
+                view.Parent?.RequestDisallowInterceptTouchEvent(true);
+                break;
+            case MotionEventActions.Move when dragged is { } moving:
+                dragMoved |= Math.Abs(motion.RawX - dragStart.X) > Dp(8) || Math.Abs(motion.RawY - dragStart.Y) > Dp(8);
+                moving.Picture.SetX(motion.RawX - moving.GrabX - origin[0]);
+                moving.Picture.SetY(motion.RawY - moving.GrabY - origin[1]);
+                moving.Picture.Alpha = OffTheKeys(motion.RawY) ? 0.4f : 0.85f;
+                break;
+            case MotionEventActions.Up when dragged is { } letGo:
+                LetGo(letGo.Picture);
+                dragged = null;
+                if (!dragMoved)
+                {
+                    letGo.Key.Alpha = 1f;
+                    Select(letGo.Id);
+                    break;
+                }
+
+                // The keyboard is made again once this touch is over, not while it is handled.
+                var (x, y) = (motion.RawX, motion.RawY);
+                strip.Post(() => Drop(letGo.Id, x, y));
+                break;
+            case MotionEventActions.Cancel when dragged is { } cancelled:
+                LetGo(cancelled.Picture);
+                cancelled.Key.Alpha = 1f;
+                dragged = null;
+                break;
+        }
+
+        return true;
+    }
+
+    /// <summary>A design's key, made the first time and taken from the row it stood in after that.</summary>
+    private TextView DesignView(int id)
+    {
+        if (designViews.TryGetValue(id, out var made))
+        {
+            (made.Parent as ViewGroup)?.RemoveView(made);
+            made.Alpha = 1f;
+            return made;
+        }
+
+        var view = PanelKeyView(KeyboardDesign.Key(id));
+        designViews[id] = view;
+        return view;
+    }
+
+    /// <summary>The dragged key's picture gone, and its bitmap freed at once, not left for the collector.</summary>
+    private void LetGo(ImageView picture)
+    {
+        root.RemoveView(picture);
+        var bitmap = (picture.Drawable as Android.Graphics.Drawables.BitmapDrawable)?.Bitmap;
+        picture.SetImageDrawable(null);
+        bitmap?.Recycle();
+        picture.Dispose();
+    }
+
+    /// <summary>Whether a point on the screen is above the whole keyboard's keys, where a key let go is taken out.</summary>
+    private bool OffTheKeys(float rawY)
+    {
+        var at = new int[2];
+        wholeKeyboard.GetLocationOnScreen(at);
+        return rawY < at[1];
+    }
+
+    /// <summary>
+    /// The key let go: above the keys, put aside; on a hole (or on its own
+    /// place), it takes it; else put in the row under the point before the
+    /// cells right of it. Where it came from, a hole stays. Kept for the screen.
+    /// </summary>
+    private void Drop(int id, float rawX, float rawY)
+    {
+        if (design is null)
+        {
+            return;
+        }
+
+        if (OffTheKeys(rawY))
+        {
+            ChangeDesign(shown => shown.PutAside(id));
+            return;
+        }
+
+        var row = RowAt(rawY);
+        var cells = designKeys.Where(cell => cell.Row == row).ToList();
+        var under = cells.FirstOrDefault(cell => (KeyboardDesign.IsHole(cell.Id) || cell.Id == id) && Within(cell.View, rawX));
+        if (under.View is not null)
+        {
+            ChangeDesign(shown => shown.Put(id, row, under.Index, onHole: true));
+            return;
+        }
+
+        var index = cells.Count(cell => CentreX(cell.View) < rawX);
+        ChangeDesign(shown => shown.Put(id, row, index, onHole: false));
+    }
+
+    /// <summary>The design's row under a height on the screen, or the nearest one.</summary>
+    private int RowAt(float rawY)
+    {
+        var best = 0;
+        var nearest = float.MaxValue;
+        foreach (var (row, view) in designRows)
+        {
+            var at = new int[2];
+            view.GetLocationOnScreen(at);
+            var distance = rawY < at[1] ? at[1] - rawY : rawY > at[1] + view.Height ? rawY - (at[1] + view.Height) : 0;
+            if (distance < nearest)
+            {
+                (best, nearest) = (row, distance);
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>Whether a point across the screen is within a view's width.</summary>
+    private static bool Within(View view, float rawX)
+    {
+        var at = new int[2];
+        view.GetLocationOnScreen(at);
+        return rawX >= at[0] && rawX < at[0] + view.Width;
+    }
+
+    private static float CentreX(View view)
+    {
+        var at = new int[2];
+        view.GetLocationOnScreen(at);
+        return at[0] + (view.Width / 2f);
+    }
+
     private TextView PanelKeyView(PanelKey key)
     {
         TextView view;
@@ -1654,6 +2239,11 @@ public sealed class KeyPanel
         view.Touch += (_, e) =>
         {
             e.Handled = true;
+            if (DesignTouch(view, e.Event!))
+            {
+                return;
+            }
+
             switch (e.Event!.ActionMasked)
             {
                 case MotionEventActions.Down:

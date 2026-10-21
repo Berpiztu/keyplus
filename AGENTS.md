@@ -107,6 +107,8 @@ Default section order:
 - Turning on without a computer: `AdbGrant.cs` (a short foreground service, both products) takes the Wireless debugging pairing code in a notification and runs the product's ADB commands through `AdbShell.java` (Java, `AndroidJavaSource` with `Bind="false"`, called from C# by JNI); the key it pairs with is made per run and never stored
 - Java libraries come as `AndroidMavenLibrary` items with `Bind="false"`: libadb-android and spake2-android from JitPack, Bouncy Castle and Conscrypt from Maven Central; each version is checked for known vulnerabilities (OSV) before it is set, Bouncy Castle is held above the vulnerable one libadb asks for, and `THIRD-PARTY-NOTICES.md` lists them with their licences and is updated with them
 - security-watch's inventory reads NuGet packages only, so it does not see the Java libraries
+- The whole keyboard's design (`KeyboardDesign.cs`, drawn and edited in `KeyPanel.cs`) is kept per screen in the preference `abcDesign`: `width|rows|keys aside|id:width`, keys by their place in `KeyboardDesign.Catalog`, holes as negative widths in hundredths; a new key in `PanelKeys.Spanish` goes at the end of the catalog, or saved designs read wrong
+- Nothing in the keyboard's layout may ask for a layout on every pass: `KeyPlusKeyboard.Place` runs on each layout of the keys' box, so a setter that always asks for one (`SetMinimumHeight`) loops about sixty times a second; set only what changed
 - Each product's app label is `MainActivity.AppLabel`; `AndroidManifest.xml` holds only the shared application attributes
 - Versions: the csproj's `ApplicationDisplayVersion` and `ApplicationVersion` (versionCode, 1.0.41 is 100041000) are the last release's, raised only by `deploy-release.ps1`; local builds count a fourth part in `private/version.props`
 - Signing: one key for every APK, Debug included: `KEYPLUS_KEYSTORE` and `KEYPLUS_KEYSTORE_PASS`, else `private/android.keystore` and `private/android.keystore.pass`; on GitHub the secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASS`
@@ -154,5 +156,7 @@ Root-owned paths without their own AGENTS.md:
 | `Resources/` | Icon (`drawable/`), strings (`values/`), the accessibility service and keyboard descriptors (`xml/`) |
 | `*.ps1`, `packaging/` | Build, deploy, enable and release scripts |
 | `.github/workflows/release.yml` | Release build and publishing |
+| `docs/release-notes/` | Each release's notes, required by `deploy-release.ps1` |
+| `docs/tODO/` | The owner's work lists, schematic: `layout.md` (findings with their photos and scale), `designs.md` (keyboard designs); `photos/` |
 | `AdbShell.java` | The Java ADB client over Wireless debugging, on libadb-android |
 | `README.md`, `rules.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` | User and build guide, owner's rules, license, the bundled libraries' licences |

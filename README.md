@@ -81,7 +81,8 @@ a window that does.
 | File | What it holds |
 | --- | --- |
 | [PanelKeys.cs](PanelKeys.cs) | The layouts (the editing shortcuts over Termux's two rows; the whole Spanish keyboard), the dead keys' accents, the meta state of held modifiers |
-| [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat |
+| [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat; the whole keyboard as the screen's design has it, and designing it |
+| [KeyboardDesign.cs](KeyboardDesign.cs) | A design of the whole keyboard: its rows, holes, keys aside and widths, kept for each screen |
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
 | [KeyPlusKeyboard.cs](KeyPlusKeyboard.cs) | The keyboard product: the same panel as a keyboard of its own, docked or in a window on a phone |
@@ -179,6 +180,14 @@ a window that does.
   the icon's place; and within each, Keys and ABC each keep their own place,
   width, keys' size, labels' size and whether they float. Turn the phone, or
   switch between Keys and ABC, and the window is as you last left it there.
+- **Designing the whole keyboard.** On Berpiztu AI Keyboard, ⚙ →
+  **Diseñar**: drag a key to another place; nothing else moves, it leaves a
+  hole and takes a hole it is dropped on. Dragged above the keys it waits
+  there, to be dragged back. A tap marks a key, and **−** and **+** make it
+  narrower or wider. **+ Fila** adds an empty row at the top, **Repartir**
+  closes the holes and sizes every key alike, **Restablecer** brings the
+  keyboard back as made. Each screen keeps its own design
+  ([docs/tODO/designs.md](docs/tODO/designs.md)).
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight, and always where you last left
   it, apart from the window's own place.

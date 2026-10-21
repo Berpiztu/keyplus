@@ -242,6 +242,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         [
             new("Mover", () => frame?.Show(resizing: false, sides: false), "✥"),
             new("Redimensionar", () => frame?.Show(resizing: true, sides: true), "⇲"),
+            new("Diseñar", () => panel?.Design(), "✎"),
             new("Modo normal", () => SetWindowed(false), "⬓", InUse: !windowed),
             new("Modo ventana", () => SetWindowed(true), "❐", InUse: windowed),
             new("Cambiar de teclado", ShowKeyboardPicker, "🌐"),
@@ -326,8 +327,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                     TopMargin = top + box.Height + gap,
                 };
             under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, GravityFlags.Bottom);
-            container.SetPadding(0, 0, 0, room.Below);
-            container.SetMinimumHeight(room.Height + room.Below);
+            Hold(room.Below, room.Height + room.Below);
         }
         else
         {
@@ -348,8 +348,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 BottomMargin = raised + box.Height + gap,
             };
             under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, raised + box.Height, GravityFlags.Bottom);
-            container.SetPadding(0, 0, 0, 0);
-            container.SetMinimumHeight(0);
+            Hold(0, 0);
         }
 
         Lay(box, keys);
@@ -380,6 +379,30 @@ public sealed class KeyPlusKeyboard : InputMethodService
     private const int EditorRoomDp = 140;
 
     /// <summary>A view laid out anew only where its place changed, for laying out is what calls <see cref="Place"/> again.</summary>
+    /// <summary>
+    /// The container's room under the keys and its least height, set only
+    /// when they change: setting the least height asks for a layout even when
+    /// it is the same, the layout placed the keyboard again (Place), and that
+    /// went round about sixty times a second, a keyboard open or not.
+    /// </summary>
+    private void Hold(int below, int least)
+    {
+        if (container is null)
+        {
+            return;
+        }
+
+        if (container.PaddingLeft != 0 || container.PaddingTop != 0 || container.PaddingRight != 0 || container.PaddingBottom != below)
+        {
+            container.SetPadding(0, 0, 0, below);
+        }
+
+        if (container.MinimumHeight != least)
+        {
+            container.SetMinimumHeight(least);
+        }
+    }
+
     private static void Lay(View view, FrameLayout.LayoutParams layout)
     {
         if (view.LayoutParameters is FrameLayout.LayoutParams now
