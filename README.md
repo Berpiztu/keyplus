@@ -38,19 +38,21 @@ keyboard the title bar does not move it nor ⤓ dock it, for Android places
 it; in ✕'s place it has **⚙**, its settings, whose first is **Cambiar de
 teclado**, Android's keyboard picker.
 
-On a phone the keyboard's title bar is Gboard's: while something is copied,
-it shows the copied things as chips, the pinned first, then the newest,
-between **📋** at its left and **ABC** and **⚙** at its right; a tap pastes
-one, a long press opens its menu (Pegar, Fijar, Editar, Eliminar). Editar
-shows its card above the keyboard, over the app, as Gboard does: one line
-that scrolls across, so neither the card nor the keys change size with the
-text, and the keys type into it until Cancelar or Guardar. With
-nothing copied, or with ⚙ open, it shows the buttons. A long press on the
-bar's buttons, its free room or between the keys moves the keyboard. Its
-four corners have large grips, ◤ ◥ ◣ ◢: dragged, they size it from that
-corner, the keys larger or smaller, wider or narrower. ⚙ opens, in the keys' place and as Gboard's rounded tiles,
-**Mover**, **Redimensionar**, **Modo normal**, **Modo ventana** and
-**Cambiar de teclado** ([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
+On a phone the keyboard's title bar is Gboard's toolbar, one height and one
+size of words whatever the keys' size: **⚙** at its left, **ABC** (or
+**Keys**) at its right, and between them the chip of what was copied last,
+for five minutes after it was copied, else **📋**; nothing is drawn over
+anything else. A tap on the chip pastes it, a long press opens its menu
+(Pegar, Fijar, Editar, Eliminar). Editar shows its card above the keyboard,
+over the app, as Gboard does: one line that scrolls across, so neither the
+card nor the keys change size with the text, and the keys type into it
+until Cancelar or Guardar. A long press on the bar's buttons, its free room
+or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
+bar into **✕** and **📋** and opens, in the keys' place and as Gboard's
+rounded tiles, **Letra más pequeña**, **Letra más grande**, **Tamaño
+normal**, **Dos filas** (in Keys), **Minimizar**, **Ajustes de la app**,
+**Mover**, **Redimensionar**, **Diseñar**, **Modo normal**, **Modo
+ventana** and **Cambiar de teclado** ([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
 over the keyboard until **Hecho**: moving, it follows a finger held anywhere
 on it; resizing, the top and bottom bars size the keys and the side ones
 their width, and **Restablecer** takes it back to its usual size. Modo

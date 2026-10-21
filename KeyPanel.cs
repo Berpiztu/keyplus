@@ -279,6 +279,39 @@ public sealed class KeyPanel
     /// <summary>The chips wait to be made again, what was copied having changed while they were out of sight.</summary>
     private bool chipsStale = true;
 
+    /// <summary>
+    /// Berpiztu AI Keyboard on a phone (<see cref="CopiedInTitleBar"/>), as
+    /// Gboard's toolbar: ⚙ at the left, ABC or Keys at the right, and between
+    /// them what was copied last while it is recent, else 📋; one height and
+    /// one size of words, whatever the keys' size, and nothing drawn over
+    /// anything else.
+    /// </summary>
+    private readonly LinearLayout toolbar;
+
+    /// <summary>⚙'s tiles or the copied things in the keys' place: ✕ and 📋 across the toolbar's place.</summary>
+    private readonly LinearLayout menuBar;
+
+    /// <summary>The toolbar's middle: the recent copy's chip, or 📋.</summary>
+    private readonly FrameLayout toolbarMiddle;
+    private readonly TextView toolbarClipboard;
+    private readonly TextView toolbarSwitchKeys;
+
+    /// <summary>The toolbar's and the menu bar's height, in dp: Gboard's.</summary>
+    private const int ToolbarDp = 48;
+
+    /// <summary>How long a copy shows as a chip in the toolbar, as Gboard shows the one just copied.</summary>
+    private static readonly TimeSpan RecentCopyTime = TimeSpan.FromMinutes(5);
+
+    /// <summary>What was copied last, by its text or image, and when: the toolbar's chip while it is recent.</summary>
+    private (string? Text, string? Image)? recentCopy;
+    private DateTime recentCopyAt;
+
+    /// <summary>What the clipboard's list held, to tell a new copy from a pin, an edit or a removal.</summary>
+    private HashSet<(string? Text, string? Image)> knownCopies = [];
+
+    /// <summary>The settings ⚙ shows now: on a phone, the panel's own tiles first.</summary>
+    private IReadOnlyList<Setting> shownSettings = [];
+
     /// <summary>The editor's card stands outside the panel, where its host puts it (<see cref="EditorOutside"/>).</summary>
     private bool editorOutside;
 
@@ -406,6 +439,26 @@ public sealed class KeyPanel
         chipBar.AddView(TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings)), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         chipBar.AddView(Grip("◥", Corner.TopRight), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
 
+        toolbarSwitchKeys = ToolButton("ABC", "Switch between the keys and a whole keyboard", 16, () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
+        toolbarClipboard = ToolButton("📋", "Everything copied lately", 20, () => Toggle(clipboardView!, ShowClipboard));
+        toolbarMiddle = new FrameLayout(context);
+        HoldToMove(toolbarMiddle, resizes: false);
+        toolbarMiddle.AddView(toolbarClipboard, new FrameLayout.LayoutParams(Dp(56), ViewGroup.LayoutParams.MatchParent, GravityFlags.Center));
+        toolbar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+        toolbar.AddView(ToolButton("⚙", "Settings: sizes, moving, designing, the keyboard's app", 20, () => Toggle(settingsView!, ShowSettings)),
+            new LinearLayout.LayoutParams(Dp(56), ViewGroup.LayoutParams.MatchParent));
+        toolbar.AddView(toolbarMiddle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        toolbar.AddView(toolbarSwitchKeys, new LinearLayout.LayoutParams(Dp(64), ViewGroup.LayoutParams.MatchParent));
+        menuBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+        foreach (var button in new[]
+        {
+            ToolButton("✕", "The keys again", 20, Uncover),
+            ToolButton("📋", "Everything copied lately", 20, () => Toggle(clipboardView!, ShowClipboard)),
+        })
+        {
+            menuBar.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        }
+
         bottomBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         bottomBar.AddView(Grip("◣", Corner.BottomLeft), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
         bottomBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
@@ -421,6 +474,8 @@ public sealed class KeyPanel
         strip.AddView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(chipBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
+        strip.AddView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
+        strip.AddView(menuBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         clipboardRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
         clipboardView = new ScrollView(context) { Visibility = ViewStates.Gone };
         clipboardView.AddView(clipboardRows);
@@ -465,6 +520,8 @@ public sealed class KeyPanel
         settingsView = new ScrollView(context) { Visibility = ViewStates.Gone };
         settingsView.AddView(settingsRows);
         strip.AddView(settingsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        knownCopies = [.. clipboard.Entries.Select(CopyKey)];
+        clipboard.Changed += NoteCopy;
         clipboard.Changed += RefillClipboard;
         asideKeys = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         designBar = DesignBar();
@@ -777,9 +834,126 @@ public sealed class KeyPanel
     /// nothing else is in the keys' place, or the title bar's buttons. Made
     /// small, the window has none of them.
     /// </summary>
+    /// <summary>
+    /// The toolbar's middle: the chip of what was copied last while it is
+    /// recent, as Gboard shows it, else 📋; and once it is no longer recent,
+    /// 📋 again by itself.
+    /// </summary>
+    private void FillToolbar()
+    {
+        while (toolbarMiddle.ChildCount > 1)
+        {
+            toolbarMiddle.RemoveViewAt(1);
+        }
+
+        var recent = RecentCopy();
+        toolbarClipboard.Visibility = recent is null ? ViewStates.Visible : ViewStates.Gone;
+        if (recent is null)
+        {
+            return;
+        }
+
+        var chip = Chip(recent);
+        var layout = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent, GravityFlags.Center);
+        layout.SetMargins(0, Dp(6), 0, Dp(6));
+        toolbarMiddle.AddView(chip, layout);
+        var left = RecentCopyTime - (DateTime.UtcNow - recentCopyAt);
+        handler.PostDelayed(ShowBars, (long)left.TotalMilliseconds + 100);
+    }
+
+    /// <summary>What was copied last, as the clipboard's list has it now, if it was copied within <see cref="RecentCopyTime"/>.</summary>
+    private ClipboardHistory.Entry? RecentCopy() =>
+        recentCopy is { } key && DateTime.UtcNow - recentCopyAt < RecentCopyTime
+            ? clipboard.Entries.FirstOrDefault(entry => CopyKey(entry) == key)
+            : null;
+
+    private static (string? Text, string? Image) CopyKey(ClipboardHistory.Entry entry) => (entry.Text, entry.Image);
+
+    /// <summary>
+    /// The clipboard's list changed: a thing it did not hold is a new copy,
+    /// the toolbar's chip from now on; a pin, an edit's old text gone or a
+    /// removal is not.
+    /// </summary>
+    private void NoteCopy()
+    {
+        var now = clipboard.Entries;
+        var fresh = now.FirstOrDefault(entry => !knownCopies.Contains(CopyKey(entry)));
+        if (fresh is not null)
+        {
+            (recentCopy, recentCopyAt) = (CopyKey(fresh), DateTime.UtcNow);
+        }
+
+        knownCopies = [.. now.Select(CopyKey)];
+    }
+
+    /// <summary>A toolbar's button: one size of words or signs whatever the keys' size; held still a moment, it moves the keyboard as the bar does.</summary>
+    private TextView ToolButton(string label, string description, float sp, Action pressed)
+    {
+        var view = new TextView(context)
+        {
+            Text = label,
+            Gravity = GravityFlags.Center,
+            ContentDescription = description,
+            Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
+        };
+        view.SetTextColor(Color.White);
+        view.SetTextSize(ComplexUnitType.Sp, sp);
+        view.SetMaxLines(1);
+        HoldToMove(view, pressed, resizes: false);
+        return view;
+    }
+
+    /// <summary>Ajustes de la app, among ⚙'s tiles: the keyboard's own app, where its settings are.</summary>
+    private void OpenApp()
+    {
+        Uncover();
+        context.StartActivity(new Intent(context, typeof(MainActivity)).AddFlags(ActivityFlags.NewTask));
+    }
+
+    /// <summary>
+    /// ⚙'s own tiles on a phone, before the keyboard's: the labels' size
+    /// (A−, A+, A↺, which asks first), Keys in two rows where Keys show, and
+    /// the keys made an icon, and the keyboard's app.
+    /// </summary>
+    private IEnumerable<Setting> PanelTiles()
+    {
+        yield return new("Letra más pequeña", () => SetLabelScale(labelScale - LabelScaleStep), "A−");
+        yield return new("Letra más grande", () => SetLabelScale(labelScale + LabelScaleStep), "A+");
+        yield return new("Tamaño normal", () => Ask("¿Tamaño normal?", () =>
+        {
+            SetLabelScale(1f);
+            UsualSizeRequested?.Invoke();
+        }), "A↺");
+        if (wholeKeyboard.Visibility != ViewStates.Visible)
+        {
+            yield return new("Dos filas", () => SetCompact(true), "▭");
+        }
+
+        yield return new("Minimizar", () => SetFolded(true), "–");
+        yield return new("Ajustes de la app", OpenApp, "⚙");
+    }
+
     private void ShowBars()
     {
         var small = compact.Visibility == ViewStates.Visible;
+        if (copiedInTitleBar)
+        {
+            // Gboard's: the toolbar, or its menu while something is in the
+            // keys' place, or the question asked; no grips, sizing is ⚙'s.
+            titleBar.Visibility = ViewStates.Gone;
+            chipBar.Visibility = ViewStates.Gone;
+            bottomBar.Visibility = ViewStates.Gone;
+            closeBar.Visibility = asking is not null && !small ? ViewStates.Visible : ViewStates.Gone;
+            menuBar.Visibility = asking is null && !small && covered is not null ? ViewStates.Visible : ViewStates.Gone;
+            toolbar.Visibility = asking is null && !small && covered is null ? ViewStates.Visible : ViewStates.Gone;
+            if (toolbar.Visibility == ViewStates.Visible)
+            {
+                FillToolbar();
+            }
+
+            return;
+        }
+
         var chips = copiedInTitleBar && asking is null && covered is null && edited is null && clipboard.Entries.Count > 0;
         titleBar.Visibility = asking is null && !small && !chips ? ViewStates.Visible : ViewStates.Gone;
         chipBar.Visibility = chips && !small ? ViewStates.Visible : ViewStates.Gone;
@@ -998,6 +1172,7 @@ public sealed class KeyPanel
         FitLegendsSoon();
         switchKeys.Text = whole ? "Keys" : "ABC";
         chipSwitchKeys.Text = switchKeys.Text;
+        toolbarSwitchKeys.Text = switchKeys.Text;
     }
 
     /// <summary>
@@ -1087,14 +1262,15 @@ public sealed class KeyPanel
     /// </summary>
     private void ShowSettings()
     {
+        shownSettings = copiedInTitleBar ? [.. PanelTiles(), .. settings] : settings;
         settingsRows.RemoveAllViews();
-        if (settings.Count > 0 && settings.All(setting => setting.Sign is not null))
+        if (shownSettings.Count > 0 && shownSettings.All(setting => setting.Sign is not null))
         {
             ShowSettingTiles();
         }
         else
         {
-            foreach (var setting in settings)
+            foreach (var setting in shownSettings)
             {
                 var row = KeyView(setting.Label);
                 row.Gravity = GravityFlags.CenterVertical | GravityFlags.Left;
@@ -1118,14 +1294,14 @@ public sealed class KeyPanel
     private void ShowSettingTiles()
     {
         var columns = Math.Clamp(strip.Width / Dp(180), 2, 3);
-        var rows = (settings.Count + columns - 1) / columns;
+        var rows = (shownSettings.Count + columns - 1) / columns;
         var padding = Dp(6);
         var room = Math.Max(ShownKeys.Height, RowHeight) - (2 * padding);
         var lineHeight = Math.Min(Dp(52 + 12), room / rows);
         settingsRows.SetPadding(padding, padding, padding, padding);
         var wordsSp = SettingWordsSp(columns, padding);
         LinearLayout? line = null;
-        for (var i = 0; i < settings.Count; i++)
+        for (var i = 0; i < shownSettings.Count; i++)
         {
             if (i % columns == 0)
             {
@@ -1133,7 +1309,7 @@ public sealed class KeyPanel
                 settingsRows.AddView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, lineHeight));
             }
 
-            line!.AddView(SettingTile(settings[i], wordsSp), TileMargins());
+            line!.AddView(SettingTile(shownSettings[i], wordsSp), TileMargins());
         }
 
         LinearLayout.LayoutParams TileMargins()
@@ -1153,15 +1329,15 @@ public sealed class KeyPanel
     private int SettingWordsSp(int columns, int padding)
     {
         // Each tile's own room: a full row's share, or the last row's, whose few tiles share it all.
-        var full = settings.Count - (settings.Count % columns);
-        var last = settings.Count - full;
-        var rooms = settings.Select((_, i) => WordsRoom(i < full ? columns : last)).ToArray();
+        var full = shownSettings.Count - (shownSettings.Count % columns);
+        var last = shownSettings.Count - full;
+        var rooms = shownSettings.Select((_, i) => WordsRoom(i < full ? columns : last)).ToArray();
         var paint = new Android.Text.TextPaint(PaintFlags.AntiAlias);
         var size = (int)MenuTextSp;
         for (; size > SmallestSettingSp; size--)
         {
             paint.TextSize = TypedValue.ApplyDimension(ComplexUnitType.Sp, size, context.Resources!.DisplayMetrics);
-            if (settings.Select((setting, i) => paint.MeasureText(setting.Label) <= rooms[i]).All(fits => fits))
+            if (shownSettings.Select((setting, i) => paint.MeasureText(setting.Label) <= rooms[i]).All(fits => fits))
             {
                 break;
             }
@@ -2887,10 +3063,14 @@ public sealed class KeyPanel
         // The title bar as tall as the keys make it, between its least
         // height, still enough to hold and move the window by, and its usual
         // one: a keyboard made small keeps a title bar near its size.
+        // Gboard's toolbar keeps its height whatever the keys' size, so its
+        // words are always read.
         var barDp = copiedInTitleBar ? ChipBarDp : TitleBarDp;
-        foreach (var bar in new View[] { titleBar, closeBar, chipBar })
+        foreach (var bar in new View[] { titleBar, closeBar, chipBar, toolbar, menuBar })
         {
-            bar.LayoutParameters!.Height = Dp(Math.Clamp(barDp * scale, LeastTitleBarDp, barDp));
+            bar.LayoutParameters!.Height = copiedInTitleBar
+                ? Dp(ToolbarDp)
+                : Dp(Math.Clamp(barDp * scale, LeastTitleBarDp, barDp));
             bar.RequestLayout();
         }
 
