@@ -93,6 +93,8 @@ a window that does.
 | [ScanCodes.cs](ScanCodes.cs) | The scan code a hardware keyboard sends with each key, which remote desktop apps go by |
 | [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
 | [MainActivity.cs](MainActivity.cs) | The app's one screen: what it does, whether it is on, the way to Settings |
+| [AdbGrant.cs](AdbGrant.cs) | The app turned on over the device's own Wireless debugging: the pairing code taken in a notification, the ADB commands run, no computer |
+| [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
 
 ## Using it
 
@@ -223,19 +225,24 @@ Then on the phone, for the popup:
    then **⋮ → Allow restricted settings**, and turn it on again.
 
 Where Settings has no such menu (INAIR's pod), or to have KeyPlus turn
-itself on, run these once after each new install (installing over the app
-keeps them), from a computer with `adb shell` before each, or in an ADB app
-on the device itself, such as Bugjaeger; **Copy the ADB commands** in
-KeyPlus copies them:
+itself on, choose **Turn it on with Wireless debugging**, once after each
+new install (installing over the app keeps it), with Wi-Fi on and Developer
+options turned on: it opens Wireless debugging; turn it on, tap **Pair
+device with pairing code**, then pull down the shade and type the code in
+KeyPlus's notification, without leaving Settings, which would close the
+code. KeyPlus pairs with the device's own adb, as an ADB app on it would,
+runs these two commands and turns itself on:
 
 ```
 appops set ai.berpiztu.keyplus ACCESS_RESTRICTED_SETTINGS allow
 pm grant ai.berpiztu.keyplus android.permission.WRITE_SECURE_SETTINGS
 ```
 
-Then **Turn on KeyPlus keys** turns the service on by itself, keeping the
-others that are on. `deploy.ps1` and `debug.ps1` run them too. Berpiztu
-AI Keyboard's screen has a box at its top to try the keys in.
+From then on **Turn on KeyPlus keys** turns the service on by itself,
+keeping the others that are on. The key it pairs with is made for that one
+time and never kept. A computer's `adb shell` runs the same two commands,
+and `deploy.ps1` and `debug.ps1` run them too. Berpiztu AI Keyboard's
+screen has a box at its top to try the keys in.
 
 For the keyboard, on a phone or a headset:
 
@@ -245,10 +252,11 @@ For the keyboard, on a phone or a headset:
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
    keyboard**.
 
-Where Android's choice will not take it (INAIR's pod), **Copy the ADB
-commands** copies what an ADB app on the device runs once (`ime enable`,
-`ime set` and the secure settings granted); then **Make it the keyboard in
-use** does it by itself. `deploy.ps1` and `debug.ps1` grant that too. The
+Where Android's choice will not take it (INAIR's pod), **Turn it on with
+Wireless debugging** does it over the device's own Wireless debugging, as
+for the popup above: it runs `ime enable`, `ime set` and grants the secure
+settings; then **Make it the keyboard in use** does it by itself.
+`deploy.ps1` and `debug.ps1` grant that too. The
 same screen sets where the keyboard stands, on every screen: **Pop-up** puts
 it in a window of its own over the app, or docks it again, at once; **Reset
 the keyboard**, after asking, brings it back as first installed, docked at

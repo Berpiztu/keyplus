@@ -38,37 +38,21 @@ public sealed class MainActivity : Activity
     /// <summary>
     /// Android's secure settings, where the accessibility services that are
     /// on and the keyboards are listed: no app holds it by itself, but adb
-    /// grants it, once, from a computer or from an ADB app on the device
-    /// itself (Bugjaeger), and then the app turns itself on.
+    /// grants it, once, from a computer or from the app itself over the
+    /// device's Wireless debugging (<see cref="AdbGrant"/>), and then the app
+    /// turns itself on.
     /// </summary>
     public const string WriteSecureSettings = "android.permission.WRITE_SECURE_SETTINGS";
 
+    /// <summary>Settings' Developer options scrolled to Wireless debugging, as Shizuku opens it.</summary>
+    private const string WirelessDebuggingKey = "toggle_adb_wireless";
+
+    private const int NotificationsRequest = 1;
+
 #if KEYBOARD
-    /// <summary>
-    /// What an ADB app on the device itself runs, where Android's keyboard
-    /// picker will not take Berpiztu AI Keyboard (INAIR's pod): turned on,
-    /// made the keyboard in use, and the secure settings granted so the app
-    /// does it by itself later (<see cref="UseKeyboard"/>).
-    /// </summary>
-    private string AdbCommands =>
-        $"ime enable {KeyboardId}\n" +
-        $"ime set {KeyboardId}\n" +
-        $"pm grant {PackageName} {WriteSecureSettings}";
-
     /// <summary>The keyboard as Android names it.</summary>
-    private string KeyboardId => new ComponentName(PackageName!, $"{PackageName}.KeyPlusKeyboard").FlattenToShortString()!;
-#else
-
-    /// <summary>
-    /// What an ADB app on the device itself runs, once after each new
-    /// install, so KeyPlus can turn its service on without a computer:
-    /// restricted settings allowed (Android 13 and later keep an app
-    /// installed outside a store from being an accessibility service until
-    /// they are), and the secure settings granted.
-    /// </summary>
-    private string AdbCommands =>
-        $"appops set {PackageName} ACCESS_RESTRICTED_SETTINGS allow\n" +
-        $"pm grant {PackageName} {WriteSecureSettings}";
+    internal static string KeyboardId(Context context) =>
+        new ComponentName(context.PackageName!, $"{context.PackageName}.KeyPlusKeyboard").FlattenToShortString()!;
 #endif
 
     protected override void OnCreate(Bundle? savedInstanceState)
@@ -94,14 +78,12 @@ public sealed class MainActivity : Activity
 
         content.AddView(Button("Make it the keyboard in use", UseKeyboard));
         content.AddView(Text(
-            "With the commands below run once in an ADB app on this device (Bugjaeger, for one), the button above " +
-            "makes Berpiztu AI Keyboard the keyboard in use by itself, where Android's own choice will not take it. " +
-            "Without them, turn it on in the keyboard settings, then choose it."));
-        content.AddView(Button("Copy the ADB commands", () =>
-        {
-            ((ClipboardManager)GetSystemService(ClipboardService)!).PrimaryClip = ClipData.NewPlainText("Berpiztu AI Keyboard ADB commands", AdbCommands);
-            Toast.MakeText(this, "Copied: paste them into the ADB app's shell", ToastLength.Long)!.Show();
-        }));
+            "Where Android's own choice will not take Berpiztu AI Keyboard, the button below makes it the keyboard " +
+            "in use over this device's Wireless debugging, in Developer options, with Wi-Fi on: it opens Wireless " +
+            "debugging; tap Pair device with pairing code there, then type the code in Berpiztu AI Keyboard's " +
+            "notification, without leaving Settings. From then on, the button above does it by itself. " +
+            "Without it, turn it on in the keyboard settings, then choose it."));
+        content.AddView(Button("Turn it on with Wireless debugging", PairWithWirelessDebugging));
         content.AddView(Button("Open keyboard settings", () =>
             StartActivity(new Intent(Settings.ActionInputMethodSettings))));
         content.AddView(Button("Choose the keyboard", () =>
@@ -145,16 +127,13 @@ public sealed class MainActivity : Activity
 
         content.AddView(Button("Turn on KeyPlus keys", TurnOn));
         content.AddView(Text(
-            "With the two commands below run once in an ADB app on this device (Bugjaeger, for one), " +
-            "the button above turns KeyPlus on by itself, no computer needed. Without them it opens " +
-            "Android's switch for it; if Android says the setting is restricted, open the app's info " +
-            "below, choose ⋮ at the top right, then \"Allow restricted settings\", and try again. " +
-            "A new install needs them again; installing over the app keeps them."));
-        content.AddView(Button("Copy the ADB commands", () =>
-        {
-            ((ClipboardManager)GetSystemService(ClipboardService)!).PrimaryClip = ClipData.NewPlainText("KeyPlus ADB commands", AdbCommands);
-            Toast.MakeText(this, "Copied: paste them into the ADB app's shell", ToastLength.Long)!.Show();
-        }));
+            "The button below turns KeyPlus on over this device's Wireless debugging, in Developer options, " +
+            "with Wi-Fi on, no computer needed: it opens Wireless debugging; tap Pair device with pairing code " +
+            "there, then type the code in KeyPlus's notification, without leaving Settings. From then on, the " +
+            "button above turns it on by itself. A new install needs it again; installing over the app keeps it. " +
+            "Without it, the button above opens Android's switch; if Android says the setting is restricted, " +
+            "open the app's info below, choose ⋮ at the top right, then \"Allow restricted settings\", and try again."));
+        content.AddView(Button("Turn it on with Wireless debugging", PairWithWirelessDebugging));
         content.AddView(Button("Open accessibility settings", () =>
             StartActivity(new Intent(Settings.ActionAccessibilitySettings))));
         content.AddView(Button("Open app info", () =>
@@ -192,6 +171,48 @@ public sealed class MainActivity : Activity
         KeyPlusPreferences.SetHidden(this, false);
 #endif
         ShowStatus();
+    }
+
+    /// <summary>
+    /// The app turned on over Wireless debugging (<see cref="AdbGrant"/>):
+    /// its notification takes the pairing code, so notifications are asked
+    /// for first; then Wireless debugging is opened, where the pairing starts.
+    /// </summary>
+    private void PairWithWirelessDebugging()
+    {
+        if (CheckSelfPermission(Android.Manifest.Permission.PostNotifications) != Android.Content.PM.Permission.Granted)
+        {
+            RequestPermissions([Android.Manifest.Permission.PostNotifications], NotificationsRequest);
+            return;
+        }
+
+        AdbGrant.Start(this);
+        try
+        {
+            StartActivity(new Intent(Settings.ActionApplicationDevelopmentSettings).PutExtra(":settings:fragment_args_key", WirelessDebuggingKey));
+        }
+        catch (ActivityNotFoundException)
+        {
+            Toast.MakeText(this, "Turn Developer options on first: tap Build number seven times in About phone.", ToastLength.Long)!.Show();
+        }
+    }
+
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Android.Content.PM.Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != NotificationsRequest)
+        {
+            return;
+        }
+
+        if (grantResults.Length > 0 && grantResults[0] == Android.Content.PM.Permission.Granted)
+        {
+            PairWithWirelessDebugging();
+        }
+        else
+        {
+            Toast.MakeText(this, "The pairing code is typed in a notification: allow notifications to go on.", ToastLength.Long)!.Show();
+        }
     }
 
     /// <summary>Whether KeyPlus is on, in the line under its description.</summary>
@@ -258,13 +279,14 @@ public sealed class MainActivity : Activity
             return;
         }
 
+        var keyboardId = KeyboardId(this);
         var enabled = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledInputMethods) ?? "";
-        if (!enabled.Split(':').Any(keyboard => keyboard.Split(';')[0] == KeyboardId))
+        if (!enabled.Split(':').Any(keyboard => keyboard.Split(';')[0] == keyboardId))
         {
-            Settings.Secure.PutString(ContentResolver, Settings.Secure.EnabledInputMethods, enabled.Length == 0 ? KeyboardId : $"{enabled}:{KeyboardId}");
+            Settings.Secure.PutString(ContentResolver, Settings.Secure.EnabledInputMethods, enabled.Length == 0 ? keyboardId : $"{enabled}:{keyboardId}");
         }
 
-        Settings.Secure.PutString(ContentResolver, Settings.Secure.DefaultInputMethod, KeyboardId);
+        Settings.Secure.PutString(ContentResolver, Settings.Secure.DefaultInputMethod, keyboardId);
         ShowStatus();
     }
 
@@ -281,12 +303,11 @@ public sealed class MainActivity : Activity
     /// </summary>
     private void TurnOn()
     {
-        var service = new ComponentName(PackageName!, $"{PackageName}.KeyPlusService").FlattenToShortString()!;
         if (CheckSelfPermission(WriteSecureSettings) != Android.Content.PM.Permission.Granted)
         {
             try
             {
-                StartActivity(new Intent(AccessibilityDetailsSettings).PutExtra(Intent.ExtraComponentName, service));
+                StartActivity(new Intent(AccessibilityDetailsSettings).PutExtra(Intent.ExtraComponentName, ServiceId(this)));
             }
             catch (ActivityNotFoundException)
             {
@@ -296,16 +317,31 @@ public sealed class MainActivity : Activity
             return;
         }
 
-        var listed = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledAccessibilityServices) ?? "";
-        var others = listed.Split(':', StringSplitOptions.RemoveEmptyEntries).Where(name => !name.StartsWith($"{PackageName}/", StringComparison.Ordinal));
-        Settings.Secure.PutString(ContentResolver, Settings.Secure.EnabledAccessibilityServices, string.Join(':', others.Append(service)));
-        Settings.Secure.PutInt(ContentResolver, Settings.Secure.AccessibilityEnabled, 1);
+        TurnOnService(this);
         status!.PostDelayed(ShowStatus, 2000);
         if (!IsServiceOn())
         {
             status.Text = "Turning KeyPlus on…";
         }
     }
+
+    /// <summary>
+    /// The KeyPlus keys service written into the secure settings as on, the
+    /// services already on kept: for an app that may write them
+    /// (<see cref="WriteSecureSettings"/>), this screen or <see cref="AdbGrant"/>.
+    /// </summary>
+    internal static void TurnOnService(Context context)
+    {
+        var resolver = context.ContentResolver;
+        var listed = Settings.Secure.GetString(resolver, Settings.Secure.EnabledAccessibilityServices) ?? "";
+        var others = listed.Split(':', StringSplitOptions.RemoveEmptyEntries).Where(name => !name.StartsWith($"{context.PackageName}/", StringComparison.Ordinal));
+        Settings.Secure.PutString(resolver, Settings.Secure.EnabledAccessibilityServices, string.Join(':', others.Append(ServiceId(context))));
+        Settings.Secure.PutInt(resolver, Settings.Secure.AccessibilityEnabled, 1);
+    }
+
+    /// <summary>The KeyPlus keys service as Android names it.</summary>
+    private static string ServiceId(Context context) =>
+        new ComponentName(context.PackageName!, $"{context.PackageName}.KeyPlusService").FlattenToShortString()!;
 
     /// <summary>Android's page for one accessibility service, with its switch (Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS, Android 13), which .NET does not name.</summary>
     private const string AccessibilityDetailsSettings = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";

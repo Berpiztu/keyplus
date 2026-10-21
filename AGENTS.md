@@ -104,6 +104,9 @@ Default section order:
   - Keyboard only: `KeyPlusKeyboard.cs`, `KeyboardFrame.cs`, `ClipboardImages.cs`, `ScreenshotWatcher.cs`, `Resources/xml/keyplus_keyboard.xml`; the Keyboard build defines `KEYBOARD`
   - Everything else is shared; a new product-specific file joins the csproj's lists
 - Each product builds into `bin/<Product>/<Configuration>/` and `obj/<Product>/<Configuration>/`
+- Turning on without a computer: `AdbGrant.cs` (a short foreground service, both products) takes the Wireless debugging pairing code in a notification and runs the product's ADB commands through `AdbShell.java` (Java, `AndroidJavaSource` with `Bind="false"`, called from C# by JNI); the key it pairs with is made per run and never stored
+- Java libraries come as `AndroidMavenLibrary` items with `Bind="false"`: libadb-android and spake2-android from JitPack, Bouncy Castle and Conscrypt from Maven Central; each version is checked for known vulnerabilities (OSV) before it is set, Bouncy Castle is held above the vulnerable one libadb asks for, and `THIRD-PARTY-NOTICES.md` lists them with their licences and is updated with them
+- security-watch's inventory reads NuGet packages only, so it does not see the Java libraries
 - Each product's app label is `MainActivity.AppLabel`; `AndroidManifest.xml` holds only the shared application attributes
 - Versions: the csproj's `ApplicationDisplayVersion` and `ApplicationVersion` (versionCode, 1.0.41 is 100041000) are the last release's, raised only by `deploy-release.ps1`; local builds count a fourth part in `private/version.props`
 - Signing: one key for every APK, Debug included: `KEYPLUS_KEYSTORE` and `KEYPLUS_KEYSTORE_PASS`, else `private/android.keystore` and `private/android.keystore.pass`; on GitHub the secrets `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASS`
@@ -151,4 +154,5 @@ Root-owned paths without their own AGENTS.md:
 | `Resources/` | Icon (`drawable/`), strings (`values/`), the accessibility service and keyboard descriptors (`xml/`) |
 | `*.ps1`, `packaging/` | Build, deploy, enable and release scripts |
 | `.github/workflows/release.yml` | Release build and publishing |
-| `README.md`, `rules.md`, `LICENSE` | User and build guide, owner's rules, license |
+| `AdbShell.java` | The Java ADB client over Wireless debugging, on libadb-android |
+| `README.md`, `rules.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` | User and build guide, owner's rules, license, the bundled libraries' licences |
