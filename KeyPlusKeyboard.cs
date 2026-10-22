@@ -279,6 +279,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // Words swiped over the letters, as Gboard's (FUTO Swipe).
             panel.Swiping = SwipeOn();
             panel.TextBeforeCaret = () => CurrentInputConnection?.GetTextBeforeCursorFormatted(1, 0)?.ToString();
+            panel.ReplaceBeforeCaret = (length, text) =>
+            {
+                if (CurrentInputConnection is not { } field)
+                {
+                    return;
+                }
+
+                field.BeginBatchEdit();
+                field.DeleteSurroundingText(length, 0);
+                field.CommitText(text, 1);
+                field.EndBatchEdit();
+            };
             panel.LargeGrips = true;
             // A long press, on the bar's buttons, its free room or between the
             // keys, moves the keyboard (docked, up and down); a corner's grip

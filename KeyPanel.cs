@@ -477,6 +477,14 @@ public sealed class KeyPanel
     /// <summary>The text just before the caret, to tell whether a swiped word needs a space before it.</summary>
     public Func<string?>? TextBeforeCaret { get; set; }
 
+    /// <summary>
+    /// The text right before the caret, so many characters, replaced with
+    /// another in one edit of the field: ⌫ keys and the text typed after
+    /// them reach the field out of order (the text first), so the keys took
+    /// the new word away. None, ⌫ keys then the text.
+    /// </summary>
+    public Action<int, string>? ReplaceBeforeCaret { get; set; }
+
     /// <summary>A finger on a letter while swiping is on: its points on the screen and times, and whether it left the letter's touch.</summary>
     private sealed class SwipeTrace(PanelKey key, long start)
     {
@@ -3885,15 +3893,22 @@ public sealed class KeyPanel
             return;
         }
 
-        foreach (var _ in typed)
-        {
-            Send(Keycode.Del, MetaKeyStates.None);
-        }
-
         var old = typed.Trim();
         var capital = old.Length > 0 && char.IsUpper(old[0]);
         var text = (typed.StartsWith(' ') ? " " : "") + (capital ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..] : word);
-        Type(text);
+        if (ReplaceBeforeCaret is { } replace)
+        {
+            replace(typed.Length, text);
+        }
+        else
+        {
+            foreach (var _ in typed)
+            {
+                Send(Keycode.Del, MetaKeyStates.None);
+            }
+
+            Type(text);
+        }
 
         // Taken, as Gboard takes it: the words gone from the toolbar; the next word still starts with its space.
         swipedText = text;
