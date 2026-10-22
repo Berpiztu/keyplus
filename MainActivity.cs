@@ -284,26 +284,26 @@ public sealed class MainActivity : Activity
             new(GetString(Resource.String.wireless_debugging), GetString(Resource.String.wireless_debugging_summary), Resource.Drawable.ic_settings_adb, PairWithWirelessDebugging),
         ],
         [
-            new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage())),
-            new(GetString(Resource.String.preferences), Icon: Resource.Drawable.ic_settings_tune, Tapped: () => settings!.Open(PreferencesPage())),
-            new(GetString(Resource.String.theme), Icon: Resource.Drawable.ic_grid_theme, Tapped: () => settings!.Open(ThemePage())),
+            new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage()), Opens: true),
+            new(GetString(Resource.String.preferences), Icon: Resource.Drawable.ic_settings_tune, Tapped: () => settings!.Open(PreferencesPage()), Opens: true),
+            new(GetString(Resource.String.theme), Icon: Resource.Drawable.ic_grid_theme, Tapped: () => settings!.Open(ThemePage()), Opens: true),
         ],
         [
             NotMadeRow(Resource.String.corrections, Resource.Drawable.ic_settings_spellcheck),
-            new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage())),
+            new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage()), Opens: true),
             NotMadeRow(Resource.String.voice_typing, Resource.Drawable.ic_tool_mic),
             NotMadeRow(Resource.String.write_fields, Resource.Drawable.ic_settings_stylus),
             NotMadeRow(Resource.String.emoji_settings, Resource.Drawable.ic_key_emoji),
         ],
         [
-            new(GetString(Resource.String.clipboard), Icon: Resource.Drawable.ic_clipboard, Tapped: () => settings!.Open(ClipboardPage())),
+            new(GetString(Resource.String.clipboard), Icon: Resource.Drawable.ic_clipboard, Tapped: () => settings!.Open(ClipboardPage()), Opens: true),
             NotMadeRow(Resource.String.dictionary, Resource.Drawable.ic_settings_dictionary),
-            new(GetString(Resource.String.designs), Icon: Resource.Drawable.ic_settings_dashboard_customize, Tapped: () => settings!.Open(DesignsPage())),
+            new(GetString(Resource.String.designs), Icon: Resource.Drawable.ic_settings_dashboard_customize, Tapped: () => settings!.Open(DesignsPage()), Opens: true),
         ],
         [
             NotMadeRow(Resource.String.privacy, Resource.Drawable.ic_settings_shield),
             NotMadeRow(Resource.String.share, Resource.Drawable.ic_grid_share),
-            new(GetString(Resource.String.about), Icon: Resource.Drawable.ic_settings_info, Tapped: () => settings!.Open(AboutPage())),
+            new(GetString(Resource.String.about), Icon: Resource.Drawable.ic_settings_info, Tapped: () => settings!.Open(AboutPage()), Opens: true),
             NotMadeRow(Resource.String.help, Resource.Drawable.ic_settings_help),
         ],
     ]);

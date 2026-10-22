@@ -13,7 +13,7 @@ namespace Berpiztu.KeyPlus;
 /// A setting's row: its title, the line under it, its sign, and what a tap
 /// does; with a switch, whether it is on and what turning it does; one of a
 /// choice's, shown with all the others, whether it is the one chosen (a tap
-/// chooses it).
+/// chooses it); whether a tap opens a page of its own.
 /// </summary>
 public sealed record SettingsRow(
     string Title,
@@ -22,7 +22,8 @@ public sealed record SettingsRow(
     Action? Tapped = null,
     bool? On = null,
     Action<bool>? Switched = null,
-    bool? Chosen = null);
+    bool? Chosen = null,
+    bool Opens = false);
 
 /// <summary>A page of settings: its title and its rows in groups, each group a card.</summary>
 public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<SettingsRow>> Groups);
@@ -100,19 +101,22 @@ public sealed class SettingsScreen
 
     private Color Read(int color) => new(context.GetColor(color));
 
-    /// <summary>The main page shown, with a view over its list (the box to try the keys in); in a wide screen, where asked, its first row's page beside it.</summary>
+    /// <summary>
+    /// The main page shown, with a view over its list (the box to try the
+    /// keys in); in a wide screen, where asked, the page of its first row that
+    /// opens one beside it. A row that only does something (Elegir el
+    /// teclado) is never tapped for it: the list would not be laid out.
+    /// </summary>
     public void Show(SettingsPage page, View? above, bool openFirst)
     {
         main = page;
         top = above;
         opened.Clear();
-        if (openFirst && Wide && page.Groups.SelectMany(group => group).FirstOrDefault(row => row.Tapped is not null && row.On is null) is { } first)
+        Lay();
+        if (openFirst && Wide && page.Groups.SelectMany(group => group).FirstOrDefault(row => row.Opens) is { } first)
         {
             first.Tapped!();
-            return;
         }
-
-        Lay();
     }
 
     /// <summary>A page opened from the main one: in its place, or beside the list on a wide screen.</summary>
