@@ -84,11 +84,91 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Words swiped over the letters, on a phone.</summary>
     private SwipeTyping? swipeTyping;
 
+    /// <summary>Swipes read as words, where the app's settings have it on (Escritura deslizando el dedo); none, the letters only tapped.</summary>
+    private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() =>
+        KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.SwipeTypingKey, true) && swipeTyping is { } swiping ? swiping.Words : null;
+
+    /// <summary>
+    /// Whether the keyboard shows for the field: as Android decides (not
+    /// while a hardware keyboard is in), and never while the app's settings
+    /// have it off, for another keyboard in use; still the keyboard in use,
+    /// what a hardware keyboard types goes through it.
+    /// </summary>
+    public override bool OnEvaluateInputViewShown()
+    {
+        var kept = KeyPlusPreferences.Global(this);
+        return base.OnEvaluateInputViewShown()
+            && (kept.GetBoolean(KeyPlusPreferences.ShowKeyboardKey, true) || kept.GetBoolean(KeyPlusPreferences.KeyboardIconKey, true));
+    }
+
+    /// <summary>
+    /// Its field let it go (Enter, the focus elsewhere): hidden, made its ⌨
+    /// icon, or kept on screen, as the app's settings say (Al perder el foco);
+    /// hidden all the same when the user asks, with ∨ or Back.
+    /// </summary>
+    public override void HideWindow()
+    {
+        var asked = hideAsked;
+        hideAsked = false;
+        var choice = KeyPlusPreferences.Global(this).GetString(KeyPlusPreferences.FocusLostKey, KeyPlusPreferences.FocusLostHide);
+        if (!asked && choice != KeyPlusPreferences.FocusLostHide)
+        {
+            Android.Util.Log.Info("KeyPlus", $"Its field let it go: kept on screen ({choice})");
+            if (choice == KeyPlusPreferences.FocusLostIcon)
+            {
+                panel?.ShowAsIcon(true);
+                iconAsFieldLeft = true;
+            }
+
+            return;
+        }
+
+        base.HideWindow();
+    }
+
+    /// <summary>The keyboard became its icon as its field let it go: the next field opens it whole again.</summary>
+    private bool iconAsFieldLeft;
+
+    /// <summary>The user asked the keyboard to hide (∨, Back), which it does even while it stays on screen as its field lets it go.</summary>
+    private bool hideAsked;
+
+    public override bool OnKeyDown(Keycode keyCode, KeyEvent? e)
+    {
+        if (keyCode == Keycode.Back && IsInputViewShown)
+        {
+            hideAsked = true;
+        }
+
+        return base.OnKeyDown(keyCode, e);
+    }
+
     /// <summary>The keyboard opening: the screenshots watched, if the user has let it read the photos since.</summary>
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
         panel?.FitLabels();
+        if (panel is not null && !OnHeadset)
+        {
+            panel.ReadSettings();
+            panel.Swiping = SwipeOn();
+
+            // Not shown, for another keyboard in use: its ⌨ icon in its place, which a tap opens. Made its
+            // icon as the last field let it go, whole again for this one.
+            if (!KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.ShowKeyboardKey, true))
+            {
+                panel.ShowAsIcon(true);
+            }
+            else if (iconAsFieldLeft)
+            {
+                panel.ShowAsIcon(false);
+            }
+
+            iconAsFieldLeft = false;
+
+            // The caret's place on the screen, now and as it moves, for a keyboard in a window to keep clear of it.
+            CurrentInputConnection?.RequestCursorUpdates((int)(CursorUpdate.Immediate | CursorUpdate.Monitor));
+        }
+
         screenshots?.Start();
     }
 
@@ -194,7 +274,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.CopiedInTitleBar = true;
 
             // Words swiped over the letters, as Gboard's (FUTO Swipe).
-            panel.Swiping = swipeTyping is { } swiping ? swiping.Words : null;
+            panel.Swiping = SwipeOn();
             panel.TextBeforeCaret = () => CurrentInputConnection?.GetTextBeforeCursorFormatted(1, 0)?.ToString();
             panel.LargeGrips = true;
             // A long press, on the bar's buttons, its free room or between the
@@ -210,6 +290,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 dy);
             frame = new KeyboardFrame(this);
             panel.ResizeRequested += () => frame.Show(resizing: true, sides: true);
+            panel.HideRequested += () =>
+            {
+                hideAsked = true;
+                RequestHideSelf(0);
+            };
+            panel.ResetSizeRequested += ResetSize;
             frame.Dragged += Adjust;
             frame.ResetRequested += ResetSize;
             frame.DoneRequested += frame.Hide;
@@ -292,6 +378,85 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Android's keyboard picker, to change for another keyboard.</summary>
     private void ShowKeyboardPicker() => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker();
 
+    /// <summary>
+    /// A drag of the whole keyboard ended, docking and undocking by dragging
+    /// being on: floating, its bottom within <see cref="DockReachDp"/> of the
+    /// room's, it docks; docked, raised more than half its height, it floats
+    /// where it was let go, its lift as before the drag.
+    /// </summary>
+    private void DockOrFloat(int lift, int liftBefore)
+    {
+        if (placed is null || box is null)
+        {
+            return;
+        }
+
+        var room = Room();
+        if (placed.Floating)
+        {
+            if (placed.Y + box.Height >= room.Height - Dp(DockReachDp))
+            {
+                SetWindowed(false);
+            }
+
+            return;
+        }
+
+        if (lift - liftBefore > box.Height / 2)
+        {
+            (placed.Width, placed.X) = (box.Width, box.Left);
+            placed.Y = room.Height - room.Below - lift - box.Height;
+            placed.Lift = liftBefore;
+            SetWindowed(true);
+        }
+    }
+
+    /// <summary>
+    /// The caret moved, or the field: a keyboard in a window that covers it,
+    /// keeping clear of the caret being on, moves above it where there is
+    /// room, else below it, <see cref="CaretGapDp"/> away. Where it stood is
+    /// kept, as after a drag: it stays clear of the text from then on.
+    /// </summary>
+    public override void OnUpdateCursorAnchorInfo(CursorAnchorInfo? cursorAnchorInfo)
+    {
+        base.OnUpdateCursorAnchorInfo(cursorAnchorInfo);
+        if (cursorAnchorInfo is null || placed is not { Floating: true } || box is null || container is null || box.Height == 0 || OnHeadset
+            || !KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.AvoidCaretKey, true)
+            || float.IsNaN(cursorAnchorInfo.InsertionMarkerTop))
+        {
+            return;
+        }
+
+        // The caret's top and bottom, from the field's own place to the screen's.
+        float[] caret = [cursorAnchorInfo.InsertionMarkerHorizontal, cursorAnchorInfo.InsertionMarkerTop, cursorAnchorInfo.InsertionMarkerHorizontal, cursorAnchorInfo.InsertionMarkerBottom];
+        cursorAnchorInfo.Matrix?.MapPoints(caret);
+        // Both on the room's terms, from the keyboard's window's top.
+        var origin = new int[2];
+        container!.GetLocationOnScreen(origin);
+        var at = new int[2];
+        box.GetLocationOnScreen(at);
+        var room = Room();
+        var (caretTop, caretBottom) = (caret[1] - origin[1], caret[3] - origin[1]);
+        var top = at[1] - origin[1];
+        var covered = caretBottom > top && caretTop < top + box.Height && caret[0] >= at[0] && caret[0] <= at[0] + box.Width;
+        if (!covered)
+        {
+            return;
+        }
+
+        var gap = Dp(CaretGapDp);
+        var above = (int)caretTop - gap - box.Height;
+        placed.Y = above >= 0 ? above : Math.Min((int)caretBottom + gap, room.Height - box.Height);
+        placed.Save();
+        Place();
+    }
+
+    /// <summary>The room a keyboard in a window keeps between itself and the caret it moved away from, in dp.</summary>
+    private const int CaretGapDp = 16;
+
+    /// <summary>How near the room's bottom a floating keyboard is let go to dock, in dp.</summary>
+    private const int DockReachDp = 24;
+
     /// <summary>Modo ventana or Modo normal chosen.</summary>
     private void SetWindowed(bool windowed)
     {
@@ -308,18 +473,21 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>
     /// The room the keyboard stands in: the screen's width, and its height
-    /// less the status and navigation bars; and the height the keys keep
-    /// clear of under them (Below): the keyboard's own navigation bar, where
-    /// Android draws ∨ and ⌨ (navigation_bar_frame_height, 48 dp), taller
-    /// than the gesture handle's inset, as Gboard keeps clear of it.
+    /// less the status and navigation bars; the navigation bar's inset
+    /// (Bar), which a keyboard's window reaches under; and the height docked
+    /// keys keep clear of under them (Below): the keyboard's own navigation
+    /// bar, where Android draws ∨ and ⌨ (navigation_bar_frame_height, 48 dp),
+    /// taller than the gesture handle's inset, as Gboard keeps clear of it. A
+    /// window is held to the room and the bar alone: held taller, Android cut
+    /// it and the keys were laid out again and again.
     /// </summary>
-    private (int Width, int Height, int Below) Room()
+    private (int Width, int Height, int Below, int Bar) Room()
     {
         var metrics = GetSystemService(WindowService).JavaCast<IWindowManager>()!.CurrentWindowMetrics;
         var bars = metrics.WindowInsets.GetInsetsIgnoringVisibility(WindowInsets.Type.SystemBars());
         var frame = Resources!.GetIdentifier("navigation_bar_frame_height", "dimen", "android");
         var below = Math.Max(bars.Bottom, frame != 0 ? Resources.GetDimensionPixelSize(frame) : 0);
-        return (metrics.Bounds.Width(), metrics.Bounds.Height() - bars.Top - bars.Bottom, below);
+        return (metrics.Bounds.Width(), metrics.Bounds.Height() - bars.Top - bars.Bottom, below, bars.Bottom);
     }
 
     /// <summary>
@@ -342,10 +510,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (placed.Floating)
         {
             // The first time in a window, from ⚙ or from the app's Pop-up: three
-            // quarters of the screen wide, in the middle, at the bottom.
+            // quarters of the screen wide, in the middle, at the bottom; the
+            // standard keyboard as wide as Gboard's floating one, 52 px of 1080
+            // (20 dp) clear of each side.
             if (placed.Width == 0)
             {
-                placed.Width = room.Width * 3 / 4;
+                placed.Width = FloatingWidth(room.Width);
                 placed.X = (room.Width - placed.Width) / 2;
                 placed.Y = room.Height;
             }
@@ -370,7 +540,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
                     TopMargin = top + box.Height + gap,
                 };
             under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, GravityFlags.Bottom);
-            Hold(room.Below, room.Height + room.Below);
+            Hold(room.Bar, room.Height + room.Bar);
+            panel.InWindow = true;
         }
         else
         {
@@ -392,6 +563,20 @@ public sealed class KeyPlusKeyboard : InputMethodService
             };
             under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, raised + box.Height, GravityFlags.Bottom);
             Hold(0, 0);
+            panel.InWindow = false;
+        }
+
+        // Its icon alone (not shown, for another keyboard in use): where the user dragged it, at first at
+        // the bottom right; nothing under it.
+        if (panel.ShowsIcon)
+        {
+            var (right, bottom) = IconPlace();
+            keys = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom | GravityFlags.Right)
+            {
+                RightMargin = Math.Clamp(right, 0, Math.Max(0, room.Width - box.Width)),
+                BottomMargin = room.Below + Math.Clamp(bottom, 0, Math.Max(0, room.Height - box.Height)),
+            };
+            under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, GravityFlags.Bottom);
         }
 
         Lay(box, keys);
@@ -400,23 +585,49 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>
-    /// The keyboard's height: as laid out, or, not laid out yet (made in a
-    /// window from the start), as it will be at that width. Placed by a
-    /// height of 0, it stood on the room's bottom edge, was given no room,
-    /// stayed 0 tall, and was never seen.
+    /// The keyboard's whole height at that width, as it wants it, measured
+    /// with no room limit: as laid out it is no taller than the room left
+    /// under where it stands, so a window kept by it never rose enough for
+    /// its bottom (the floating bar) to show; and, not laid out yet, a height
+    /// of 0 left it on the room's bottom edge, never seen.
     /// </summary>
     private int Tall(int width)
     {
-        if (box!.Height > 0)
-        {
-            return box.Height;
-        }
-
-        box.Measure(
+        box!.Measure(
             View.MeasureSpec.MakeMeasureSpec(width, MeasureSpecMode.Exactly),
             View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
         return box.MeasuredHeight;
     }
+
+    /// <summary>A window's usual width: the standard keyboard's as Gboard's floating one, the others three quarters of the room.</summary>
+    private int FloatingWidth(int room) =>
+        panel?.Mode == PanelPlacement.StandardMode ? room - (2 * Dp(FloatingMarginDp)) : room * 3 / 4;
+
+    /// <summary>The icon's room from the screen's right and from the keyboard's navigation bar the first time, in dp.</summary>
+    private const int IconMarginDp = 16;
+
+    /// <summary>Where the icon stands, kept for the screen: from the room's right and bottom, in pixels.</summary>
+    private const string IconRightPreference = "iconRight";
+    private const string IconBottomPreference = "iconBottom";
+
+    /// <summary>Where the icon stood when a drag of it started.</summary>
+    private (int Right, int Bottom) iconStart;
+
+    private (int Right, int Bottom) IconPlace() =>
+        (watched?.GetInt(IconRightPreference, Dp(IconMarginDp)) ?? Dp(IconMarginDp), watched?.GetInt(IconBottomPreference, Dp(IconMarginDp)) ?? Dp(IconMarginDp));
+
+    private void KeepIconPlace(int right, int bottom)
+    {
+        var room = Room();
+        var size = box?.Width ?? 0;
+        watched?.Edit()!
+            .PutInt(IconRightPreference, Math.Clamp(right, 0, Math.Max(0, room.Width - size)))!
+            .PutInt(IconBottomPreference, Math.Clamp(bottom, 0, Math.Max(0, room.Height - size)))!
+            .Apply();
+    }
+
+    /// <summary>The standard keyboard's room on each side, floating the first time, in dp: Gboard's.</summary>
+    private const float FloatingMarginDp = 52 / 2.625f;
 
     /// <summary>The room above a keyboard in a window that Editar's card takes, in dp; with less, the card stands under it.</summary>
     private const int EditorRoomDp = 140;
@@ -475,13 +686,14 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         var at = new int[2];
         container.GetLocationInWindow(at);
-        var top = placed.Floating ? at[1] + container.Height : at[1] + box.Top;
+        // In a window, or its icon alone, the app keeps all of its room.
+        var top = placed.Floating || panel.ShowsIcon ? at[1] + container.Height : at[1] + box.Top;
         outInsets.ContentTopInsets = top;
         outInsets.VisibleTopInsets = top;
         outInsets.TouchableInsets = TouchableInsets.Region;
         var region = outInsets.TouchableRegion!;
         region.Set(at[0] + box.Left, at[1] + box.Top, at[0] + box.Right, at[1] + box.Bottom);
-        if (!placed.Floating && ground is not null)
+        if (!placed.Floating && !panel.ShowsIcon && ground is not null)
         {
             // Docked, the ground beside and under the keys is the keyboard's too.
             region.InvokeOp(at[0] + ground.Left, at[1] + ground.Top, at[0] + ground.Right, at[1] + ground.Bottom, Android.Graphics.Region.Op.Union!);
@@ -515,7 +727,17 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
 
         var start = adjustStart;
-        if (part.HasFlag(KeyboardFrame.Part.Whole))
+        if (part.HasFlag(KeyboardFrame.Part.Whole) && panel.ShowsIcon)
+        {
+            if (drag == KeyPanel.Drag.Start)
+            {
+                iconStart = IconPlace();
+            }
+
+            // From the right and the bottom: dragged right or down, nearer them.
+            KeepIconPlace(iconStart.Right - (int)dx, iconStart.Bottom - (int)dy);
+        }
+        else if (part.HasFlag(KeyboardFrame.Part.Whole))
         {
             if (placed.Floating)
             {
@@ -554,6 +776,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (drag == KeyPanel.Drag.End)
         {
             placed.Save();
+            if (part == KeyboardFrame.Part.Whole && !panel.ShowsIcon && KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.DockByDragKey, false))
+            {
+                DockOrFloat(start.Lift - (int)dy, start.Lift);
+            }
         }
 
         void Resize(float height)
@@ -588,7 +814,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
         panel.Scale = 1f;
         if (placed.Floating)
         {
-            placed.Width = Room().Width * 3 / 4;
+            placed.Width = FloatingWidth(Room().Width);
+            placed.X = (Room().Width - placed.Width) / 2;
         }
         else
         {

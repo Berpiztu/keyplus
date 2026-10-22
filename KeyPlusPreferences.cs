@@ -47,6 +47,40 @@ public static class KeyPlusPreferences
     }
 
     /// <summary>What holds for the whole phone.</summary>
+    /// <summary>
+    /// The keyboard's settings, one for every screen, as the app's settings
+    /// set them (Preferencias, Escritura deslizando el dedo): their keys and
+    /// Gboard's defaults.
+    /// </summary>
+    public const string VibrateKey = "vibrate";
+    public const string LongPressKey = "longPressMs";
+    public const int LongPressDefault = 300;
+    public const string SwipeTypingKey = "swipeTyping";
+    public const string SwipeTrailKey = "swipeTrail";
+
+    /// <summary>Dock the floating keyboard dragged to the bottom, float the docked one dragged up (Gboard docks; the owner wants both or neither): off unless turned on.</summary>
+    public const string DockByDragKey = "dockByDrag";
+
+    /// <summary>A keyboard in a window moves out of the way of the caret it covers (the owner's, thought for Windows too): on unless turned off.</summary>
+    public const string AvoidCaretKey = "avoidCaret";
+
+    /// <summary>The keyboard shows when a field is typed in: on unless turned off, for when another keyboard is in use and one covered the other.</summary>
+    public const string ShowKeyboardKey = "showKeyboard";
+
+    /// <summary>With the keyboard not shown, its ⌨ icon shows in its place, which opens it when tapped: on unless turned off, then nothing shows.</summary>
+    public const string KeyboardIconKey = "keyboardIcon";
+
+    /// <summary>
+    /// What the keyboard does as its field lets it go (Enter, the focus
+    /// elsewhere): hides (Android's, by default), becomes its ⌨ icon, or
+    /// stays on screen; ∨ and Back hide it all the same.
+    /// </summary>
+    public const string FocusLostKey = "focusLost";
+    public const string FocusLostHide = "hide";
+    public const string FocusLostIcon = "icon";
+    public const string FocusLostStay = "stay";
+    public static readonly string[] FocusLostChoices = [FocusLostHide, FocusLostIcon, FocusLostStay];
+
     public static ISharedPreferences Global(Context context) =>
         context.GetSharedPreferences(PhoneName, FileCreationMode.Private)!;
 

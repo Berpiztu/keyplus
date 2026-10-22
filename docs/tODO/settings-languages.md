@@ -102,6 +102,13 @@ tell it apart come later. In this order.
   - Diccionario: Diccionario personal.
   - Información: licences, FUTO Swipe's notice.
 
+## 2b. Pop-up keyboard out of the way
+
+- A setting (Preferencias): while the keyboard is a pop-up (in a window),
+  it moves out of the way when it stands over the field being typed in
+  (the caret's place, which Android gives the keyboard). Thought for Windows
+  too.
+
 ## 3. Languages
 
 - Each language has its own layout: Spanish with ñ, ç and the accents;

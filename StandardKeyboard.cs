@@ -40,6 +40,15 @@ public sealed class StandardColors(Context context)
 
     public Color Divider { get; } = Read(context, Android.Resource.Color.SystemNeutral2200);
 
+    /// <summary>The floating keyboard's outline while resized, its corners and, at 80 %, its edge.</summary>
+    public Color Accent { get; } = Read(context, Android.Resource.Color.SystemAccent1600);
+
+    /// <summary>The floating keyboard's Reset while resized: Gboard's 223 grey, the palette's nearest tone.</summary>
+    public Color ResetGround { get; } = Read(context, Android.Resource.Color.SystemNeutral1100);
+
+    /// <summary>The floating keyboard's handle: Gboard's 168 grey, the palette's nearest tone.</summary>
+    public Color Handle { get; } = Read(context, Android.Resource.Color.SystemNeutral1300);
+
     public Color Outline { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineLight : Android.Resource.Color.SystemNeutral1500);
 
     /// <summary>The outline at half: on the Fold, a dot not in sight 180 where the ground is 228 and the outline 132.</summary>
@@ -111,8 +120,6 @@ public sealed class StandardKeyboard : View
     private const float TrailHeadAlpha = 0.93f;
     private const float TrailTailAlpha = 0.40f;
 
-    /// <summary>Gboard's long press, 300 ms (Preferencias › Duración de la pulsación), and Shift's double tap within the same.</summary>
-    private const int LongPressMs = 300;
 
     private readonly StandardColors colors;
     private readonly Paint fill = new(PaintFlags.AntiAlias);
@@ -188,6 +195,15 @@ public sealed class StandardKeyboard : View
     }
 
     private StandardLanguage language = StandardKeys.Spanish;
+
+    /// <summary>How long a key is held for its corner's symbol, and Shift's two taps' room (Preferencias › Duración de la pulsación).</summary>
+    public int LongPressMs { get; set; } = KeyPlusPreferences.LongPressDefault;
+
+    /// <summary>Whether a key's touch is felt (Preferencias › Vibración al pulsar las teclas).</summary>
+    public bool Vibrates { get; set; } = true;
+
+    /// <summary>Whether a swipe draws its trail (Escritura deslizando el dedo › Recorrido del deslizamiento).</summary>
+    public bool ShowsTrail { get; set; } = true;
 
     /// <summary>The keys' size, 1 for Gboard's own.</summary>
     public float Scale
@@ -437,7 +453,11 @@ public sealed class StandardKeyboard : View
         var now = new Finger(pointer, hit.Key, hit.Box, x, y, time);
         now.Points.Add((x, y, time));
         finger = now;
-        PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+        if (Vibrates)
+        {
+            PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+        }
+
         if (hit.Key.Action == StandardAction.Delete)
         {
             Deleted?.Invoke();
@@ -448,7 +468,11 @@ public sealed class StandardKeyboard : View
             Hold(() =>
             {
                 now.LongPressed = true;
-                PerformHapticFeedback(FeedbackConstants.LongPress);
+                if (Vibrates)
+                {
+                    PerformHapticFeedback(FeedbackConstants.LongPress);
+                }
+
                 Invalidate();
             }, 0, LongPressMs);
         }
@@ -506,6 +530,11 @@ public sealed class StandardKeyboard : View
 
     private void ShowTrail(Finger now)
     {
+        if (!ShowsTrail)
+        {
+            return;
+        }
+
         trail = new SwipeTrail(Dp(TrailDp), colors.Trail, 0, 0, Dp(TrailTailDp), TrailLife, TrailHeadAlpha, TrailTailAlpha);
         trail.SetBounds(0, 0, Width, Height);
         foreach (var (x, y, time) in now.Points)

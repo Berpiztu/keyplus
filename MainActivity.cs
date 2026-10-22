@@ -15,12 +15,14 @@ using FeedbackFlags = Android.AccessibilityServices.FeedbackFlags;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The app's one screen: a box to try the keys in (the keyboard's), what KeyPlus does,
-/// whether it is on, and the places in Settings that turn it on: for the
-/// popup the accessibility service
-/// (KeyPlusService), and opening the app brings the popup back on screen
-/// after ✕ closed it; for the keyboard, the keyboard (KeyPlusKeyboard). The
-/// keys themselves live there, not here.
+/// The app's one screen. The popup's: what KeyPlus does, whether it is on,
+/// and the places in Settings that turn its accessibility service
+/// (KeyPlusService) on; opening the app brings the popup back on screen
+/// after ✕ closed it. The keyboard's, as Gboard's: while the keyboard is not
+/// on or not the one in use, its two steps (turn it on, choose it), each
+/// marked done as Android has it; then its settings (SettingsScreen),
+/// a box to try the keys in over them. The keys themselves live in their
+/// services, not here.
 /// </summary>
 [Activity(Label = AppLabel, MainLauncher = true, Exported = true,
     Theme = "@android:style/Theme.DeviceDefault.DayNight")]
@@ -33,7 +35,9 @@ public sealed class MainActivity : Activity
     public const string AppLabel = "@string/app_name";
 #endif
 
+#if !KEYBOARD
     private TextView? status;
+#endif
 
     /// <summary>
     /// Android's secure settings, where the accessibility services that are
@@ -60,64 +64,22 @@ public sealed class MainActivity : Activity
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
+#if KEYBOARD
+        // Gboard's settings have their title in the page, not in a bar.
+        ActionBar?.Hide();
+        settings = new SettingsScreen(this);
+        tryBox = TryBox();
+        OnBackInvokedDispatcher.RegisterOnBackInvokedCallback(0, new BackCallback(this));
 
+        // Android 15 lays the app out from the screen's edges, under its bars
+        // and the keyboard: the page keeps clear of them.
+        settings.View.SetOnApplyWindowInsetsListener(new Insets(0));
+        SetContentView(settings.View);
+#else
         var padding = (int)(24 * Resources!.DisplayMetrics!.Density);
         var content = new LinearLayout(this) { Orientation = Orientation.Vertical };
         content.SetPadding(padding, 0, padding, padding);
 
-#if KEYBOARD
-        content.AddView(Text(
-            "Berpiztu AI Keyboard is a keyboard with Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End and the page keys, " +
-            "and ABC in its title bar for a whole Spanish keyboard, sent to the field you are typing in: " +
-            "a terminal, an SSH app, or a web editor such as vscode.dev in the browser.\n\n" +
-            "Ctrl and Alt hold for the next key: Ctrl then \"s\" is Ctrl+S. Shift stays on until pressed again. " +
-            "Keys repeat while held. Move the keyboard as the headset moves any keyboard; drag a corner up or down " +
-            "for larger or smaller keys. – minimizes it into the ⌨ icon, which a tap opens again. " +
-            "⚙ at the right of its title bar has its settings: Cambiar de teclado picks another keyboard."));
-
-        status = Text("");
-        content.AddView(status);
-
-        content.AddView(Button("Make it the keyboard in use", UseKeyboard));
-        content.AddView(Text(
-            "Where Android's own choice will not take Berpiztu AI Keyboard, the button below makes it the keyboard " +
-            "in use over this device's Wireless debugging, in Developer options, with Wi-Fi on: it opens Wireless " +
-            "debugging; tap Pair device with pairing code there, then type the code in Berpiztu AI Keyboard's " +
-            "notification, without leaving Settings. From then on, the button above does it by itself. " +
-            "Without it, turn it on in the keyboard settings, then choose it."));
-        content.AddView(Button("Turn it on with Wireless debugging", PairWithWirelessDebugging));
-        content.AddView(Button("Open keyboard settings", () =>
-            StartActivity(new Intent(Settings.ActionInputMethodSettings))));
-        content.AddView(Button("Choose the keyboard", () =>
-            ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker()));
-
-        // Where the keyboard stands, set from here too: a keyboard lost in a
-        // window too small for it (INAIR's pod) is brought back.
-        popup = new CheckBox(this) { Text = "Pop-up: the keyboard in a window of its own, over the app" };
-        popup.SetTextSize(Android.Util.ComplexUnitType.Sp, 16);
-        popup.CheckedChange += (_, e) => SetPopup(e.IsChecked);
-        var spaced = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
-        spaced.SetMargins(0, 0, 0, (int)(16 * Resources.DisplayMetrics.Density));
-        content.AddView(popup, spaced);
-        content.AddView(Button("Reset the keyboard", () => new AlertDialog.Builder(this)
-            .SetMessage("¿Teclado como recién instalado? Vuelve abajo, a todo lo ancho, con su tamaño normal.")!
-            .SetPositiveButton("Sí", (_, _) => ResetKeyboard())!
-            .SetNegativeButton("No", (_, _) => { })!
-            .Show()));
-        content.AddView(Text(
-            "Android puts no screenshot on the clipboard: it saves it among your photos. Let the keyboard " +
-            "read them, and each screenshot you take from then on joins the copied texts above the keys, to paste."));
-        content.AddView(Button("Allow screenshots", () => RequestPermissions([ScreenshotWatcher.Permission], 0)));
-
-        // FUTO Swipe's model weights license asks for this notice in sight.
-        content.AddView(Text("Swipe a word over the letters to type it: swipe typing powered by FUTO Swipe."));
-
-        content.AddView(Text(
-            "Your keyboard designs (⚙ → Diseñar), every screen's, saved to a file to keep or to send to another " +
-            "device, and taken from one. The designs a file replaces, and a Reset clears, are kept on this device first."));
-        content.AddView(Button("Export designs", ExportDesigns));
-        content.AddView(Button("Import designs", ImportDesigns));
-#else
         content.AddView(Text(
             "KeyPlus adds Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End and the page keys " +
             "above the keyboard you already use, and sends them to the field you are typing in: " +
@@ -155,8 +117,6 @@ public sealed class MainActivity : Activity
             content.AddView(Button("Open the keys' window", () => StartActivity(new Intent(this, typeof(KeyWindowActivity)))));
         }
 
-#endif
-
         // The box stays at the top, whole, while the rest scrolls under it:
         // the keyboard opening never pushes it out of sight.
         var scroll = new ScrollView(this);
@@ -166,13 +126,11 @@ public sealed class MainActivity : Activity
         // Android 15 lays the app out from the screen's edges, under its bars
         // and the keyboard: the page keeps clear of them.
         page.SetOnApplyWindowInsetsListener(new Insets(padding));
-#if KEYBOARD
-        page.AddView(TryBox());
-#endif
         var rest = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f);
         rest.SetMargins(-padding, 0, -padding, 0);
         page.AddView(scroll, rest);
         SetContentView(page);
+#endif
     }
 
     protected override void OnResume()
@@ -226,16 +184,20 @@ public sealed class MainActivity : Activity
         }
     }
 
-    /// <summary>Whether KeyPlus is on, in the line under its description.</summary>
+    /// <summary>Whether KeyPlus is on: the keyboard's steps or settings; the popup's line under its description.</summary>
     private void ShowStatus()
     {
 #if KEYBOARD
-        var here = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
-        popup!.Checked = new PanelPlacement(KeyPlusPreferences.ForScreen(this, here)).Floating;
-        status!.Text = (IsKeyboardOn()
-            ? "Berpiztu AI Keyboard is on: choose it as the keyboard to type with it."
-            : "Berpiztu AI Keyboard is off.")
-            + (ScreenshotWatcher.Allowed(this) ? " Screenshots join the copied texts." : "");
+        if (!IsKeyboardOn() || !IsKeyboardInUse())
+        {
+            settings!.Show(SetupPage(), null, openFirst: false);
+        }
+        else if (!showingSettings)
+        {
+            settings!.Show(MainPage(), tryBox, openFirst: true);
+        }
+
+        showingSettings = IsKeyboardOn() && IsKeyboardInUse();
 #else
         status!.Text = IsServiceOn()
             ? "KeyPlus is on: the ⌨ icon is on screen, and the keys appear whenever a keyboard is open."
@@ -244,8 +206,241 @@ public sealed class MainActivity : Activity
     }
 
 #if KEYBOARD
-    /// <summary>Pop-up: the keyboard in a window of its own, or docked; shown as the screen this app is on keeps it.</summary>
-    private CheckBox? popup;
+    private SettingsScreen? settings;
+    private EditText? tryBox;
+
+    /// <summary>Whether the settings show, the keyboard on and in use: shown once, not made again at each return.</summary>
+    private bool showingSettings;
+
+    /// <summary>The picker of keyboards is a dialog over this screen: its choice seen as the screen has the focus again.</summary>
+    public override void OnWindowFocusChanged(bool hasFocus)
+    {
+        base.OnWindowFocusChanged(hasFocus);
+        if (hasFocus)
+        {
+            ShowStatus();
+        }
+    }
+
+    /// <summary>Back: a settings' page closed; with none, the app left as Android leaves one.</summary>
+    private sealed class BackCallback(MainActivity activity) : Java.Lang.Object, Android.Window.IOnBackInvokedCallback
+    {
+        public void OnBackInvoked()
+        {
+            if (activity.settings?.Back() != true)
+            {
+                activity.MoveTaskToBack(true);
+            }
+        }
+    }
+
+    /// <summary>The keyboard's two steps, as Gboard's first screen: each marked done as Android has it.</summary>
+    private SettingsPage SetupPage() => new(GetString(Resource.String.setup_title),
+    [
+        [new(GetString(Resource.String.setup_turn_on), GetString(IsKeyboardOn() ? Resource.String.setup_done : Resource.String.setup_turn_on_summary), Tapped: TurnOnKeyboard)],
+        [new(GetString(Resource.String.setup_choose), GetString(IsKeyboardInUse() ? Resource.String.setup_done : Resource.String.setup_choose_summary), Tapped: ChooseKeyboard)],
+    ]);
+
+    /// <summary>
+    /// Turn it on: by the app itself where it may write the secure settings;
+    /// else a choice, Wireless debugging (no computer, once) or Android's
+    /// keyboard settings, where a device has no Wireless debugging (a pod).
+    /// </summary>
+    private void TurnOnKeyboard()
+    {
+        if (CheckSelfPermission(WriteSecureSettings) == Android.Content.PM.Permission.Granted)
+        {
+            UseKeyboard();
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.setup_how)!
+            .SetItems([GetString(Resource.String.setup_wireless), GetString(Resource.String.setup_android)], (_, chosen) =>
+            {
+                if (chosen.Which == 0)
+                {
+                    PairWithWirelessDebugging();
+                }
+                else
+                {
+                    StartActivity(new Intent(Settings.ActionInputMethodSettings));
+                }
+            })!
+            .Show();
+    }
+
+    /// <summary>Choose it: by the app itself where it may, else Android's choice of keyboard.</summary>
+    private void ChooseKeyboard() => UseKeyboard();
+
+    /// <summary>The settings, Gboard's in Gboard's order: ours where they are made, the others saying they are not yet.</summary>
+    private SettingsPage MainPage() => new(GetString(Resource.String.settings_title),
+    [
+        // The keyboard chosen, and turned on again over Wireless debugging when Android forgot the pairing.
+        [
+            new(GetString(Resource.String.choose_keyboard), Icon: Resource.Drawable.ic_grid_keyboard, Tapped: () =>
+                ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker()),
+            new(GetString(Resource.String.wireless_debugging), GetString(Resource.String.wireless_debugging_summary), Resource.Drawable.ic_settings_adb, PairWithWirelessDebugging),
+        ],
+        [
+            new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage())),
+            new(GetString(Resource.String.preferences), Icon: Resource.Drawable.ic_settings_tune, Tapped: () => settings!.Open(PreferencesPage())),
+            NotMadeRow(Resource.String.theme, Resource.Drawable.ic_grid_theme),
+        ],
+        [
+            NotMadeRow(Resource.String.corrections, Resource.Drawable.ic_settings_spellcheck),
+            new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage())),
+            NotMadeRow(Resource.String.voice_typing, Resource.Drawable.ic_tool_mic),
+            NotMadeRow(Resource.String.write_fields, Resource.Drawable.ic_settings_stylus),
+            NotMadeRow(Resource.String.emoji_settings, Resource.Drawable.ic_key_emoji),
+        ],
+        [
+            new(GetString(Resource.String.clipboard), Icon: Resource.Drawable.ic_clipboard, Tapped: () => settings!.Open(ClipboardPage())),
+            NotMadeRow(Resource.String.dictionary, Resource.Drawable.ic_settings_dictionary),
+            new(GetString(Resource.String.designs), Icon: Resource.Drawable.ic_settings_dashboard_customize, Tapped: () => settings!.Open(DesignsPage())),
+        ],
+        [
+            NotMadeRow(Resource.String.privacy, Resource.Drawable.ic_settings_shield),
+            NotMadeRow(Resource.String.share, Resource.Drawable.ic_grid_share),
+            new(GetString(Resource.String.about), Icon: Resource.Drawable.ic_settings_info, Tapped: () => settings!.Open(AboutPage())),
+            NotMadeRow(Resource.String.help, Resource.Drawable.ic_settings_help),
+        ],
+    ]);
+
+    private SettingsRow NotMadeRow(int title, int icon) =>
+        new(GetString(title), Icon: icon, Tapped: () => Toast.MakeText(this, GetString(Resource.String.not_made_yet, new Java.Lang.String(GetString(title))), ToastLength.Short)!.Show());
+
+    private SettingsPage LanguagesPage() => new(GetString(Resource.String.languages),
+    [
+        [new("Español (España)", "QWERTY (Ñ)"), new("English (US)", "QWERTY")],
+        [NotMadeRow(Resource.String.add_keyboard, Resource.Drawable.ic_settings_add)],
+    ]);
+
+    /// <summary>The keyboard's preferences: the pop-up and Reset; the touch felt and the long press's duration.</summary>
+    private SettingsPage PreferencesPage()
+    {
+        var here = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
+        var kept = KeyPlusPreferences.Global(this);
+        var longPress = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
+        var shows = kept.GetBoolean(KeyPlusPreferences.ShowKeyboardKey, true);
+        var focusLost = kept.GetString(KeyPlusPreferences.FocusLostKey, KeyPlusPreferences.FocusLostHide);
+        SettingsRow[] showing = shows
+            ? [ShowKeyboardRow(true), new(GetString(Resource.String.focus_lost)), .. KeyPlusPreferences.FocusLostChoices.Select(choice => FocusLostRow(choice, choice == focusLost))]
+            : [ShowKeyboardRow(false), Switch(Resource.String.keyboard_icon, Resource.String.keyboard_icon_summary, KeyPlusPreferences.KeyboardIconKey)];
+        return new(GetString(Resource.String.preferences),
+        [
+            showing,
+            [
+                new(GetString(Resource.String.popup), GetString(Resource.String.popup_summary), On: new PanelPlacement(KeyPlusPreferences.ForScreen(this, here)).Floating, Switched: SetPopup),
+                Switch(Resource.String.dock_by_drag, Resource.String.dock_by_drag_summary, KeyPlusPreferences.DockByDragKey, byDefault: false),
+                Switch(Resource.String.avoid_caret, Resource.String.avoid_caret_summary, KeyPlusPreferences.AvoidCaretKey),
+                new(GetString(Resource.String.reset), GetString(Resource.String.reset_summary), Tapped: () => new AlertDialog.Builder(this)
+                    .SetMessage(Resource.String.reset_ask)!
+                    .SetPositiveButton(Resource.String.yes, (_, _) => ResetKeyboard())!
+                    .SetNegativeButton(Resource.String.no, (_, _) => { })!
+                    .Show()),
+            ],
+            [
+                Switch(Resource.String.vibration, null, KeyPlusPreferences.VibrateKey),
+                new(GetString(Resource.String.long_press), GetString(Resource.String.milliseconds, longPress), Tapped: ChooseLongPress),
+            ],
+        ]);
+    }
+
+    /// <summary>Mostrar el teclado al escribir: turned, the page made again, the icon's choice under it while it is off.</summary>
+    private SettingsRow ShowKeyboardRow(bool on) =>
+        new(GetString(Resource.String.show_keyboard), GetString(Resource.String.show_keyboard_summary), On: on, Switched: turned =>
+        {
+            KeyPlusPreferences.Global(this).Edit()!.PutBoolean(KeyPlusPreferences.ShowKeyboardKey, turned)!.Apply();
+            settings!.Refresh(PreferencesPage());
+        });
+
+    /// <summary>One of Al perder el foco's three, all in sight under it, the chosen one marked; a tap chooses it.</summary>
+    private SettingsRow FocusLostRow(string choice, bool chosen) =>
+        new(GetString(FocusLostWords(choice)), Chosen: chosen, Tapped: () =>
+        {
+            KeyPlusPreferences.Global(this).Edit()!.PutString(KeyPlusPreferences.FocusLostKey, choice)!.Apply();
+            settings!.Refresh(PreferencesPage());
+        });
+
+    private static int FocusLostWords(string? choice) => choice switch
+    {
+        KeyPlusPreferences.FocusLostIcon => Resource.String.focus_lost_icon,
+        KeyPlusPreferences.FocusLostStay => Resource.String.focus_lost_stay,
+        _ => Resource.String.focus_lost_hide,
+    };
+
+    /// <summary>The long press's durations offered, Gboard's 300 ms among them.</summary>
+    private static readonly int[] LongPresses = [200, 300, 400, 500, 600, 800, 1000];
+
+    private void ChooseLongPress()
+    {
+        var kept = KeyPlusPreferences.Global(this);
+        var now = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.long_press)!
+            .SetSingleChoiceItems([.. LongPresses.Select(ms => GetString(Resource.String.milliseconds, ms))], Array.IndexOf(LongPresses, now), (sender, chosen) =>
+            {
+                kept.Edit()!.PutInt(KeyPlusPreferences.LongPressKey, LongPresses[chosen.Which])!.Apply();
+                (sender as AlertDialog)?.Dismiss();
+                settings!.Refresh(PreferencesPage());
+            })!
+            .Show();
+    }
+
+    /// <summary>A switch kept among the keyboard's settings for every screen, as it is by default until turned.</summary>
+    private SettingsRow Switch(int title, int? summary, string key, bool byDefault = true)
+    {
+        var kept = KeyPlusPreferences.Global(this);
+        return new(GetString(title), summary is { } line ? GetString(line) : null, On: kept.GetBoolean(key, byDefault),
+            Switched: on => kept.Edit()!.PutBoolean(key, on)!.Apply());
+    }
+
+    private SettingsPage GlidePage() => new(GetString(Resource.String.glide),
+    [
+        [
+            Switch(Resource.String.glide, Resource.String.glide_summary, KeyPlusPreferences.SwipeTypingKey),
+            Switch(Resource.String.glide_trail, Resource.String.glide_trail_summary, KeyPlusPreferences.SwipeTrailKey),
+        ],
+        // FUTO Swipe's model weights license asks for this notice in sight.
+        [new(GetString(Resource.String.futo))],
+    ]);
+
+    /// <summary>The clipboard: screenshots among the copied things, once the keyboard may read the photos; turned off in Android's app info.</summary>
+    private SettingsPage ClipboardPage() => new(GetString(Resource.String.clipboard),
+    [
+        [new(GetString(Resource.String.screenshots), On: ScreenshotWatcher.Allowed(this), Switched: on =>
+        {
+            if (on)
+            {
+                RequestPermissions([ScreenshotWatcher.Permission], 0);
+            }
+            else
+            {
+                StartActivity(new Intent(Settings.ActionApplicationDetailsSettings, Android.Net.Uri.Parse($"package:{PackageName}")));
+            }
+        })],
+    ]);
+
+    private SettingsPage DesignsPage() => new(GetString(Resource.String.designs),
+    [
+        [new(GetString(Resource.String.design), GetString(Resource.String.design_summary))],
+        [
+            new(GetString(Resource.String.export_designs), GetString(Resource.String.export_summary), Tapped: ExportDesigns),
+            new(GetString(Resource.String.import_designs), GetString(Resource.String.import_summary), Tapped: ImportDesigns),
+        ],
+    ]);
+
+    private SettingsPage AboutPage() => new(GetString(Resource.String.about),
+    [
+        [new(GetString(Resource.String.version), PackageManager!.GetPackageInfo(PackageName!, 0)!.VersionName)],
+        [new(GetString(Resource.String.futo))],
+        [new(GetString(Resource.String.licences), GetString(Resource.String.licences_summary))],
+    ]);
+
+    /// <summary>Whether Berpiztu AI Keyboard is the keyboard in use.</summary>
+    private bool IsKeyboardInUse() =>
+        Settings.Secure.GetString(ContentResolver, Settings.Secure.DefaultInputMethod) == KeyboardId(this);
 
     /// <summary>The screens a layout is kept for, each with its own place and size.</summary>
     private static readonly KeyPlusPreferences.Screen[] Screens = Enum.GetValues<KeyPlusPreferences.Screen>();
@@ -411,28 +606,31 @@ public sealed class MainActivity : Activity
     }
 
     /// <summary>
-    /// Berpiztu AI Keyboard made the keyboard in use: by the app itself where
-    /// it may write the secure settings (<see cref="WriteSecureSettings"/>),
-    /// the keyboards already on kept; else Android's choice of keyboard.
+    /// Berpiztu AI Keyboard made the keyboard in use: turned on first, where
+    /// it is not, in Android's keyboard settings; then chosen by the app itself
+    /// where it may write the secure settings (<see cref="WriteSecureSettings"/>),
+    /// else in Android's choice of keyboard. The list of keyboards turned on
+    /// is not written here: Android 14 lets no new app read it, and written
+    /// whole it would lose the languages other keyboards keep in it (Gboard's).
     /// </summary>
     private void UseKeyboard()
     {
+        if (!IsKeyboardOn())
+        {
+            StartActivity(new Intent(Settings.ActionInputMethodSettings));
+            return;
+        }
+
         if (CheckSelfPermission(WriteSecureSettings) != Android.Content.PM.Permission.Granted)
         {
             ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker();
             return;
         }
 
-        var keyboardId = KeyboardId(this);
-        var enabled = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledInputMethods) ?? "";
-        if (!enabled.Split(':').Any(keyboard => keyboard.Split(';')[0] == keyboardId))
-        {
-            Settings.Secure.PutString(ContentResolver, Settings.Secure.EnabledInputMethods, enabled.Length == 0 ? keyboardId : $"{enabled}:{keyboardId}");
-        }
-
-        Settings.Secure.PutString(ContentResolver, Settings.Secure.DefaultInputMethod, keyboardId);
+        Settings.Secure.PutString(ContentResolver, Settings.Secure.DefaultInputMethod, KeyboardId(this));
         ShowStatus();
     }
+
 
     /// <summary>Whether KeyPlus's keyboard is turned on in the keyboard list.</summary>
     private bool IsKeyboardOn() =>
@@ -518,13 +716,13 @@ public sealed class MainActivity : Activity
     {
         var box = new EditText(this)
         {
-            Hint = "Try the keys here",
+            Hint = GetString(Resource.String.try_keys),
             InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagMultiLine,
             Gravity = GravityFlags.Top | GravityFlags.Left,
             VerticalScrollBarEnabled = true,
         };
-        box.SetLines(6);
-        box.SetMaxLines(6);
+        box.SetLines(3);
+        box.SetMaxLines(3);
         box.SetHorizontallyScrolling(false);
         box.SetTextSize(Android.Util.ComplexUnitType.Sp, 16);
 

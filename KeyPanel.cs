@@ -323,6 +323,46 @@ public sealed class KeyPanel
     private readonly LinearLayout standardBar;
     private readonly StandardColors? standardColors;
 
+    /// <summary>
+    /// The standard keyboard floating in a window, as Gboard's (on the
+    /// emulator, pixels over 2.625): a card with corners 55 px round and a
+    /// shadow, under the keys a bar 104 px tall with ∨ (hide) at its left,
+    /// its centre 90 px in, drawn 29 px wide (480 of its 960), and in the
+    /// middle a handle 188 × 10 px that moves the window.
+    /// </summary>
+    private readonly FrameLayout? floatingBar;
+    private bool inWindow;
+    private const float CardCornerDp = 55 / 2.625f;
+    private const float CardShadowDp = 8;
+    private const float FloatingBarDp = 104 / 2.625f;
+    private const float HideCentreDp = 90 / 2.625f;
+    private const float HideDp = 29 / (480f / 960) / 2.625f;
+    private const float HandleWidthDp = 188 / 2.625f;
+    private const float HandleHeightDp = 10 / 2.625f;
+
+    /// <summary>
+    /// The floating card being resized, as Gboard's, a tap on its bar beside
+    /// the handle: its outline 4 px, its corners 8 px and 38 px past their
+    /// curve; a corner held anywhere within <see cref="CornerReachDp"/>;
+    /// Reset, 207 × 74 px, 105 px from the card's right. It ends by itself
+    /// <see cref="CardResizeMs"/> after the last touch, or as the card is moved.
+    /// </summary>
+    private bool cardResizing;
+    private readonly List<View> cardCorners = [];
+    private View? cardReset;
+    private Java.Lang.Runnable? endCardResize;
+    private const float CardLineDp = 4 / 2.625f;
+    private const float CardMarkDp = 8 / 2.625f;
+    private const float CardMarkReachDp = 38 / 2.625f;
+    private const float ResetWidthDp = 207 / 2.625f;
+    private const float ResetHeightDp = 74 / 2.625f;
+    private const float ResetRightDp = 105 / 2.625f;
+    private const int CardResizeMs = 3000;
+
+    /// <summary>Berpiztu AI Keyboard's ⌨ icon, in dp: a finger's; and the room around it its shadow is drawn in.</summary>
+    private const int IconDp = 48;
+    private const int IconShadowDp = 12;
+
     /// <summary>The standard keyboard's grid (⊞), Gboard's, in the keys' place; none without the standard keyboard.</summary>
     private readonly StandardGrid? standardGrid;
 
@@ -533,6 +573,15 @@ public sealed class KeyPanel
         toolbar.AddView(toolbarMiddle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         standardColors = standardKeys ? new StandardColors(context) : null;
         standardBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+
+        // A keyboard made narrower or wider (a window resized): its toolbar's places again for that width.
+        standardBar.LayoutChange += (_, e) =>
+        {
+            if (e.Right - e.Left != e.OldRight - e.OldLeft)
+            {
+                standardBar.Post(ShowBars);
+            }
+        };
         menuBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
         foreach (var button in new View[]
         {
@@ -626,7 +675,10 @@ public sealed class KeyPanel
         if (standardKeys)
         {
             standard = MakeStandard();
+            ReadSettings();
             strip.AddView(standard, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+            floatingBar = FloatingBar();
+            strip.AddView(floatingBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(FloatingBarDp)));
         }
 
         // Between the keys, a long press moves or resizes the window as on a key.
@@ -638,10 +690,34 @@ public sealed class KeyPanel
         tab.ContentDescription = "Show the keys";
         tab.SetPadding(Dp(16), Dp(6), Dp(16), Dp(6));
         Draggable(tab, ReportMoving, OnIconTapped);
+        if (standardColors is not null)
+        {
+            // Berpiztu AI Keyboard's icon, to stand out over any app (the owner's eyes): in a light theme
+            // the app's own icon, dark; in a dark one a white round key with the keyboard in black. Raised
+            // over the app, with room around it for its shadow.
+            tab.SetPadding(0, 0, 0, 0);
+            tab.Gravity = GravityFlags.Center;
+            tab.Elevation = Dp(CardShadowDp);
+            if ((context.Resources!.Configuration!.UiMode & UiMode.NightMask) == UiMode.NightYes)
+            {
+                var round = new GradientDrawable();
+                round.SetShape(ShapeType.Oval);
+                round.SetColor(Color.White);
+                tab.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), round, null);
+                tab.SetTextColor(Color.Black);
+            }
+            else
+            {
+                tab.Text = "";
+                tab.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), context.GetDrawable(Resource.Drawable.ic_keyplus), null);
+            }
+        }
 
         root = new PanelFrame(this, context);
         root.AddView(strip);
-        root.AddView(tab);
+        root.AddView(tab, standardColors is not null
+            ? new FrameLayout.LayoutParams(Dp(IconDp), Dp(IconDp)) { LeftMargin = Dp(IconShadowDp), TopMargin = Dp(IconShadowDp), RightMargin = Dp(IconShadowDp), BottomMargin = Dp(IconShadowDp) }
+            : new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
         ShowMode(preferences.GetBoolean(WholeKeyboardPreference, lettersFirst), preferences.GetBoolean(CompactPreference, false));
         if (standard is not null && preferences.GetBoolean(StandardPreference, true))
@@ -655,6 +731,9 @@ public sealed class KeyPanel
 
     /// <summary>The panel's view, for the window that shows it.</summary>
     public View Root => root;
+
+    /// <summary>The keyboard as its ⌨ icon for this field, or opened again: not kept, as Minimizar's is.</summary>
+    public void ShowAsIcon(bool icon) => ShowFolded(icon);
 
     /// <summary>Whether the user minimized the window into its icon.</summary>
     public bool Folded { get; private set; }
@@ -1037,7 +1116,7 @@ public sealed class KeyPanel
         var first = covered is not null
             ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
             : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
-        standardBar.AddView(first, new LinearLayout.LayoutParams(Dp(ToolSlotDp), ViewGroup.LayoutParams.MatchParent));
+        standardBar.AddView(first, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
         if (swipeWords.Count > 0)
         {
             standardBar.AddView(SwipeWordsRow(SuggestionSp, colors.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
@@ -1060,15 +1139,18 @@ public sealed class KeyPanel
             })
             {
                 standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-                standardBar.AddView(tool, new LinearLayout.LayoutParams(Dp(ToolSlotDp), ViewGroup.LayoutParams.MatchParent));
+                standardBar.AddView(tool, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
             }
 
             standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
 
         standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_mic, "Voice typing", () => NotMadeYet(context.GetString(Resource.String.voice_typing)), colors.Key),
-            new LinearLayout.LayoutParams(Dp(ToolSlotDp), ViewGroup.LayoutParams.MatchParent));
+            new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
     }
+
+    /// <summary>A toolbar sign's place: Gboard's, or, where seven of them do not fit (a narrow window), a seventh of the bar.</summary>
+    private int ToolSlot => standardBar.Width > 0 ? Math.Min(Dp(ToolSlotDp), standardBar.Width / 7) : Dp(ToolSlotDp);
 
     /// <summary>A sign of the standard keyboard's toolbar, centred in its place, in a circle where it has one; held still a moment, it moves the keyboard as the bar does.</summary>
     private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null)
@@ -1517,13 +1599,184 @@ public sealed class KeyPanel
     /// <summary>The toolbar's words and signs: the device's, on the standard keyboard; white on PC.</summary>
     private Color ToolGlyph => standard is { Visibility: ViewStates.Visible } ? standardColors!.Glyph : Color.White;
 
-    /// <summary>The ground and the toolbars in the look of the keys in sight: Gboard's, in the device's colours, or PC's.</summary>
+    /// <summary>
+    /// The ground and the toolbars in the look of the keys in sight: Gboard's,
+    /// in the device's colours, or PC's; the standard keyboard in a window a
+    /// card with its bar under the keys.
+    /// </summary>
     private void ApplyLook()
     {
-        strip.SetBackgroundColor(GroundColor);
+        var card = inWindow && standard is { Visibility: ViewStates.Visible };
+        if (card)
+        {
+            var ground = new GradientDrawable();
+            ground.SetColor(GroundColor);
+            ground.SetCornerRadius(Dp(CardCornerDp));
+            strip.Background = ground;
+            strip.OutlineProvider = ViewOutlineProvider.Background;
+            strip.ClipToOutline = true;
+            strip.Elevation = Dp(CardShadowDp);
+        }
+        else
+        {
+            strip.SetBackgroundColor(GroundColor);
+            strip.ClipToOutline = false;
+            strip.Elevation = 0;
+        }
+
+        if (floatingBar is not null)
+        {
+            floatingBar.Visibility = card ? ViewStates.Visible : ViewStates.Gone;
+        }
+
+        if (!card && cardResizing)
+        {
+            ShowCardResizing(false);
+        }
+
         Tint(toolbar, ToolGlyph);
         Tint(menuBar, ToolGlyph);
         ShowBars();
+    }
+
+    /// <summary>Whether the keyboard stands in a window of its own (Modo ventana, Flotante): the standard keyboard then a card, as Gboard's floating one.</summary>
+    public bool InWindow
+    {
+        set
+        {
+            if (inWindow != value)
+            {
+                inWindow = value;
+                ApplyLook();
+            }
+        }
+    }
+
+    /// <summary>∨ in the floating keyboard's bar: the keyboard hidden.</summary>
+    public event Action? HideRequested;
+
+    /// <summary>Reset while the floating keyboard is resized: its usual size and place.</summary>
+    public event Action? ResetSizeRequested;
+
+    /// <summary>The floating card resized, or no longer: its outline, its corners to hold and Reset; it ends by itself a while after the last touch.</summary>
+    private void ShowCardResizing(bool resizing)
+    {
+        cardResizing = resizing && inWindow && standard is { Visibility: ViewStates.Visible };
+        strip.Foreground = cardResizing
+            ? new CardOutline(standardColors!.Accent, Dp(CardLineDp), Dp(CardMarkDp), Dp(CardCornerDp), Dp(CardMarkReachDp))
+            : null;
+        if (cardCorners.Count == 0 && cardResizing)
+        {
+            foreach (var (corner, gravity) in new[]
+            {
+                (Corner.TopLeft, GravityFlags.Top | GravityFlags.Left),
+                (Corner.TopRight, GravityFlags.Top | GravityFlags.Right),
+                (Corner.BottomLeft, GravityFlags.Bottom | GravityFlags.Left),
+                (Corner.BottomRight, GravityFlags.Bottom | GravityFlags.Right),
+            })
+            {
+                // Above the card, which stands raised for its shadow: touches go to the highest view first.
+                var hold = new View(context) { ContentDescription = "Drag to resize the keyboard", Elevation = Dp(CardShadowDp) + 1 };
+                Draggable(hold, (drag, dx, dy) =>
+                {
+                    StayResizing();
+                    Resizing?.Invoke(corner, drag, dx, dy);
+                }, tapped: null);
+                root.AddView(hold, new FrameLayout.LayoutParams(Dp(CornerReachDp), Dp(CornerReachDp), gravity));
+                cardCorners.Add(hold);
+            }
+        }
+
+        foreach (var hold in cardCorners)
+        {
+            hold.Visibility = cardResizing ? ViewStates.Visible : ViewStates.Gone;
+        }
+
+        if (cardReset is not null)
+        {
+            cardReset.Visibility = cardResizing ? ViewStates.Visible : ViewStates.Gone;
+        }
+
+        StayResizing();
+    }
+
+    /// <summary>The card stays resized a while longer, from this touch: else it ends by itself.</summary>
+    private void StayResizing()
+    {
+        if (endCardResize is not null)
+        {
+            handler.RemoveCallbacks(endCardResize);
+        }
+
+        if (cardResizing)
+        {
+            endCardResize ??= new Java.Lang.Runnable(() => ShowCardResizing(false));
+            handler.PostDelayed(endCardResize, CardResizeMs);
+        }
+    }
+
+    /// <summary>The floating keyboard's bar: ∨ at the left, which hides it, and the handle in the middle, dragged to move the window.</summary>
+    private FrameLayout FloatingBar()
+    {
+        var bar = new FrameLayout(context) { Visibility = ViewStates.Gone, Clickable = true };
+        // A tap on the bar beside the handle resizes the card, as Gboard's.
+        bar.Click += (_, _) => ShowCardResizing(!cardResizing);
+        var hide = new ImageView(context) { ContentDescription = "Hide the keyboard", ImageTintList = ColorStateList.ValueOf(standardColors!.Glyph) };
+        hide.SetImageResource(Resource.Drawable.ic_tool_hide);
+        hide.SetScaleType(ImageView.ScaleType.FitCenter);
+        hide.Click += (_, _) => HideRequested?.Invoke();
+        bar.AddView(hide, new FrameLayout.LayoutParams(Dp(HideDp), Dp(HideDp), GravityFlags.Left | GravityFlags.CenterVertical) { LeftMargin = Dp(HideCentreDp - (HideDp / 2)) });
+
+        var handle = new View(context) { ContentDescription = "Drag to move the keyboard" };
+        var pill = new GradientDrawable();
+        pill.SetColor(standardColors.Handle);
+        pill.SetCornerRadius(Dp(HandleHeightDp));
+        handle.Background = pill;
+        // Held anywhere around the handle, not on it alone: it is thin.
+        var reach = new FrameLayout(context);
+        reach.AddView(handle, new FrameLayout.LayoutParams(Dp(HandleWidthDp), Dp(HandleHeightDp), GravityFlags.Center));
+        Draggable(reach, (drag, dx, dy) =>
+        {
+            // Moved, the card is no longer resized, as Gboard's.
+            ShowCardResizing(false);
+            ReportMoving(drag, dx, dy);
+        }, tapped: null);
+        bar.AddView(reach, new FrameLayout.LayoutParams(Dp(HandleWidthDp * 2), ViewGroup.LayoutParams.MatchParent, GravityFlags.Center));
+
+        var reset = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone, Clickable = true, ContentDescription = context.GetString(Resource.String.reset_size) };
+        reset.SetGravity(GravityFlags.Center);
+        var pillGround = new GradientDrawable();
+        pillGround.SetColor(standardColors.ResetGround);
+        pillGround.SetCornerRadius(Dp(ResetHeightDp) / 2f);
+        reset.Background = pillGround;
+        var sign = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(standardColors.Glyph) };
+        sign.SetImageResource(Resource.Drawable.ic_tool_reset);
+        reset.AddView(sign, new LinearLayout.LayoutParams(Dp(18), Dp(18)) { RightMargin = Dp(6) });
+        var words = new TextView(context) { Text = context.GetString(Resource.String.reset_size) };
+        words.SetTextColor(standardColors.Glyph);
+        words.SetTextSize(ComplexUnitType.Sp, 14);
+        reset.AddView(words);
+        reset.Click += (_, _) =>
+        {
+            ShowCardResizing(false);
+            ResetSizeRequested?.Invoke();
+        };
+        var resetPlace = new FrameLayout.LayoutParams(Dp(ResetWidthDp), Dp(ResetHeightDp), GravityFlags.Right | GravityFlags.CenterVertical) { RightMargin = Dp(ResetRightDp) };
+        bar.AddView(reset, resetPlace);
+
+        // Reset in the middle of the room right of the handle, no further in than Gboard's: a narrow card has little.
+        bar.LayoutChange += (_, e) =>
+        {
+            var room = ((e.Right - e.Left) / 2) - Dp(HandleWidthDp / 2);
+            var margin = Math.Clamp((room - Dp(ResetWidthDp)) / 2, 0, Dp(ResetRightDp));
+            if (resetPlace.RightMargin != margin)
+            {
+                resetPlace.RightMargin = margin;
+                reset.Post(reset.RequestLayout);
+            }
+        };
+        cardReset = reset;
+        return bar;
     }
 
     /// <summary>Every word and sign within a bar the colour given.</summary>
@@ -1587,6 +1840,20 @@ public sealed class KeyPanel
         Swiped = (path, capital, capitals) => ReadSwipe(path, capital, capitals),
         Visibility = ViewStates.Gone,
     };
+
+    /// <summary>The app's settings the standard keyboard follows, read again as it opens: they may have changed meanwhile.</summary>
+    public void ReadSettings()
+    {
+        if (standard is null)
+        {
+            return;
+        }
+
+        var kept = KeyPlusPreferences.Global(context);
+        standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
+        standard.Vibrates = kept.GetBoolean(KeyPlusPreferences.VibrateKey, true);
+        standard.ShowsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
+    }
 
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen.</summary>
     private void NextLanguage()

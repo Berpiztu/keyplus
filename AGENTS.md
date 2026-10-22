@@ -155,7 +155,7 @@ Root-owned paths without their own AGENTS.md:
 |------|--------|
 | `*.cs` | The app's sources, mapped file by file in `README.md` |
 | `Berpiztu.KeyPlus.csproj`, `AndroidManifest.xml` | Build, products, versions, signing, shared manifest |
-| `Resources/` | Icons (`drawable/`: the app's, and the standard keyboard's Material Symbols `ic_key_*`, `ic_tool_*`), strings in English and Spanish (`values/`, `values-es/`), the accessibility service and keyboard descriptors (`xml/`) |
+| `Resources/` | Icons (`drawable/`: the app's, and the standard keyboard's and the settings' Material Symbols `ic_key_*`, `ic_tool_*`, `ic_grid_*`, `ic_settings_*`), strings in English and Spanish (`values/`, `values-es/`), the accessibility service and keyboard descriptors (`xml/`) |
 | `*.ps1`, `packaging/` | Build, deploy, enable and release scripts |
 | `.github/workflows/release.yml` | Release build and publishing |
 | `docs/release-notes/` | Each release's notes, required by `deploy-release.ps1` |
