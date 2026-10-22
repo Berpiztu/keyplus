@@ -148,11 +148,22 @@ Agreed with the owner, 22 October 2026.
   saved keyboards ("Mi diseño – móvil"…), designed as before; a screen that
   showed PC shows its own, docked and floating. Tema › Guardados renames or
   deletes them. — done
-- Next: Diseñar for the standard keyboards: the size, rows inserted, keys
-  taken from a list (Esc, Tab, Ctrl, Alt, ⊞, ImpPnt, the arrows, Inicio,
-  Fin, RePág, AvPág, Supr, F1–F12…), moved, widened, removed. Hecho saves a
-  new keyboard, which becomes the screen's for the state it was designed in
-  (docked or floating).
+- Diseñar (⊞ or ⚙) on the standard keyboards, as the PC's designer the
+  owner liked: a tap marks a key in blue, − and + a quarter of a key
+  narrower or wider, a drag moves it, in its row or another; over the keys
+  − + + Tecla + Fila Quitar Cancelar Hecho. + Tecla lists by group Esc, Tab,
+  Supr, Insert, Inicio, Fin, RePág, AvPág; Ctrl, Alt, ⊞, Alt Gr, Bloq
+  Mayús; F1–F12, ImpPnt; the arrows; the one chosen after the marked key.
+  + Fila an empty row, outlined, over the marked one (at the top with none).
+  The keyboard keeps its width: a key widened takes its room from its own
+  row, the other rows untouched. The letters' page only; the design keeps
+  places of the keyboard it was made from, so it follows the language.
+  Hecho on Estándar or Estándar PC saves a new keyboard ("Estándar PC
+  22-10 10:30", renamed in Tema), the screen's for the state it was
+  designed in; on a saved one, its design. — done
+- Version 2: A− and A+ in the designer, as the dark PC's had them, the
+  letters' size of the whole keyboard kept with its design (the owner,
+  22 October 2026: the sizes look right as they are).
 - Later: previews; colours (Gboard's themes).
 
 ## 2d. Emoji (as Gboard's on the owner's Fold)

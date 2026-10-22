@@ -117,4 +117,12 @@
   <string name="emoji_symbols">Symbols</string>
   <string name="emoji_flags">Flags</string>
   <string name="search">Search</string>
+  <string name="design_editing">Editing</string>
+  <string name="design_modifiers">Modifiers</string>
+  <string name="design_functions">Functions</string>
+  <string name="design_arrows">Arrows</string>
+  <string name="add_key">+ Key</string>
+  <string name="add_row">+ Row</string>
+  <string name="remove">Remove</string>
+  <string name="saved_as">%1$s %2$s</string>
 </resources>

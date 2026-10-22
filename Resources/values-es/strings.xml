@@ -111,4 +111,12 @@
   <string name="emoji_symbols">Símbolos</string>
   <string name="emoji_flags">Banderas</string>
   <string name="search">Buscar</string>
+  <string name="design_editing">Edición</string>
+  <string name="design_modifiers">Modificadores</string>
+  <string name="design_functions">Funciones</string>
+  <string name="design_arrows">Flechas</string>
+  <string name="add_key">+ Tecla</string>
+  <string name="add_row">+ Fila</string>
+  <string name="remove">Quitar</string>
+  <string name="saved_as">%1$s %2$s</string>
 </resources>

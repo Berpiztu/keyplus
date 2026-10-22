@@ -104,6 +104,7 @@ a window that does.
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
+| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
@@ -125,6 +126,12 @@ a window that does.
   under Guardados. On the keyboard, one button (a phone or a computer
   reading PC) switches between the two, and Flotante (a screen with keys,
   crossed while floating) docks or floats it.
+- **⊞ › Diseñar** designs a standard keyboard: a tap marks a key in blue,
+  − and + make it narrower or wider, a drag moves it; + Tecla adds Esc,
+  Tab, Supr, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞, Alt Gr, F1–F12,
+  ImpPnt or an arrow after it, + Fila adds a row, Quitar takes one out.
+  Hecho saves Estándar or Estándar PC as a new keyboard, this screen's
+  docked or floating as it was designed.
 - **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
   is dragged between them, its name in sight; the toolbar's buttons show
   their names as the mouse rests on them.

@@ -749,6 +749,9 @@ public sealed class KeyPanel
                 NotMade = NotMadeYet,
             };
             strip.AddView(emojiPanel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+            extraKeysView = new ScrollView(context) { Visibility = ViewStates.Gone, VerticalScrollBarEnabled = false };
+            extraKeysView.SetBackgroundColor(standardColors.Ground);
+            strip.AddView(extraKeysView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
             Emojis.Prepare(context);
         }
         knownCopies = [.. clipboard.Entries.Select(CopyKey)];
@@ -1133,7 +1136,7 @@ public sealed class KeyPanel
     /// <summary>
     /// The last swipe's words as Gboard's suggestions: the word typed in the
     /// centre, in bold, the next likeliest on each side, a tap on one taking
-    /// its place; a long word smaller, whole, never cut; lines between them
+    /// its place and ending the suggestions; a long word smaller, whole, never cut; lines between them
     /// where the look has them.
     /// </summary>
     private LinearLayout SwipeWordsRow(float sp, Color? divider)
@@ -1207,6 +1210,12 @@ public sealed class KeyPanel
         if (editingTools)
         {
             FillEditingBar();
+            return;
+        }
+
+        if (designingStandard)
+        {
+            FillDesignBar();
             return;
         }
 
@@ -1331,7 +1340,7 @@ public sealed class KeyPanel
     /// </summary>
     private void ShowEmojiRow()
     {
-        var recent = emojiPanel is not null && standardBar.Visibility == ViewStates.Visible ? Emojis.Recent(context) : [];
+        var recent = emojiPanel is not null && standardBar.Visibility == ViewStates.Visible && !designingStandard ? Emojis.Recent(context) : [];
         emojiRow.Visibility = recent.Count > 0 ? ViewStates.Visible : ViewStates.Gone;
         emojiRowItems.RemoveAllViews();
         if (recent.Count == 0)
@@ -1385,15 +1394,155 @@ public sealed class KeyPanel
             keyboard?.Id == Keyboards.StandardId
                 ? new(OtherStandardId, context.GetString(Resource.String.keyboard_standard), Resource.Drawable.ic_grid_phone, () => Choose(OtherStandard))
                 : new(OtherStandardId, "PC", Resource.Drawable.ic_grid_pc, () => Choose(OtherStandard)),
+            new(DesignId, context.GetString(Resource.String.design), Resource.Drawable.ic_grid_design, Design),
             new(MinimizeId, context.GetString(Resource.String.minimize), Resource.Drawable.ic_grid_minimize, () => SetFolded(true)),
         ];
         return all.ToDictionary(tool => tool.Id);
     }
 
+    private const string DesignId = "design";
+
+    /// <summary>Whether the standard keyboard's keys are being designed (⊞ › Diseñar).</summary>
+    private bool designingStandard;
+
+    /// <summary>The keys a design can add (+ Tecla), in the keys' place while chosen.</summary>
+    private readonly ScrollView? extraKeysView;
+
+    /// <summary>
+    /// Diseñar on a standard keyboard, as the PC's designer: a tap marks a
+    /// key in blue, − and + make it narrower or wider, a drag moves it;
+    /// + Tecla, + Fila and Quitar over the keys, in the toolbar's place, with
+    /// Cancelar and Hecho. Its design, or the keyboard as made, to start from.
+    /// </summary>
+    private void StartStandardDesign()
+    {
+        Uncover();
+        var made = StandardKeys.Page(keyboard?.Base == Keyboards.StandardPcBase ? StandardPage.Pc : StandardPage.Letters, standard!.Language);
+        standard.Design = StandardDesign.FromText(keyboard?.Design) ?? StandardDesign.From(made);
+        standard.Designing = true;
+        designingStandard = true;
+        ShowBars();
+    }
+
+    /// <summary>
+    /// Hecho: the design kept, a keyboard the keyboard comes with saved as a
+    /// new one, which this screen then shows, docked or floating as it is
+    /// (renamed in Tema); a saved one keeps it. Cancelar: as it was.
+    /// </summary>
+    private void EndStandardDesign(bool keep)
+    {
+        designingStandard = false;
+        standard!.Designing = false;
+        Uncover();
+        if (keep && standard.Design is { } designed && keyboard is { } shown)
+        {
+            if (shown.BuiltIn)
+            {
+                Keyboards.Select(preferences, floating, Keyboards.SaveAs(context, Keyboards.NewName(context, shown), shown.Base, designed.Text).Id);
+            }
+            else
+            {
+                Keyboards.SetDesign(context, shown.Id, designed.Text);
+            }
+        }
+        else
+        {
+            standard.Design = StandardDesign.FromText(keyboard?.Design);
+        }
+
+        ShowBars();
+    }
+
+    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, Quitar, Cancelar, Hecho in blue.</summary>
+    private void FillDesignBar()
+    {
+        var colors = standardColors!;
+        (string Label, Action Pressed, bool Done)[] buttons =
+        [
+            ("−", () => standard!.ResizeMarked(wider: false), false),
+            ("+", () => standard!.ResizeMarked(wider: true), false),
+            (context.GetString(Resource.String.add_key), () => Toggle(extraKeysView!, ShowExtraKeys), false),
+            (context.GetString(Resource.String.add_row), () => standard!.AddRow(), false),
+            (context.GetString(Resource.String.remove), () => standard!.RemoveMarked(), false),
+            (context.GetString(Resource.String.cancel), () => EndStandardDesign(keep: false), false),
+            (context.GetString(Resource.String.done), () => EndStandardDesign(keep: true), true),
+        ];
+        foreach (var (label, pressed, done) in buttons)
+        {
+            var ground = new GradientDrawable();
+            ground.SetColor(done ? colors.Primary : colors.Function);
+            ground.SetCornerRadius(Dp(ToolCircleDp) / 2f);
+            var button = new TextView(context)
+            {
+                Text = label,
+                Gravity = GravityFlags.Center,
+                Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null),
+                Clickable = true,
+            };
+            button.SetTextColor(done ? colors.OnPrimary : colors.FunctionGlyph);
+            button.SetSingleLine(true);
+            button.SetAutoSizeTextTypeUniformWithConfiguration(8, 16, 1, (int)ComplexUnitType.Sp);
+            button.Click += (_, _) => pressed();
+            var place = new FrameLayout(context);
+            place.AddView(button, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolCircleDp), GravityFlags.Center) { LeftMargin = Dp(2), RightMargin = Dp(2) });
+            standardBar.AddView(place, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, label.Length <= 1 ? 0.7f : 1f));
+        }
+    }
+
+    /// <summary>+ Tecla: the keys a design can add in the keys' place, by group, a tap adding one after the marked key.</summary>
+    private void ShowExtraKeys()
+    {
+        var colors = standardColors!;
+        var list = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        list.SetPadding(Dp(12), Dp(4), Dp(12), Dp(8));
+        foreach (var (name, ids) in StandardKeys.Extras)
+        {
+            var header = new TextView(context) { Text = context.GetString(name) };
+            header.SetTextColor(colors.Outline);
+            header.SetTextSize(ComplexUnitType.Sp, 13);
+            header.SetPadding(Dp(4), Dp(8), 0, Dp(4));
+            list.AddView(header);
+            const int across = 5;
+            for (var first = 0; first < ids.Length; first += across)
+            {
+                var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+                for (var i = first; i < first + across; i++)
+                {
+                    if (i >= ids.Length || StandardKeys.Extra(ids[i], standard!.Language) is not { } key)
+                    {
+                        row.AddView(new View(context), new LinearLayout.LayoutParams(0, Dp(40), 1f));
+                        continue;
+                    }
+
+                    var id = ids[i];
+                    var ground = new GradientDrawable();
+                    ground.SetColor(colors.Function);
+                    ground.SetCornerRadius(Dp(8));
+                    var button = new TextView(context) { Text = key.Label, Gravity = GravityFlags.Center, Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null), Clickable = true };
+                    button.SetTextColor(colors.FunctionGlyph);
+                    button.SetSingleLine(true);
+                    button.SetAutoSizeTextTypeUniformWithConfiguration(8, 15, 1, (int)ComplexUnitType.Sp);
+                    button.Click += (_, _) =>
+                    {
+                        Uncover();
+                        standard!.AddKey(id);
+                    };
+                    row.AddView(button, new LinearLayout.LayoutParams(0, Dp(40), 1f) { LeftMargin = Dp(2), RightMargin = Dp(2), BottomMargin = Dp(4) });
+                }
+
+                list.AddView(row);
+            }
+        }
+
+        extraKeysView!.RemoveAllViews();
+        extraKeysView.AddView(list);
+        Cover(extraKeysView, settingsButton);
+    }
+
     /// <summary>The toolbar's buttons and the grid's as placed; those the toolbar has no room for in the grid, first.</summary>
     private (List<string> Bar, List<string> Grid) Arranged()
     {
-        var (bar, grid) = StandardTools.Read(context, BarFirst, [.. gridTiles.Select(tile => tile.Id), OtherStandardId, MinimizeId]);
+        var (bar, grid) = StandardTools.Read(context, BarFirst, [.. gridTiles.Select(tile => tile.Id), OtherStandardId, DesignId, MinimizeId]);
         var room = BarRoom;
         return ([.. bar.Take(room)], [.. bar.Skip(room), .. grid]);
     }
@@ -2263,6 +2412,7 @@ public sealed class KeyPanel
             Send(code, meta);
         },
         Pc = keyboard?.Base == Keyboards.StandardPcBase,
+        Design = keyboard is { Standard: true } ? StandardDesign.FromText(keyboard.Design) : null,
         EmojisAsked = ShowEmojis,
         Entered = () =>
         {
@@ -2989,10 +3139,9 @@ public sealed class KeyPanel
     /// </summary>
     public void Design()
     {
-        // The standard keyboards are not designed yet: the PC keyboards saved are.
-        if (keyboard is { Standard: true })
+        if (keyboard is { Standard: true } && standard is not null)
         {
-            NotMadeYet(context.GetString(Resource.String.design));
+            StartStandardDesign();
             return;
         }
 
@@ -3745,8 +3894,11 @@ public sealed class KeyPanel
         var capital = old.Length > 0 && char.IsUpper(old[0]);
         var text = (typed.StartsWith(' ') ? " " : "") + (capital ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..] : word);
         Type(text);
+
+        // Taken, as Gboard takes it: the words gone from the toolbar; the next word still starts with its space.
         swipedText = text;
         swipedWord = word;
+        swipeWords = [];
         ShowBars();
     }
 

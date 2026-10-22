@@ -74,6 +74,10 @@ public static class Keyboards
         return made;
     }
 
+    /// <summary>A name for a keyboard saved as it is designed, the user to rename it in Tema: its own and the time.</summary>
+    public static string NewName(Context context, KeyboardEntry from) =>
+        context.GetString(Resource.String.saved_as, new Java.Lang.String(from.Name), new Java.Lang.String(DateTime.Now.ToString("dd-MM HH:mm", System.Globalization.CultureInfo.InvariantCulture)));
+
     public static void Rename(Context context, string id, string name) =>
         Keep(context, [.. Made(context).Select(keyboard => keyboard.Id == id ? keyboard with { Name = name } : keyboard)]);
 

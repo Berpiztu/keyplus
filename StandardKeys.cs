@@ -267,6 +267,51 @@ public static class StandardKeys
     private static StandardKey Shift(float width) =>
         new("Shift", StandardAction.Shift, Width: width, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_shift);
 
+    /// <summary>A place a language has no key at, in a design: an empty key that does nothing.</summary>
+    public static readonly StandardKey Blank = new("", StandardAction.Key, Look: StandardLook.Function, Code: Keycode.Unknown);
+
+    /// <summary>
+    /// The keys a design can add (Diseñar › + Tecla), by group as the list
+    /// shows them, each by its id: a PC's that the standard keyboards may
+    /// lack.
+    /// </summary>
+    public static readonly (int Name, string[] Ids)[] Extras =
+    [
+        (Resource.String.design_editing, ["esc", "tab", "del", "ins", "home", "end", "pgup", "pgdn"]),
+        (Resource.String.design_modifiers, ["ctrl", "alt", "meta", "altgr", "caps"]),
+        (Resource.String.design_functions, ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "prtsc"]),
+        (Resource.String.design_arrows, ["left", "up", "down", "right"]),
+    ];
+
+    /// <summary>A key a design can add, by its id, labelled in a language as a PC there labels it.</summary>
+    public static StandardKey? Extra(string id, StandardLanguage language)
+    {
+        var english = language == English;
+        return id switch
+        {
+            "esc" => PcKey("Esc", Keycode.Escape),
+            "tab" => PcKey("Tab", Keycode.Tab),
+            "del" => PcKey(english ? "Del" : "Supr", Keycode.ForwardDel),
+            "ins" => PcKey(english ? "Ins" : "Insert", Keycode.Insert),
+            "home" => PcKey(english ? "Home" : "Inicio", Keycode.MoveHome),
+            "end" => PcKey(english ? "End" : "Fin", Keycode.MoveEnd),
+            "pgup" => PcKey(english ? "PgUp" : "RePág", Keycode.PageUp),
+            "pgdn" => PcKey(english ? "PgDn" : "AvPág", Keycode.PageDown),
+            "ctrl" => new("Ctrl", StandardAction.Ctrl, Look: StandardLook.Function),
+            "alt" => new("Alt", StandardAction.Alt, Look: StandardLook.Function),
+            "meta" => new("⊞", StandardAction.Meta, Look: StandardLook.Function),
+            "altgr" => new("Alt Gr", StandardAction.AltGr, Look: StandardLook.Function),
+            "caps" => CapsLock(english ? "Caps Lock" : "Bloq Mayús") with { Width = 1f },
+            "prtsc" => PcKey(english ? "PrtSc" : "ImpPnt", Keycode.Sysrq),
+            "left" => PcKey("←", Keycode.DpadLeft),
+            "up" => PcKey("↑", Keycode.DpadUp),
+            "down" => PcKey("↓", Keycode.DpadDown),
+            "right" => PcKey("→", Keycode.DpadRight),
+            _ when id.StartsWith('f') && int.TryParse(id[1..], out var number) && number is >= 1 and <= 12 => PcKey($"F{number}", Keycode.F1 + (number - 1)),
+            _ => null,
+        };
+    }
+
     private static IEnumerable<StandardKey> Letters(string letters, string hints) =>
         letters.Zip(hints, (letter, hint) => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString(), Hint: hint.ToString()));
 
