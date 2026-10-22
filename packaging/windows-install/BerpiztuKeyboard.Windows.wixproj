@@ -1,0 +1,26 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- Per-user MSI for Berpiztu AI Keyboard on Windows, as wslc-ai-agent's
+       client installer: build-windows-installer.ps1 publishes the app into
+       Payload and builds this with the release's version. -->
+  <PropertyGroup>
+    <MsiVersion Condition="'$(MsiVersion)' == ''">0.0.0</MsiVersion>
+    <DefineConstants>$(DefineConstants);MsiVersion=$(MsiVersion);Payload=$(Payload);LicenseRtf=$(LicenseRtf)</DefineConstants>
+    <OutputType>Package</OutputType>
+    <OutputName>Berpiztu-AI-Keyboard-Windows</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <SuppressIces>ICE03;ICE38;ICE64;ICE91</SuppressIces>
+    <SuppressValidation>true</SuppressValidation>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Package.wxs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>

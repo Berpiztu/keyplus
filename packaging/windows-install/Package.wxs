@@ -1,0 +1,82 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <!-- Per-user MSI for Berpiztu AI Keyboard on Windows: no administrator
+       asked for. Installs under %LOCALAPPDATA%\Berpiztu AI Keyboard, with the
+       keyboard and its settings in the Start menu, and the keyboard started
+       at sign-in out of sight (by the clock, shown when a text field takes
+       the focus), as a keyboard is always there. -->
+  <Package
+      Name="Berpiztu AI Keyboard"
+      Manufacturer="Berpiztu"
+      Version="$(var.MsiVersion)"
+      UpgradeCode="51c5db6e-3132-4434-b463-6af85a56adae"
+      Language="1033"
+      Scope="perUser">
+    <SummaryInformation
+        Description="Berpiztu AI Keyboard $(var.MsiVersion)"
+        Comments="$(var.MsiVersion)"
+        Manufacturer="Berpiztu" />
+    <!-- Every other version is replaced, older or newer, as the agent's
+         client installer does: an older one is a way back. An equal one too:
+         Windows Installer reads three parts of a version. -->
+    <Upgrade Id="51c5db6e-3132-4434-b463-6af85a56adae">
+      <UpgradeVersion Minimum="0.0.0" Maximum="$(var.MsiVersion)" IncludeMinimum="yes" IncludeMaximum="yes" MigrateFeatures="yes" Property="WIX_UPGRADE_DETECTED" />
+      <UpgradeVersion Minimum="$(var.MsiVersion)" IncludeMinimum="no" MigrateFeatures="yes" Property="NEWERVERSIONDETECTED" />
+    </Upgrade>
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <Icon Id="KeyboardIcon" SourceFile="..\..\windows\BerpiztuKeyboard.ico" />
+    <Property Id="ARPPRODUCTICON" Value="KeyboardIcon" />
+
+    <Feature Id="Main" Title="Berpiztu AI Keyboard" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="KeyboardShortcutsAndStart" />
+    </Feature>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Berpiztu AI Keyboard" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- The app as dotnet publish leaves it, self-contained: no .NET to install first. -->
+    <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.Payload)\**" />
+    </ComponentGroup>
+
+    <Component Id="KeyboardShortcutsAndStart" Directory="INSTALLFOLDER" Guid="392c4b09-f196-403f-9c6f-20a81169702c">
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\Keyboard" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+      <RegistryValue Root="HKCU" Key="Software\Berpiztu\Keyboard" Name="Version" Type="string" Value="[ProductVersion]" />
+      <!-- Started at sign-in out of sight; Task Manager's startup apps turn it off. -->
+      <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="Berpiztu AI Keyboard" Type="string" Value="&quot;[INSTALLFOLDER]BerpiztuKeyboard.exe&quot; --hidden" />
+      <Shortcut Id="KeyboardShortcut"
+                Name="Berpiztu AI Keyboard"
+                Directory="ProgramMenuFolder"
+                Target="[INSTALLFOLDER]BerpiztuKeyboard.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="KeyboardIcon"
+                Advertise="no" />
+      <Shortcut Id="SettingsShortcut"
+                Name="Berpiztu AI Keyboard settings"
+                Directory="ProgramMenuFolder"
+                Target="[INSTALLFOLDER]BerpiztuKeyboard.exe"
+                Arguments="--settings"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="KeyboardIcon"
+                Advertise="no" />
+      <RemoveFolder Id="RemoveKeyboardFolder" Directory="INSTALLFOLDER" On="uninstall" />
+    </Component>
+
+    <!-- The keyboard started once it is installed, where the installer had a window: it is the keyboard's first run. -->
+    <SetProperty Id="WixShellExecTarget" Value="[INSTALLFOLDER]BerpiztuKeyboard.exe" Before="StartKeyboard" Sequence="execute" />
+    <CustomAction Id="StartKeyboard" BinaryRef="Wix4UtilCA_X64" DllEntry="WixShellExec" Execute="immediate" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <RemoveExistingProducts After="InstallValidate" />
+      <Custom Action="StartKeyboard" After="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot; AND UILevel &gt; 2" />
+    </InstallExecuteSequence>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+  </Package>
+</Wix>

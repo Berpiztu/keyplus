@@ -88,9 +88,9 @@
        that compiles the standard keyboards' layouts from here: none of it
        is Android's. -->
   <ItemGroup>
-    <Compile Remove="windows\**" />
-    <None Remove="windows\**" />
-    <EmbeddedResource Remove="windows\**" />
+    <Compile Remove="windows\**;packaging\windows-install\**" />
+    <None Remove="windows\**;packaging\windows-install\**" />
+    <EmbeddedResource Remove="windows\**;packaging\windows-install\**" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">

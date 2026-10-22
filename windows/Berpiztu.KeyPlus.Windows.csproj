@@ -22,6 +22,12 @@
     <Product>Berpiztu AI Keyboard</Product>
     <Authors>Berpiztu</Authors>
     <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
+    <!-- The app's icon, the Android app's own drawn at Windows' sizes (packaging\Make-WindowsIcon.ps1). -->
+    <ApplicationIcon>BerpiztuKeyboard.ico</ApplicationIcon>
+    <!-- WPF's and Windows Forms' own texts in the languages the keyboard speaks, not every one: a lighter installer. -->
+    <SatelliteResourceLanguages>en;es</SatelliteResourceLanguages>
+    <!-- The version is the Android apps' (..\Berpiztu.KeyPlus.csproj's ApplicationDisplayVersion), one release for all three; a build may set its own. -->
+    <Version Condition="'$(Version)' == ''">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\Berpiztu.KeyPlus.csproj')), '&lt;ApplicationDisplayVersion&gt;([0-9.]+)&lt;').Groups[1].Value)</Version>
   </PropertyGroup>
 
   <!-- Direct2D and DirectWrite (MIT): emoji drawn in colour as Windows draws

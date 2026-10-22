@@ -7,7 +7,9 @@ namespace Berpiztu.KeyPlus;
 /// Berpiztu AI Keyboard for Windows: the keyboard, or, started with
 /// --settings, its settings, each a program of its own as on Android, one of
 /// each at a time; started again while running, the keyboard shows itself
-/// and the settings come to the front.
+/// and the settings come to the front. Started with --hidden (as Windows
+/// starts it at sign-in), the keyboard runs out of sight, by the clock, until
+/// a text field takes the focus.
 /// </summary>
 public static class Program
 {
@@ -15,6 +17,7 @@ public static class Program
     public static void Main(string[] arguments)
     {
         var settings = arguments.Contains(SettingsWindow.Argument);
+        var hidden = arguments.Contains(HiddenArgument);
         using var running = new Mutex(true, settings ? @"Local\Berpiztu.KeyPlus.Windows.Settings" : @"Local\Berpiztu.KeyPlus.Windows", out var first);
         if (!first)
         {
@@ -24,7 +27,7 @@ public static class Program
                 ShowWindow(open, Restore);
                 SetForegroundWindow(open);
             }
-            else if (open != IntPtr.Zero)
+            else if (open != IntPtr.Zero && !hidden)
             {
                 PostMessage(open, KeyboardWindow.ShowMessage, IntPtr.Zero, IntPtr.Zero);
             }
@@ -33,8 +36,24 @@ public static class Program
         }
 
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
-        app.Run(settings ? new SettingsWindow() : new KeyboardWindow());
+        if (settings)
+        {
+            app.Run(new SettingsWindow());
+        }
+        else if (hidden)
+        {
+            // Its window made but not shown: it watches the focus and shows itself for a text field.
+            new System.Windows.Interop.WindowInteropHelper(new KeyboardWindow()).EnsureHandle();
+            app.Run();
+        }
+        else
+        {
+            app.Run(new KeyboardWindow());
+        }
     }
+
+    /// <summary>The argument that starts the keyboard out of sight.</summary>
+    public const string HiddenArgument = "--hidden";
 
     private const int Restore = 9;
 

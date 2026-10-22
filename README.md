@@ -346,21 +346,31 @@ first; Windows draws no flags, so they are left out. 🎤 types what
 ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
-the settings: the microphone, that silence, the gain, the service, and
-moving out of the way of the text, which keeps the keyboard off the
-caret of any window. The grid and the designer are not on Windows yet.
+the settings, an app of their own as on Android: Idiomas, Preferencias,
+Tema, Escritura deslizando el dedo, Escribir por voz and Información. The
+grid and the designer are not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj
 ```
+
+`.\build-windows-installer.ps1` makes its installer,
+`dist\Berpiztu-AI-Keyboard-Windows.msi` ([packaging\windows-install](packaging/windows-install), WiX 5, as
+wslc-ai-agent's client installer): the app published self-contained for
+x64, so no .NET is installed first, at the Android apps' version; per user,
+no administrator asked, under `%LOCALAPPDATA%\Berpiztu AI Keyboard`, the
+keyboard and its settings in the Start menu, the keyboard started once
+installed and out of sight at every sign-in (`--hidden`). Its icon is the
+Android app's, drawn at Windows' sizes by `packaging\Make-WindowsIcon.ps1`.
 
 ### Releasing
 
 `.\deploy-release.ps1`, as wslc-ai-agent's, raises the release's version
 to the next patch (or `-Version`), commits it, tags `v<version>` and pushes;
 [the Release workflow](.github/workflows/release.yml) builds each APK in a
-job of its own, with caches of its own, at that version, and publishes both
-on the repository's **Releases** page, to download on a phone or a headset
+job of its own, with caches of its own, and the Windows installer in a
+third, at that version, and publishes the three on the repository's
+**Releases** page, to download on a phone, a headset or a Windows computer
 and install there. `-Local` builds them here instead, `-Local -Publish`
 uploads them from here too.
 
