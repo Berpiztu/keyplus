@@ -17,7 +17,7 @@
 - `KeyboardWindow.cs`: `WS_EX_NOACTIVATE` (never focused) and `WS_EX_APPWINDOW` (a taskbar button); its place, width, keyboard and language kept in `%APPDATA%\Berpiztu\Keyboard\window.json`
 - `Palette.cs`: the colours from Windows' accent tones and the theme's background and foreground (`UISettings`), never written by hand
 - `Program.cs`: one keyboard at a time (a mutex)
-- Swipe typing: `SwipeEngine.cs` calls `keyplus_swipe.dll` (`native/futo-swipe/win-x64/`, built by `native/futo-swipe/windows/build.ps1` from FUTO's swipe-library and ExecuTorch with clang-cl, its C API in `keyplus_swipe.cpp`); the encoder and the word lists are the Android keyboard's `Assets/`, copied beside the app; the words are made with `..\SwipeWords.cs`, shared with Android; the letter forms are written to `%LOCALAPPDATA%\Berpiztu\Keyboarduto-swipe`
+- Swipe typing: `SwipeEngine.cs` calls `keyplus_swipe.dll` (`native/futo-swipe/win-x64/`, built by `native/futo-swipe/windows/build.ps1` from FUTO's swipe-library and ExecuTorch with clang-cl, its C API in `keyplus_swipe.cpp`); the encoder and the word lists are the Android keyboard's `Assets/`, copied beside the app; the words are made with `..\SwipeWords.cs`, shared with Android; the letter forms are written to `%LOCALAPPDATA%\Berpiztu\Keyboard\futo-swipe`
 
 ## Work Guidance
 
