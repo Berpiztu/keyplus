@@ -58,7 +58,6 @@ public sealed class KeyPanel
     private const string FoldedPreference = "folded";
     private const string WholeKeyboardPreference = "wholeKeyboard";
     private const string CompactPreference = "compact";
-    private const string StandardPreference = "standard";
 
     /// <summary>The standard keyboard's language, one for every screen, as Gboard's: kept by its code.</summary>
     private const string LanguagePreference = "standardLanguage";
@@ -173,6 +172,36 @@ public sealed class KeyPanel
 
     /// <summary>The whole keyboard (ABC): as made, or as the screen's design has it, made again when it changes.</summary>
     private LinearLayout wholeKeyboard;
+
+    /// <summary>The keyboard of the list this screen shows, docked or floating (Ajustes › Tema); none in the popup.</summary>
+    private readonly KeyboardEntry? keyboard;
+
+    /// <summary>Whether the keyboard floats: the keyboard chosen from here is the screen's floating one.</summary>
+    private readonly bool floating;
+
+    /// <summary>The keyboard of the list shown; none in the popup.</summary>
+    public string? KeyboardId => keyboard?.Id;
+
+    /// <summary>The whole keyboard's design: a keyboard saved keeps its own; the popup's, the screen's.</summary>
+    private KeyboardDesign? ReadDesign() =>
+        keyboard is null ? KeyboardDesign.Read(preferences) : KeyboardDesign.FromText(keyboard.Design);
+
+    /// <summary>The design kept where it belongs: in the keyboard saved; the popup's, the screen's. None, the keyboard as made again.</summary>
+    private void KeepDesign(KeyboardDesign? kept)
+    {
+        if (keyboard is { } made)
+        {
+            Keyboards.SetDesign(context, made.Id, kept?.Text);
+        }
+        else if (kept is not null)
+        {
+            kept.Save(preferences);
+        }
+        else
+        {
+            KeyboardDesign.Forget(preferences);
+        }
+    }
 
     /// <summary>The screen's design of the whole keyboard; none, the keyboard as made (KeyboardDesign).</summary>
     private KeyboardDesign? design;
@@ -366,8 +395,50 @@ public sealed class KeyPanel
     /// <summary>The standard keyboard's grid (⊞), Gboard's, in the keys' place; none without the standard keyboard.</summary>
     private readonly StandardGrid? standardGrid;
 
-    /// <summary>The grid's buttons the keyboard gives, Gboard's, before the panel's own (PC, Minimizar).</summary>
+    /// <summary>The standard keyboard's emoji (the comma held, ⊞'s Emojis), in the keys' and the toolbar's place; and those typed lately, over the toolbar.</summary>
+    private readonly EmojiPanel? emojiPanel;
+    private readonly LinearLayout emojiRow;
+    private readonly LinearLayout emojiRowItems;
+
+    /// <summary>The row of those typed lately, as Gboard's on the Fold: 100 px tall, each 83 px apart, 48 px wide.</summary>
+    private const float EmojiRowDp = 100 / 2.25f;
+    private const float EmojiRowCellDp = 83 / 2.25f;
+    private const float EmojiRowShare = 48f / 83;
+
+    /// <summary>The grid's buttons the keyboard gives, Gboard's, before the panel's own (the other standard keyboard, Minimizar).</summary>
     private IReadOnlyList<GridTile> gridTiles = [];
+
+    /// <summary>The toolbar's own buttons, Gboard's, in Gboard's order: where they stand until placed elsewhere (⊞ › ✏).</summary>
+    private static readonly string[] BarFirst = ["clipboard", "stickers", "resize", "settings", "oneHanded"];
+
+    private const string OtherStandardId = "otherStandard";
+    private const string MinimizeId = "minimize";
+
+    /// <summary>
+    /// Customising, on the Fold: the toolbar's buttons in a blue outline 85 px
+    /// tall, each a pill 117 px wide, 8 px apart (125 px from one to the next).
+    /// </summary>
+    private const float EditBarDp = 85 / 2.25f;
+    private const float EditToolDp = 117 / 2.25f;
+    private const float EditToolGapDp = 8 / 2.25f;
+
+    /// <summary>While the grid is customised (⊞ › ✏): the toolbar's buttons and the grid's, by their ids, as they are being placed.</summary>
+    private bool editingTools;
+    private List<string> barTools = [];
+    private List<string> gridTools = [];
+
+    /// <summary>
+    /// The button dragged while customising: it and where it was taken from,
+    /// its picture under the finger, and where it would go, on the toolbar
+    /// or in the grid (-1, neither).
+    /// </summary>
+    private (GridTile Tool, bool FromBar, int From)? lifted;
+    private View? liftedView;
+    private int barGap = -1;
+    private int gridGap = -1;
+
+    /// <summary>The toolbar's places while customising, in order, a gap's among them.</summary>
+    private List<View> barSlots = [];
     private const float ToolSlotDp = 118 / 2.625f;
     private const float ToolCircleDp = 89 / 2.625f;
     private const float ToolIconDp = 40 / (720f / 960) / 2.625f;
@@ -466,8 +537,9 @@ public sealed class KeyPanel
     /// <param name="preferences">The layout of the display the panel is on.</param>
     /// <param name="clipboard">The texts copied lately, which 📋 lists.</param>
     /// <param name="lettersFirst">Whether a screen with no mode kept opens on the whole keyboard (ABC), as a keyboard opens on its letters, rather than on Keys.</param>
-    /// <param name="standardKeys">Whether there is the standard keyboard, Gboard's, which a screen with no mode kept opens on; PC beside it.</param>
-    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type, bool lettersFirst = false, bool standardKeys = false)
+    /// <param name="keyboardScreen">Berpiztu AI Keyboard on a phone's screen: the keyboards of the list (Estándar, Estándar PC, those saved), the one the screen shows docked or floating; none, the popup's and the headset's keys.</param>
+    /// <param name="floating">Whether the keyboard floats, which picks the screen's keyboard for floating.</param>
+    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type, bool lettersFirst = false, KeyPlusPreferences.Screen? keyboardScreen = null, bool floating = false)
     {
         this.context = context;
         this.clipboard = clipboard;
@@ -571,6 +643,7 @@ public sealed class KeyPanel
         toolbarSettings.SetPadding(Dp(8), 0, Dp(8), 0);
         toolbar.AddView(toolbarSettings, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         toolbar.AddView(toolbarMiddle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        var standardKeys = keyboardScreen is not null;
         standardColors = standardKeys ? new StandardColors(context) : null;
         standardBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
 
@@ -608,6 +681,15 @@ public sealed class KeyPanel
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(chipBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
+        emojiRow = new LinearLayout(context) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone };
+        emojiRowItems = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        emojiRow.AddView(emojiRowItems, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+        if (standardColors is not null)
+        {
+            emojiRow.AddView(new View(context) { Background = new ColorDrawable(standardColors.Divider) }, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 1));
+        }
+
+        strip.AddView(emojiRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(EmojiRowDp)));
         strip.AddView(standardBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         strip.AddView(menuBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         clipboardRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
@@ -656,8 +738,18 @@ public sealed class KeyPanel
         strip.AddView(settingsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
         if (standardColors is not null)
         {
-            standardGrid = new StandardGrid(context, standardColors, () => NotMadeYet("✏")) { Visibility = ViewStates.Gone };
+            standardGrid = new StandardGrid(context, standardColors, StartEditingTools) { Visibility = ViewStates.Gone };
             strip.AddView(standardGrid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+            emojiPanel = new EmojiPanel(context, standardColors)
+            {
+                Visibility = ViewStates.Gone,
+                Typed = TypeEmoji,
+                Deleted = () => Send(Keycode.Del, MetaKeyStates.None),
+                Closed = Uncover,
+                NotMade = NotMadeYet,
+            };
+            strip.AddView(emojiPanel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+            Emojis.Prepare(context);
         }
         knownCopies = [.. clipboard.Entries.Select(CopyKey)];
         clipboard.Changed += NoteCopy;
@@ -666,7 +758,9 @@ public sealed class KeyPanel
         designBar = DesignBar();
         strip.AddView(designBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         terminal = Rows(PanelKeys.Terminal);
-        design = KeyboardDesign.Read(preferences);
+        this.floating = floating;
+        keyboard = keyboardScreen is { } screen ? Keyboards.Selected(context, preferences, screen, floating) : null;
+        design = ReadDesign();
         wholeKeyboard = WholeKeyboard();
         compact = Rows(PanelKeys.Compact);
         strip.AddView(terminal);
@@ -720,7 +814,7 @@ public sealed class KeyPanel
             : new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
         ShowMode(preferences.GetBoolean(WholeKeyboardPreference, lettersFirst), preferences.GetBoolean(CompactPreference, false));
-        if (standard is not null && preferences.GetBoolean(StandardPreference, true))
+        if (standard is not null && keyboard is { Standard: true })
         {
             ShowStandard();
         }
@@ -1110,6 +1204,12 @@ public sealed class KeyPanel
     private void FillStandardBar()
     {
         standardBar.RemoveAllViews();
+        if (editingTools)
+        {
+            FillEditingBar();
+            return;
+        }
+
         var colors = standardColors!;
         var recent = swipeWords.Count > 0 ? null : RecentCopy();
         var suggesting = swipeWords.Count > 0 || recent is not null;
@@ -1129,14 +1229,8 @@ public sealed class KeyPanel
         }
         else
         {
-            foreach (var tool in new[]
-            {
-                StandardTool(Resource.Drawable.ic_clipboard, "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard)),
-                StandardTool(Resource.Drawable.ic_tool_stickers, "Stickers", () => NotMadeYet(context.GetString(Resource.String.stickers))),
-                StandardTool(Resource.Drawable.ic_tool_resize, "Resize the keyboard", () => ResizeRequested?.Invoke()),
-                StandardTool(Resource.Drawable.ic_tool_settings, "The keyboard's settings", OpenApp),
-                StandardTool(Resource.Drawable.ic_tool_one_handed, "One-handed", () => NotMadeYet(context.GetString(Resource.String.one_handed))),
-            })
+            var tools = Tools();
+            foreach (var tool in Arranged().Bar.Select(id => tools[id]).Select(tool => StandardTool(tool.Icon, tool.Label, tool.Chosen)))
             {
                 standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
                 standardBar.AddView(tool, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
@@ -1152,18 +1246,29 @@ public sealed class KeyPanel
     /// <summary>A toolbar sign's place: Gboard's, or, where seven of them do not fit (a narrow window), a seventh of the bar.</summary>
     private int ToolSlot => standardBar.Width > 0 ? Math.Min(Dp(ToolSlotDp), standardBar.Width / 7) : Dp(ToolSlotDp);
 
-    /// <summary>A sign of the standard keyboard's toolbar, centred in its place, in a circle where it has one; held still a moment, it moves the keyboard as the bar does.</summary>
-    private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null)
+    /// <summary>
+    /// A sign of the standard keyboard's toolbar, centred in its place, in a
+    /// circle where it has one (its outline, where it has one), in the keys'
+    /// letters' colour or its own; held still a moment, it moves the keyboard
+    /// as the bar does.
+    /// </summary>
+    private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null, Color? glyph = null, Color? ring = null)
     {
-        var sign = new ImageView(context) { ContentDescription = description };
+        // Its name shown as the mouse rests on it, as the owner asked.
+        var sign = new ImageView(context) { ContentDescription = description, TooltipText = description };
         sign.SetImageResource(icon);
-        sign.ImageTintList = ColorStateList.ValueOf(standardColors!.Glyph);
+        sign.ImageTintList = ColorStateList.ValueOf(glyph ?? standardColors!.Glyph);
         sign.SetScaleType(ImageView.ScaleType.FitCenter);
         var inset = Dp((ToolCircleDp - ToolIconDp) / 2);
         sign.SetPadding(inset, inset, inset, inset);
         var ground = new GradientDrawable();
         ground.SetShape(ShapeType.Oval);
         ground.SetColor(circle ?? Color.Transparent);
+        if (ring is { } line)
+        {
+            ground.SetStroke(Dp(StandardGrid.OutlineDp), line);
+        }
+
         sign.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null);
         HoldToMove(sign, pressed, resizes: false);
         var place = new FrameLayout(context);
@@ -1177,19 +1282,337 @@ public sealed class KeyPanel
     /// <summary>The grid's buttons the keyboard gives (Gboard's), which come before the panel's own.</summary>
     public IReadOnlyList<GridTile> GridTiles
     {
-        set => gridTiles = value;
+        set
+        {
+            gridTiles = value;
+
+            // A button that shows a state (Flotante) changed: the toolbar and the grid in sight show it.
+            if (standardBar.Visibility == ViewStates.Visible)
+            {
+                FillStandardBar();
+            }
+
+            if (covered?.Cover == standardGrid && !editingTools)
+            {
+                ShowGrid();
+            }
+        }
     }
 
-    /// <summary>The grid in the keys' place: the keyboard's buttons, then PC and Minimizar.</summary>
+    /// <summary>
+    /// The emoji in the keys' place and the toolbar's, as Gboard's: those
+    /// typed lately first; ABC or ← the keys again. The window keeps its size.
+    /// </summary>
+    public void ShowEmojis()
+    {
+        if (emojiPanel is null)
+        {
+            return;
+        }
+
+        var bars = standardBar.Height + (emojiRow.Visibility == ViewStates.Visible ? emojiRow.Height : 0);
+        emojiPanel.Fill();
+        Cover(emojiPanel, settingsButton);
+        emojiPanel.LayoutParameters!.Height += bars;
+        emojiPanel.RequestLayout();
+    }
+
+    /// <summary>An emoji typed, from the panel or the row of those typed lately.</summary>
+    private void TypeEmoji(string emoji)
+    {
+        EndSwipe(letter: false);
+        Type(emoji);
+    }
+
+    /// <summary>
+    /// Over the toolbar, while it shows, the emoji typed lately in a row, as
+    /// Gboard's on the Fold: as many as fit, a tap typing one; none typed yet,
+    /// no row.
+    /// </summary>
+    private void ShowEmojiRow()
+    {
+        var recent = emojiPanel is not null && standardBar.Visibility == ViewStates.Visible ? Emojis.Recent(context) : [];
+        emojiRow.Visibility = recent.Count > 0 ? ViewStates.Visible : ViewStates.Gone;
+        emojiRowItems.RemoveAllViews();
+        if (recent.Count == 0)
+        {
+            return;
+        }
+
+        var width = strip.Width > 0 ? strip.Width : context.Resources!.DisplayMetrics!.WidthPixels;
+        var cell = Dp(EmojiRowCellDp);
+        var measure = new Paint { TextSize = 100 };
+        var size = 100 * cell * EmojiRowShare / Math.Max(1, measure.MeasureText("😀"));
+        foreach (var emoji in recent.Take(Math.Max(1, width / cell)))
+        {
+            var item = new TextView(context) { Text = emoji, Gravity = GravityFlags.Center, Clickable = true };
+            item.SetTextSize(ComplexUnitType.Px, size);
+            item.Click += (_, _) =>
+            {
+                Emojis.Used(context, emoji);
+                TypeEmoji(emoji);
+                ShowEmojiRow();
+            };
+            // Each in its cell from the left, as Gboard's, however few.
+            emojiRowItems.AddView(item, new LinearLayout.LayoutParams(cell, ViewGroup.LayoutParams.MatchParent));
+        }
+    }
+
+    /// <summary>The grid in the keys' place: its buttons as placed.</summary>
     private void ShowGrid()
     {
-        standardGrid!.Tiles =
-        [
-            .. gridTiles,
-            new("PC", Resource.Drawable.ic_grid_pc, () => SetStandard(false)),
-            new(context.GetString(Resource.String.minimize), Resource.Drawable.ic_grid_minimize, () => SetFolded(true)),
-        ];
+        var tools = Tools();
+        standardGrid!.Tiles = [.. Arranged().Grid.Select(id => tools[id])];
         Cover(standardGrid, settingsButton);
+    }
+
+    /// <summary>
+    /// Every button the toolbar and the grid can hold, by its id: the
+    /// toolbar's own, the keyboard's, then the panel's (the other standard
+    /// keyboard, Minimizar).
+    /// </summary>
+    private Dictionary<string, GridTile> Tools()
+    {
+        GridTile[] all =
+        [
+            new("clipboard", context.GetString(Resource.String.clipboard), Resource.Drawable.ic_clipboard, () => Toggle(clipboardView!, ShowClipboard)),
+            new("stickers", context.GetString(Resource.String.stickers), Resource.Drawable.ic_tool_stickers, () => NotMadeYet(context.GetString(Resource.String.stickers))),
+            new("resize", context.GetString(Resource.String.resize), Resource.Drawable.ic_tool_resize, () => ResizeRequested?.Invoke()),
+            new("settings", context.GetString(Resource.String.keyboard_settings), Resource.Drawable.ic_tool_settings, OpenApp),
+            new("oneHanded", context.GetString(Resource.String.one_handed), Resource.Drawable.ic_tool_one_handed, () => NotMadeYet(context.GetString(Resource.String.one_handed))),
+            .. gridTiles,
+            // One button either way, as the owner asked: it shows the keyboard in sight, Estándar a phone, PC a computer, and switches to the other.
+            keyboard?.Id == Keyboards.StandardId
+                ? new(OtherStandardId, context.GetString(Resource.String.keyboard_standard), Resource.Drawable.ic_grid_phone, () => Choose(OtherStandard))
+                : new(OtherStandardId, "PC", Resource.Drawable.ic_grid_pc, () => Choose(OtherStandard)),
+            new(MinimizeId, context.GetString(Resource.String.minimize), Resource.Drawable.ic_grid_minimize, () => SetFolded(true)),
+        ];
+        return all.ToDictionary(tool => tool.Id);
+    }
+
+    /// <summary>The toolbar's buttons and the grid's as placed; those the toolbar has no room for in the grid, first.</summary>
+    private (List<string> Bar, List<string> Grid) Arranged()
+    {
+        var (bar, grid) = StandardTools.Read(context, BarFirst, [.. gridTiles.Select(tile => tile.Id), OtherStandardId, MinimizeId]);
+        var room = BarRoom;
+        return ([.. bar.Take(room)], [.. bar.Skip(room), .. grid]);
+    }
+
+    /// <summary>How many buttons the toolbar holds: as many of Gboard's pills, customising, as fit between ⊞ and 🎤 (five on a phone, as Gboard's).</summary>
+    private int BarRoom => standardBar.Width > 0
+        ? Math.Max(1, (standardBar.Width - (2 * ToolSlot) - (2 * Dp(StandardGrid.OutlineDp))) / Dp(EditToolDp + EditToolGapDp))
+        : BarFirst.Length;
+
+    /// <summary>✏: the grid customised, as Gboard's.</summary>
+    private void StartEditingTools()
+    {
+        (barTools, gridTools) = Arranged();
+        editingTools = true;
+        barGap = gridGap = -1;
+        FillStandardBar();
+        ShowEditingGrid();
+    }
+
+    private void ShowEditingGrid()
+    {
+        var tools = Tools();
+        standardGrid!.ShowEditing([.. gridTools.Select(id => tools[id])], gridGap, Lift);
+    }
+
+    /// <summary>✓: customising done, the grid's pages again with its buttons where they were placed.</summary>
+    private void EndEditingTools()
+    {
+        editingTools = false;
+        FillStandardBar();
+        ShowGrid();
+    }
+
+    /// <summary>
+    /// The toolbar while customising, as Gboard's: ✓ in a blue circle, the
+    /// toolbar's buttons each on a pill in a blue outline, a gap where the
+    /// one dragged would go (the last left out where the toolbar is full,
+    /// for it goes to the grid), 🎤 ringed in blue.
+    /// </summary>
+    private void FillEditingBar()
+    {
+        var colors = standardColors!;
+        standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_check, context.GetString(Resource.String.done), EndEditingTools, colors.Primary, colors.OnPrimary),
+            new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+
+        var outline = new GradientDrawable();
+        outline.SetColor(colors.Dim);
+        outline.SetCornerRadius(Dp(EditBarDp) / 2f);
+        outline.SetStroke(Dp(StandardGrid.OutlineDp), colors.Primary);
+        var group = new LinearLayout(context) { Orientation = Orientation.Horizontal, Background = outline };
+        var inset = Dp(StandardGrid.OutlineDp + EditToolGapDp);
+        group.SetPadding(inset, inset, inset, inset);
+        var tools = Tools();
+        var shown = barTools.Take(barGap >= 0 ? BarRoom - 1 : BarRoom).Select(id => (GridTile?)tools[id]).ToList();
+        if (barGap >= 0)
+        {
+            shown.Insert(Math.Min(barGap, shown.Count), null);
+        }
+
+        barSlots = [];
+        foreach (var tool in shown)
+        {
+            var slot = tool is null ? new View(context) : EditingTool(tool);
+            group.AddView(slot, new LinearLayout.LayoutParams(Dp(EditToolDp), ViewGroup.LayoutParams.MatchParent) { LeftMargin = barSlots.Count > 0 ? Dp(EditToolGapDp) : 0 });
+            barSlots.Add(slot);
+        }
+
+        var middle = new FrameLayout(context);
+        middle.AddView(group, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, Dp(EditBarDp), GravityFlags.Center));
+        standardBar.AddView(middle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_mic, "Voice typing", () => NotMadeYet(context.GetString(Resource.String.voice_typing)), colors.Key, ring: colors.Primary),
+            new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+    }
+
+    /// <summary>A toolbar button while customising: its sign on a pill in the keys' colour, its name as the mouse rests on it; held, lifted.</summary>
+    private FrameLayout EditingTool(GridTile tool)
+    {
+        var colors = standardColors!;
+        var sign = new ImageView(context) { ContentDescription = tool.Label, ImageTintList = ColorStateList.ValueOf(colors.Glyph) };
+        sign.SetImageResource(tool.Icon);
+        sign.SetScaleType(ImageView.ScaleType.FitCenter);
+        var ground = new GradientDrawable();
+        ground.SetColor(colors.Key);
+        ground.SetCornerRadius(Dp(EditBarDp) / 2f);
+        var pill = new FrameLayout(context) { Background = ground, TooltipText = tool.Label };
+        pill.AddView(sign, new FrameLayout.LayoutParams(Dp(ToolIconDp), Dp(ToolIconDp), GravityFlags.Center));
+        StandardGrid.HoldToDrag(pill, (x, y) => Lift(tool, x, y));
+        return pill;
+    }
+
+    /// <summary>A button held while customising: taken from where it was, a gap there, its picture under the finger.</summary>
+    private void Lift(GridTile tool, float x, float y)
+    {
+        var fromBar = barTools.IndexOf(tool.Id);
+        lifted = (tool, fromBar >= 0, fromBar >= 0 ? fromBar : gridTools.IndexOf(tool.Id));
+        barTools.Remove(tool.Id);
+        gridTools.Remove(tool.Id);
+        barGap = fromBar;
+        gridGap = fromBar >= 0 ? -1 : lifted.Value.From;
+        FillStandardBar();
+        ShowEditingGrid();
+        MoveLifted(x, y);
+    }
+
+    /// <summary>
+    /// The button dragged, under the finger, its sign and its name: over the
+    /// toolbar, the toolbar opening where it would go; over the list, the
+    /// list opening; elsewhere, neither.
+    /// </summary>
+    private void MoveLifted(float x, float y)
+    {
+        if (lifted is not { } now)
+        {
+            return;
+        }
+
+        var overBar = StandardGrid.Contains(standardBar, x, y);
+        var overList = !overBar && standardGrid!.OverList(x, y);
+        var bar = overBar ? InsertAt(barSlots, barGap, x, y) : -1;
+        var grid = overList ? InsertAt(standardGrid!.Cells, gridGap, x, y) : -1;
+        if (bar != barGap)
+        {
+            barGap = bar;
+            FillStandardBar();
+        }
+
+        if (grid != gridGap)
+        {
+            gridGap = grid;
+            ShowEditingGrid();
+        }
+
+        // Always the whole pill, its sign and its name, over the toolbar too: the owner's wish, to see which button it is.
+        if (liftedView is null)
+        {
+            var (width, height) = standardGrid!.PillSize;
+            liftedView = standardGrid.Pill(now.Tool);
+            liftedView.Elevation = Dp(CardShadowDp);
+            root.AddView(liftedView, new FrameLayout.LayoutParams(width, height));
+        }
+
+        var at = new int[2];
+        root.GetLocationOnScreen(at);
+        liftedView.TranslationX = x - at[0] - (liftedView.LayoutParameters!.Width / 2f);
+        liftedView.TranslationY = y - at[1] - (liftedView.LayoutParameters.Height / 2f);
+    }
+
+    /// <summary>Where among some places, a gap's among them, the button dragged would go: the nearest place, or past it where nothing is open yet and the finger is past its middle.</summary>
+    private static int InsertAt(IReadOnlyList<View> places, int gap, float x, float y)
+    {
+        var nearest = StandardGrid.Nearest(places, x, y);
+        if (nearest < 0)
+        {
+            return 0;
+        }
+
+        var at = new int[2];
+        places[nearest].GetLocationOnScreen(at);
+        return gap < 0 && x > at[0] + (places[nearest].Width / 2f) ? nearest + 1 : nearest;
+    }
+
+    /// <summary>
+    /// The button let go: where the gap is (on a full toolbar, the toolbar's
+    /// last to the grid's start), or back where it was; the places kept.
+    /// </summary>
+    private void DropLifted()
+    {
+        if (lifted is not { } now)
+        {
+            return;
+        }
+
+        if (barGap >= 0)
+        {
+            barTools.Insert(Math.Min(barGap, barTools.Count), now.Tool.Id);
+            if (barTools.Count > BarRoom)
+            {
+                gridTools.Insert(0, barTools[^1]);
+                barTools.RemoveAt(barTools.Count - 1);
+            }
+        }
+        else if (gridGap >= 0)
+        {
+            gridTools.Insert(Math.Min(gridGap, gridTools.Count), now.Tool.Id);
+        }
+        else
+        {
+            var from = now.FromBar ? barTools : gridTools;
+            from.Insert(Math.Min(now.From, from.Count), now.Tool.Id);
+        }
+
+        lifted = null;
+        barGap = gridGap = -1;
+        if (liftedView is not null)
+        {
+            root.RemoveView(liftedView);
+            liftedView = null;
+        }
+
+        StandardTools.Save(context, barTools, gridTools);
+        FillStandardBar();
+        ShowEditingGrid();
+    }
+
+    /// <summary>A button lifted: the rest of the touch is the drag's, wherever the finger goes.</summary>
+    private bool Dragging(MotionEvent motion)
+    {
+        if (lifted is null)
+        {
+            return false;
+        }
+
+        MoveLifted(motion.RawX, motion.RawY);
+        if (motion.ActionMasked is MotionEventActions.Up or MotionEventActions.Cancel)
+        {
+            DropLifted();
+        }
+
+        return true;
     }
 
     /// <summary>What was copied last, as the clipboard's list has it now, if it was copied within <see cref="RecentCopyTime"/>.</summary>
@@ -1270,11 +1693,11 @@ public sealed class KeyPanel
             SetLabelScale(1f);
             UsualSizeRequested?.Invoke();
         }), "A↺");
-        // The standard keyboard or PC, PC's own modes only within it.
+        // A saved PC keyboard's own modes; from it, back to a standard one.
         var standardShown = standard is { Visibility: ViewStates.Visible };
         if (standard is not null)
         {
-            yield return new(standardShown ? "PC" : "Estándar", () => SetStandard(!standardShown), standardShown ? "PC" : "⌨");
+            yield return new(OtherStandardName, () => Choose(OtherStandard), OtherStandard == Keyboards.StandardPcId ? "PC" : "⌨");
         }
 
         if (!standardShown && wholeKeyboard.Visibility != ViewStates.Visible)
@@ -1314,7 +1737,8 @@ public sealed class KeyPanel
             var standardShown = covered?.Keys == standard || standard is { Visibility: ViewStates.Visible };
             menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             toolbar.Visibility = asking is null && !small && covered is null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
-            standardBar.Visibility = asking is null && standardShown ? ViewStates.Visible : ViewStates.Gone;
+            standardBar.Visibility = asking is null && standardShown && (emojiPanel is null || covered?.Cover != emojiPanel) ? ViewStates.Visible : ViewStates.Gone;
+            ShowEmojiRow();
             if (toolbar.Visibility == ViewStates.Visible)
             {
                 FillToolbar();
@@ -1563,21 +1987,14 @@ public sealed class KeyPanel
         ApplyLook();
     }
 
-    /// <summary>The standard keyboard, or PC as it was left (the strip's keys or the whole keyboard), kept, and the mode's place and size taken.</summary>
-    private void SetStandard(bool on)
-    {
-        if (on)
-        {
-            ShowStandard();
-        }
-        else
-        {
-            ShowMode(preferences.GetBoolean(WholeKeyboardPreference, true), preferences.GetBoolean(CompactPreference, false));
-        }
+    /// <summary>The standard keyboard ⊞ switches to: Estándar PC from Estándar, Estándar from any other.</summary>
+    private string OtherStandard => keyboard?.Id == Keyboards.StandardId ? Keyboards.StandardPcId : Keyboards.StandardId;
 
-        preferences.Edit()!.PutBoolean(StandardPreference, on)!.Apply();
-        ModeChanged?.Invoke();
-    }
+    private string OtherStandardName =>
+        context.GetString(OtherStandard == Keyboards.StandardPcId ? Resource.String.keyboard_standard_pc : Resource.String.keyboard_standard);
+
+    /// <summary>A keyboard of the list chosen for this screen, docked or floating as the keyboard is: the keyboard made again with it.</summary>
+    private void Choose(string id) => Keyboards.Select(preferences, floating, id);
 
     /// <summary>The standard keyboard in the keys' place, in the device's colours.</summary>
     private void ShowStandard()
@@ -1606,7 +2023,7 @@ public sealed class KeyPanel
     /// </summary>
     private void ApplyLook()
     {
-        var card = inWindow && standard is { Visibility: ViewStates.Visible };
+        var card = inWindow && standardColors is not null;
         if (card)
         {
             var ground = new GradientDrawable();
@@ -1627,6 +2044,7 @@ public sealed class KeyPanel
         if (floatingBar is not null)
         {
             floatingBar.Visibility = card ? ViewStates.Visible : ViewStates.Gone;
+            TintFloatingBar();
         }
 
         if (!card && cardResizing)
@@ -1655,13 +2073,30 @@ public sealed class KeyPanel
     /// <summary>∨ in the floating keyboard's bar: the keyboard hidden.</summary>
     public event Action? HideRequested;
 
+    /// <summary>The floating bar's parts whose colours follow the keys in sight: Gboard's on the standard keyboard, PC's own on PC.</summary>
+    private ImageView? floatingHide;
+    private GradientDrawable? floatingHandle;
+    private GradientDrawable? resetGround;
+
+    private void TintFloatingBar()
+    {
+        var standardShown = standard is { Visibility: ViewStates.Visible };
+        floatingHide?.SetColorFilter(ToolGlyph, PorterDuff.Mode.SrcIn!);
+        floatingHandle?.SetColor(standardShown ? standardColors!.Handle : DimTextColor);
+        resetGround?.SetColor(standardShown ? standardColors!.ResetGround : CardColor);
+        if (cardReset is not null)
+        {
+            Tint(cardReset, ToolGlyph);
+        }
+    }
+
     /// <summary>Reset while the floating keyboard is resized: its usual size and place.</summary>
     public event Action? ResetSizeRequested;
 
     /// <summary>The floating card resized, or no longer: its outline, its corners to hold and Reset; it ends by itself a while after the last touch.</summary>
     private void ShowCardResizing(bool resizing)
     {
-        cardResizing = resizing && inWindow && standard is { Visibility: ViewStates.Visible };
+        cardResizing = resizing && inWindow && standardColors is not null;
         strip.Foreground = cardResizing
             ? new CardOutline(standardColors!.Accent, Dp(CardLineDp), Dp(CardMarkDp), Dp(CardCornerDp), Dp(CardMarkReachDp))
             : null;
@@ -1721,7 +2156,8 @@ public sealed class KeyPanel
         var bar = new FrameLayout(context) { Visibility = ViewStates.Gone, Clickable = true };
         // A tap on the bar beside the handle resizes the card, as Gboard's.
         bar.Click += (_, _) => ShowCardResizing(!cardResizing);
-        var hide = new ImageView(context) { ContentDescription = "Hide the keyboard", ImageTintList = ColorStateList.ValueOf(standardColors!.Glyph) };
+        var hide = new ImageView(context) { ContentDescription = "Hide the keyboard" };
+        floatingHide = hide;
         hide.SetImageResource(Resource.Drawable.ic_tool_hide);
         hide.SetScaleType(ImageView.ScaleType.FitCenter);
         hide.Click += (_, _) => HideRequested?.Invoke();
@@ -1729,8 +2165,8 @@ public sealed class KeyPanel
 
         var handle = new View(context) { ContentDescription = "Drag to move the keyboard" };
         var pill = new GradientDrawable();
-        pill.SetColor(standardColors.Handle);
         pill.SetCornerRadius(Dp(HandleHeightDp));
+        floatingHandle = pill;
         handle.Background = pill;
         // Held anywhere around the handle, not on it alone: it is thin.
         var reach = new FrameLayout(context);
@@ -1746,14 +2182,13 @@ public sealed class KeyPanel
         var reset = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone, Clickable = true, ContentDescription = context.GetString(Resource.String.reset_size) };
         reset.SetGravity(GravityFlags.Center);
         var pillGround = new GradientDrawable();
-        pillGround.SetColor(standardColors.ResetGround);
         pillGround.SetCornerRadius(Dp(ResetHeightDp) / 2f);
         reset.Background = pillGround;
-        var sign = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(standardColors.Glyph) };
+        resetGround = pillGround;
+        var sign = new ImageView(context);
         sign.SetImageResource(Resource.Drawable.ic_tool_reset);
         reset.AddView(sign, new LinearLayout.LayoutParams(Dp(18), Dp(18)) { RightMargin = Dp(6) });
         var words = new TextView(context) { Text = context.GetString(Resource.String.reset_size) };
-        words.SetTextColor(standardColors.Glyph);
         words.SetTextSize(ComplexUnitType.Sp, 14);
         reset.AddView(words);
         reset.Click += (_, _) =>
@@ -1822,6 +2257,13 @@ public sealed class KeyPanel
             EndSwipe(letter: false);
             Send(Keycode.Del, MetaKeyStates.None);
         },
+        KeyPressed = (code, meta) =>
+        {
+            EndSwipe(letter: false);
+            Send(code, meta);
+        },
+        Pc = keyboard?.Base == Keyboards.StandardPcBase,
+        EmojisAsked = ShowEmojis,
         Entered = () =>
         {
             EndSwipe(letter: false);
@@ -1844,16 +2286,20 @@ public sealed class KeyPanel
     /// <summary>The app's settings the standard keyboard follows, read again as it opens: they may have changed meanwhile.</summary>
     public void ReadSettings()
     {
-        if (standard is null)
-        {
-            return;
-        }
-
         var kept = KeyPlusPreferences.Global(context);
-        standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
-        standard.Vibrates = kept.GetBoolean(KeyPlusPreferences.VibrateKey, true);
-        standard.ShowsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
+        vibrates = kept.GetBoolean(KeyPlusPreferences.VibrateKey, true);
+        showsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
+        if (standard is not null)
+        {
+            standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
+            standard.Vibrates = vibrates;
+            standard.ShowsTrail = showsTrail;
+        }
     }
+
+    /// <summary>The app's settings PC follows too: a key's touch felt, a swipe's trail drawn.</summary>
+    private bool vibrates = true;
+    private bool showsTrail = true;
 
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen.</summary>
     private void NextLanguage()
@@ -2543,6 +2989,13 @@ public sealed class KeyPanel
     /// </summary>
     public void Design()
     {
+        // The standard keyboards are not designed yet: the PC keyboards saved are.
+        if (keyboard is { Standard: true })
+        {
+            NotMadeYet(context.GetString(Resource.String.design));
+            return;
+        }
+
         if (wholeKeyboard.Visibility != ViewStates.Visible)
         {
             SetWholeKeyboard(true);
@@ -2638,7 +3091,7 @@ public sealed class KeyPanel
         }
 
         change(design);
-        design.Save(preferences);
+        KeepDesign(design);
         ShowDesign();
     }
 
@@ -2713,7 +3166,7 @@ public sealed class KeyPanel
     /// <summary>Restablecer: the screen's keyboard as made, still being designed.</summary>
     private void ResetDesign()
     {
-        KeyboardDesign.Forget(preferences);
+        KeepDesign(null);
         design = KeyboardDesign.Usual();
         ShowDesign();
     }
@@ -3083,7 +3536,11 @@ public sealed class KeyPanel
         {
             case MotionEventActions.Down:
                 view.Pressed = true;
-                view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+                if (vibrates)
+                {
+                    view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+                }
+
                 swipeTrace = new SwipeTrace(key, motion.EventTime);
                 Track(swipeTrace, at[0] + motion.GetX(), at[1] + motion.GetY(), motion.EventTime);
                 break;
@@ -3140,6 +3597,11 @@ public sealed class KeyPanel
     /// <summary>A swipe's trail shown over the whole keyboard, from the points the finger already drew.</summary>
     private void ShowTrail(SwipeTrace trace)
     {
+        if (!showsTrail)
+        {
+            return;
+        }
+
         var at = new int[2];
         wholeKeyboard.GetLocationOnScreen(at);
         swipeTrail = new SwipeTrail(Dp(SwipeTrailDp), HeldColor, at[0], at[1]);
@@ -3370,14 +3832,22 @@ public sealed class KeyPanel
             {
                 case MotionEventActions.Down:
                     view.Pressed = true;
-                    view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+                    if (vibrates)
+                    {
+                        view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+                    }
+
                     if (key.OpensFull)
                     {
                         opened = false;
                         opening = new Java.Lang.Runnable(() =>
                         {
                             opened = true;
-                            view.PerformHapticFeedback(FeedbackConstants.LongPress);
+                            if (vibrates)
+                            {
+                                view.PerformHapticFeedback(FeedbackConstants.LongPress);
+                            }
+
                             SetCompact(false);
                         });
                         handler.PostDelayed(opening, LongPressMs);
@@ -3580,6 +4050,11 @@ public sealed class KeyPanel
 
         public override bool OnInterceptTouchEvent(MotionEvent? e)
         {
+            if (e is not null && panel.Dragging(e))
+            {
+                return true;
+            }
+
             if (e?.ActionMasked == MotionEventActions.Down && panel.PointerCorner(e) is { } corner)
             {
                 sizing = corner;
@@ -3593,6 +4068,11 @@ public sealed class KeyPanel
 
         public override bool OnTouchEvent(MotionEvent? e)
         {
+            if (e is not null && panel.Dragging(e))
+            {
+                return true;
+            }
+
             if (sizing is not { } corner || e is null)
             {
                 return base.OnTouchEvent(e);

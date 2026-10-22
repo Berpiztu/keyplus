@@ -99,8 +99,12 @@ a window that does.
 | [SettingsScreen.cs](SettingsScreen.cs) | The keyboard's settings as Gboard's: a big title, rows in rounded groups, a page beside the list on a wide screen, in the device's colours |
 | [AdbGrant.cs](AdbGrant.cs) | The app turned on over the device's own Wireless debugging: the pairing code taken in a notification, the ADB commands run, no computer |
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
-| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\< |
-| [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots, ✏ |
+| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
+| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema): Estándar, Estándar PC and those saved; each screen's docked and floating one |
+| [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
+| [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
+| [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
+| [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
 | [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder and the Spanish word list loaded once, a swipe read as words, accents put back |
@@ -109,6 +113,24 @@ a window that does.
 
 ## Using it
 
+- **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
+  and the device's colours: **Estándar**, Gboard's keys, and **Estándar
+  PC**, a PC's (Spanish ISO, or US in English): F1–F12, Alt Gr's symbol in
+  each key's corner and on the keys while Alt Gr is on, ´ and ` as dead
+  keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key, the arrows
+  repeating. Each screen (phone, tablet upright or on its side, DeX) shows
+  one docked and one floating, chosen in **Ajustes › Tema**; at first
+  Estándar on a phone, Estándar PC on a tablet on its side and on DeX. The
+  PC designs made before are saved keyboards there, renamed or deleted
+  under Guardados. On the keyboard, one button (a phone or a computer
+  reading PC) switches between the two, and Flotante (a screen with keys,
+  crossed while floating) docks or floats it.
+- **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
+  is dragged between them, its name in sight; the toolbar's buttons show
+  their names as the mouse rests on them.
+- **Emoji**: the comma held, or ⊞'s Emojis, opens them in the keys' place,
+  by group with a tab for each, those typed lately first; once one is
+  typed, the latest are in a row over the toolbar.
 - **What was copied** is kept to paste again, the last 20. **📋** in the
   title bar shows it in the keys' place; a tap pastes it, **✕** takes it out
   of the list. Berpiztu AI Keyboard keeps whatever is copied in any app,

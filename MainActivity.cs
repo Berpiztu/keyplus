@@ -67,6 +67,7 @@ public sealed class MainActivity : Activity
 #if KEYBOARD
         // Gboard's settings have their title in the page, not in a bar.
         ActionBar?.Hide();
+        Keyboards.MoveDesignsOnce(this);
         settings = new SettingsScreen(this);
         tryBox = TryBox();
         OnBackInvokedDispatcher.RegisterOnBackInvokedCallback(0, new BackCallback(this));
@@ -285,7 +286,7 @@ public sealed class MainActivity : Activity
         [
             new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage())),
             new(GetString(Resource.String.preferences), Icon: Resource.Drawable.ic_settings_tune, Tapped: () => settings!.Open(PreferencesPage())),
-            NotMadeRow(Resource.String.theme, Resource.Drawable.ic_grid_theme),
+            new(GetString(Resource.String.theme), Icon: Resource.Drawable.ic_grid_theme, Tapped: () => settings!.Open(ThemePage())),
         ],
         [
             NotMadeRow(Resource.String.corrections, Resource.Drawable.ic_settings_spellcheck),
@@ -309,6 +310,90 @@ public sealed class MainActivity : Activity
 
     private SettingsRow NotMadeRow(int title, int icon) =>
         new(GetString(title), Icon: icon, Tapped: () => Toast.MakeText(this, GetString(Resource.String.not_made_yet, new Java.Lang.String(GetString(title))), ToastLength.Short)!.Show());
+
+    /// <summary>
+    /// Tema: the keyboards of the list twice, the one this screen shows
+    /// docked and the one it shows floating each marked, a tap choosing
+    /// another there; then those saved, one tapped renamed or deleted.
+    /// </summary>
+    private SettingsPage ThemePage()
+    {
+        var kind = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
+        var here = KeyPlusPreferences.ForScreen(this, kind);
+        var all = Keyboards.All(this);
+        SettingsRow[] Shown(bool floating)
+        {
+            var chosen = Keyboards.Selected(this, here, kind, floating);
+            return
+            [
+                new(GetString(floating ? Resource.String.floating : Resource.String.docked), Keyboards.ScreenName(this, kind)),
+                .. all.Select(keyboard => new SettingsRow(keyboard.Name, Chosen: keyboard.Id == chosen.Id, Tapped: () =>
+                {
+                    Keyboards.Select(here, floating, keyboard.Id);
+                    settings!.Refresh(ThemePage());
+                })),
+            ];
+        }
+
+        List<IReadOnlyList<SettingsRow>> groups = [Shown(floating: false), Shown(floating: true)];
+        if (all.Where(keyboard => !keyboard.BuiltIn).ToList() is { Count: > 0 } saved)
+        {
+            groups.Add([new(GetString(Resource.String.keyboards_saved), GetString(Resource.String.keyboards_saved_summary)), .. saved.Select(keyboard => new SettingsRow(keyboard.Name, Tapped: () => ChangeSaved(keyboard)))]);
+        }
+
+        return new(GetString(Resource.String.theme), groups);
+    }
+
+    /// <summary>A saved keyboard renamed or, once asked, deleted.</summary>
+    private void ChangeSaved(KeyboardEntry keyboard) => new AlertDialog.Builder(this)
+        .SetTitle(keyboard.Name)!
+        .SetItems([GetString(Resource.String.rename), GetString(Resource.String.delete)], (_, picked) =>
+        {
+            if (picked.Which == 0)
+            {
+                AskName(keyboard.Name, name =>
+                {
+                    Keyboards.Rename(this, keyboard.Id, name);
+                    settings!.Refresh(ThemePage());
+                });
+                return;
+            }
+
+            new AlertDialog.Builder(this)
+                .SetMessage(GetString(Resource.String.delete_ask, new Java.Lang.String(keyboard.Name)))!
+                .SetPositiveButton(Resource.String.delete, (_, _) =>
+                {
+                    Keyboards.Delete(this, keyboard.Id);
+                    settings!.Refresh(ThemePage());
+                })!
+                .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
+                .Show();
+        })!
+        .Show();
+
+    /// <summary>A keyboard's name asked, the one it has offered; an empty one leaves it as it was.</summary>
+    private void AskName(string offered, Action<string> named)
+    {
+        var field = new EditText(this) { Text = offered, Hint = GetString(Resource.String.keyboard_name) };
+        field.SetSingleLine(true);
+        field.SelectAll();
+        var padding = (int)(20 * Resources!.DisplayMetrics!.Density);
+        var frame = new FrameLayout(this);
+        frame.SetPadding(padding, padding / 2, padding, 0);
+        frame.AddView(field);
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.keyboard_name)!
+            .SetView(frame)!
+            .SetPositiveButton(Resource.String.ok, (_, _) =>
+            {
+                if (field.Text?.Trim() is { Length: > 0 } name)
+                {
+                    named(name);
+                }
+            })!
+            .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
+            .Show();
+    }
 
     private SettingsPage LanguagesPage() => new(GetString(Resource.String.languages),
     [
@@ -502,13 +587,13 @@ public sealed class MainActivity : Activity
         }
     }
 
-    /// <summary>Every screen's design, those it has, written to the file chosen.</summary>
+    /// <summary>The keyboards saved in the list (Ajustes › Tema) written to the file chosen, each by its name with its design.</summary>
     private void WriteDesigns(Android.Net.Uri file)
     {
-        var designs = Screens
-            .Select(screen => (Screen: screen.ToString(), Design: KeyboardDesign.Kept(KeyPlusPreferences.ForScreen(this, screen))))
-            .Where(kept => kept.Design is not null)
-            .ToDictionary(kept => kept.Screen, kept => kept.Design!);
+        var designs = Keyboards.All(this)
+            .Where(keyboard => !keyboard.BuiltIn && keyboard.Design is not null)
+            .GroupBy(keyboard => keyboard.Name)
+            .ToDictionary(named => named.Key, named => named.First().Design!);
         var json = System.Text.Json.JsonSerializer.Serialize(
             new DesignsFile(DesignsKind, 1, Build.Model ?? "", DateTime.Now, designs),
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
@@ -519,11 +604,15 @@ public sealed class MainActivity : Activity
         }
 
         Toast.MakeText(this, designs.Count == 0
-            ? "No screen has a design yet: the file holds none."
-            : $"{designs.Count} design(s) exported: {string.Join(", ", designs.Keys.Select(ScreenWords))}.", ToastLength.Long)!.Show();
+            ? "No keyboard saved has a design yet: the file holds none."
+            : $"{designs.Count} keyboard(s) exported: {string.Join(", ", designs.Keys)}.", ToastLength.Long)!.Show();
     }
 
-    /// <summary>A file's designs read, and taken after asking which screens they replace.</summary>
+    /// <summary>
+    /// A file's designs read and added to the list as PC keyboards, nothing
+    /// replaced: each by its name, one kept before the list
+    /// by its screen's ("My design – phone").
+    /// </summary>
     private void ReadDesigns(Android.Net.Uri file)
     {
         string json;
@@ -535,35 +624,29 @@ public sealed class MainActivity : Activity
 
         var read = System.Text.Json.JsonSerializer.Deserialize<DesignsFile>(json);
         var designs = (read?.Kind == DesignsKind ? read.Designs : null)?
-            .Where(design => Enum.TryParse<KeyPlusPreferences.Screen>(design.Key, out _) && KeyboardDesign.Reads(design.Value))
-            .ToDictionary(design => Enum.Parse<KeyPlusPreferences.Screen>(design.Key), design => design.Value);
+            .Where(design => KeyboardDesign.Reads(design.Value))
+            .Select(design => (Name: Enum.TryParse<KeyPlusPreferences.Screen>(design.Key, out var screen)
+                ? GetString(Resource.String.my_design, new Java.Lang.String(Keyboards.ScreenName(this, screen)))
+                : design.Key, Design: design.Value))
+            .ToList();
         if (designs is null || designs.Count == 0)
         {
             Toast.MakeText(this, "That file holds no keyboard design.", ToastLength.Long)!.Show();
             return;
         }
 
-        new AlertDialog.Builder(this)
-            .SetMessage($"¿Importar los diseños de {string.Join(", ", designs.Keys.Select(screen => ScreenWords(screen.ToString())))}? " +
-                "Sustituyen a los de esas pantallas; los de ahora se guardan antes en el teléfono.")!
-            .SetPositiveButton("Sí", (_, _) =>
-            {
-                KeepDesignsAside();
-                foreach (var (screen, design) in designs)
-                {
-                    KeyboardDesign.Import(KeyPlusPreferences.ForScreen(this, screen), design);
-                }
+        foreach (var (name, design) in designs)
+        {
+            Keyboards.SaveAs(this, name, Keyboards.PcBase, design);
+        }
 
-                Toast.MakeText(this, "Designs imported.", ToastLength.Long)!.Show();
-            })!
-            .SetNegativeButton("No", (_, _) => { })!
-            .Show();
+        Toast.MakeText(this, $"{designs.Count} keyboard(s) added to Tema: {string.Join(", ", designs.Select(design => design.Name))}.", ToastLength.Long)!.Show();
     }
 
     /// <summary>
     /// Every screen's design as it is now, each copied to a file of its own
-    /// in the app's files (designs-history), before an import replaces or a
-    /// Reset clears them: none is lost, none written over.
+    /// in the app's files (designs-history), before a Reset clears them:
+    /// none is lost, none written over.
     /// </summary>
     private void KeepDesignsAside()
     {
@@ -578,16 +661,6 @@ public sealed class MainActivity : Activity
             }
         }
     }
-
-    /// <summary>A screen as the dialogs name it.</summary>
-    private static string ScreenWords(string screen) => screen switch
-    {
-        nameof(KeyPlusPreferences.Screen.Phone) => "móvil",
-        nameof(KeyPlusPreferences.Screen.TabletPortrait) => "tablet en vertical",
-        nameof(KeyPlusPreferences.Screen.TabletLandscape) => "tablet en horizontal",
-        nameof(KeyPlusPreferences.Screen.Dex) => "DeX",
-        _ => screen,
-    };
 
     /// <summary>
     /// Every screen's place, size, mode and labels forgotten: the keyboard

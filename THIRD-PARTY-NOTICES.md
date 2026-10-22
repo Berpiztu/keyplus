@@ -26,6 +26,7 @@ public and the library is a separate artifact in the build
 | FUTO Swipe encoder model (`Assets/futo-swipe/honorable_sturgeon`) | FUTO Model Weights License 1.0 (`Assets/futo-swipe/LICENSE.md`): the app says "powered by FUTO Swipe" | https://huggingface.co/futo-org/futo-swipe |
 | ExecuTorch, inside libswipe_jni.so | BSD | https://github.com/pytorch/executorch |
 | libc++_shared.so, from the Android NDK r27d | Apache-2.0 with LLVM exceptions | https://developer.android.com/ndk |
+| Unicode's emoji list, emoji-test.txt 15.1, its fully-qualified emoji by group (`Assets/emoji/emoji-15.1.txt`) | Unicode License v3 (terms of use) | https://unicode.org/Public/emoji/15.1/ |
 | AOSP LatinIME's Spanish and English (US) word lists (`Assets/dictionaries/es_wordlist.combined.gz`, `en_US_wordlist.combined.gz`) | AOSP LatinIME (to confirm) | https://android.googlesource.com/platform/packages/inputmethods/LatinIME |
 
 ## Icons
@@ -33,4 +34,4 @@ public and the library is a separate artifact in the build
 | Icon | Licence | Source |
 | --- | --- | --- |
 | The clipboard (`Resources/drawable/ic_clipboard.xml`), Material Icons' content_paste | Apache-2.0 | https://github.com/google/material-design-icons |
-| The standard keyboard's keys and toolbar (`Resources/drawable/ic_key_*.xml`, `ic_tool_*.xml`, `ic_grid_*.xml`, `ic_settings_*.xml`), Material Symbols (outlined) | Apache-2.0 | https://github.com/google/material-design-icons |
+| The standard keyboard's keys and toolbar (`Resources/drawable/ic_key_*.xml`, `ic_tool_*.xml`, `ic_grid_*.xml`, `ic_settings_*.xml`, `ic_emoji_*.xml`), Material Symbols (outlined); `ic_grid_pc.xml`, `ic_grid_floating*.xml` its computer with "PC", keys or a slash drawn on | Apache-2.0 | https://github.com/google/material-design-icons |

@@ -77,6 +77,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
         screenshots = new ScreenshotWatcher(this, clipboard);
         screenshots.Start();
 
+        // The PC designs each screen kept before the list of keyboards, made keyboards of it once.
+        Keyboards.MoveDesignsOnce(this);
+
         // FUTO Swipe and its word list, loaded once, away from the main thread.
         swipeTyping = new SwipeTyping(this);
     }
@@ -248,7 +251,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         placed = new PanelPlacement(preferences);
         // It opens on its letters the first time, as a keyboard does, on a phone and on a headset;
         // on a phone, on the standard keyboard, Gboard's.
-        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText, lettersFirst: true, standardKeys: !OnHeadset)
+        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText, lettersFirst: true, keyboardScreen: OnHeadset ? null : screen, floating: placed.Floating)
         {
             Enter = PerformEnter,
             Dockable = false,
@@ -360,18 +363,21 @@ public sealed class KeyPlusKeyboard : InputMethodService
         void NotMade(int name) => panel?.NotMadeYet(GetString(name));
         return
         [
-            new(GetString(Resource.String.floating), Resource.Drawable.ic_grid_keyboard, () => SetWindowed(placed?.Floating != true)),
-            new("GIF", Resource.Drawable.ic_grid_gif, () => panel?.NotMadeYet("GIF"), More: true),
-            new(GetString(Resource.String.split), Resource.Drawable.ic_grid_split, () => NotMade(Resource.String.split)),
-            new(GetString(Resource.String.translate), Resource.Drawable.ic_grid_translate, () => NotMade(Resource.String.translate)),
-            new(GetString(Resource.String.theme), Resource.Drawable.ic_grid_theme, () => NotMade(Resource.String.theme), More: true),
-            new(GetString(Resource.String.share), Resource.Drawable.ic_grid_share, () => NotMade(Resource.String.share)),
-            new("Emojis", Resource.Drawable.ic_key_emoji, () => panel?.NotMadeYet("Emojis"), More: true),
-            new(GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
-            new(GetString(Resource.String.next_language), Resource.Drawable.ic_key_language, () => NotMade(Resource.String.next_language)),
-            new(GetString(Resource.String.text_editing), Resource.Drawable.ic_grid_text_editing, () => NotMade(Resource.String.text_editing), More: true),
-            new(GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => frame?.Show(resizing: false, sides: false)),
-            new(GetString(Resource.String.switch_keyboard), Resource.Drawable.ic_grid_keyboard, ShowKeyboardPicker),
+            // The owner's sign, a screen with keys; crossed while the keyboard floats, as Gboard's; a tap, the other state.
+            placed?.Floating == true
+                ? new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating_off, () => SetWindowed(false))
+                : new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating, () => SetWindowed(true)),
+            new("gif", "GIF", Resource.Drawable.ic_grid_gif, () => panel?.NotMadeYet("GIF"), More: true),
+            new("split", GetString(Resource.String.split), Resource.Drawable.ic_grid_split, () => NotMade(Resource.String.split)),
+            new("translate", GetString(Resource.String.translate), Resource.Drawable.ic_grid_translate, () => NotMade(Resource.String.translate)),
+            new("theme", GetString(Resource.String.theme), Resource.Drawable.ic_grid_theme, () => NotMade(Resource.String.theme), More: true),
+            new("share", GetString(Resource.String.share), Resource.Drawable.ic_grid_share, () => NotMade(Resource.String.share)),
+            new("emojis", "Emojis", Resource.Drawable.ic_key_emoji, () => panel?.ShowEmojis(), More: true),
+            new("undo", GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
+            new("nextLanguage", GetString(Resource.String.next_language), Resource.Drawable.ic_key_language, () => NotMade(Resource.String.next_language)),
+            new("textEditing", GetString(Resource.String.text_editing), Resource.Drawable.ic_grid_text_editing, () => NotMade(Resource.String.text_editing), More: true),
+            new("move", GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => frame?.Show(resizing: false, sides: false)),
+            new("switchKeyboard", GetString(Resource.String.switch_keyboard), Resource.Drawable.ic_grid_keyboard, ShowKeyboardPicker),
         ];
     }
 
@@ -467,7 +473,17 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         placed.Floating = windowed;
         placed.Save();
+
+        // The screen shows another keyboard floating than docked: the keyboard made again with it.
+        var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
+        if (!OnHeadset && Keyboards.Selected(this, KeyPlusPreferences.ForScreen(this, screen), screen, windowed).Id != panel.KeyboardId)
+        {
+            panel.Root.Post(() => SetInputView(OnCreateInputView()));
+            return;
+        }
+
         panel.Settings = PhoneSettings();
+        panel.GridTiles = GridTiles();
         Place();
     }
 
@@ -847,7 +863,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// </summary>
     private void OnPreferenceChanged(ISharedPreferences preferences, string? key)
     {
-        var reset = key is null || key == KeyboardDesign.ImportedPreference;
+        var reset = key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key);
         var popupChanged = key == PanelPlacement.FloatingPreference && placed is not null
             && new PanelPlacement(preferences).Floating != placed.Floating;
         if (reset || popupChanged)

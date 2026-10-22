@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flotante while the keyboard is docked, tinted in code: Material Symbols' computer (outlined, Apache-2.0),
+     https://github.com/google/material-design-icons, symbols/android/computer/materialsymbolsoutlined/,
+     keys drawn on its screen, as the owner asked. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M40,840L40,760L920,760L920,840L40,840ZM160,720Q127,720 103.5,696.5Q80,673 80,640L80,200Q80,167 103.5,143.5Q127,120 160,120L800,120Q833,120 856.5,143.5Q880,167 880,200L880,640Q880,673 856.5,696.5Q833,720 800,720L160,720ZM160,640L800,640Q800,640 800,640Q800,640 800,640L800,200Q800,200 800,200Q800,200 800,200L160,200Q160,200 160,200Q160,200 160,200L160,640Q160,640 160,640Q160,640 160,640ZM160,640Q160,640 160,640Q160,640 160,640L160,200Q160,200 160,200Q160,200 160,200L160,200Q160,200 160,200Q160,200 160,200L160,640Q160,640 160,640Q160,640 160,640L160,640Z"/>
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M205,275L275,275L275,345L205,345ZM325,275L395,275L395,345L325,345ZM445,275L515,275L515,345L445,345ZM565,275L635,275L635,345L565,345ZM685,275L755,275L755,345L685,345ZM205,375L275,375L275,445L205,445ZM325,375L395,375L395,445L325,445ZM445,375L515,375L515,445L445,445ZM565,375L635,375L635,445L565,445ZM685,375L755,375L755,445L685,445ZM300,495L660,495L660,565L300,565Z"/>
+</vector>

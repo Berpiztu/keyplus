@@ -228,10 +228,15 @@ public sealed class KeyboardDesign
         return cells;
     }
 
-    public void Save(ISharedPreferences preferences) =>
-        preferences.Edit()!.PutString(Preference,
-            $"{Width.ToString(CultureInfo.InvariantCulture)}|{string.Join(';', Rows.Select(row => string.Join(',', row)))}|{string.Join(',', Removed)}|"
-            + string.Join(',', Widths.Select(pair => $"{pair.Key}:{pair.Value.ToString(CultureInfo.InvariantCulture)}")))!.Apply();
+    public void Save(ISharedPreferences preferences) => preferences.Edit()!.PutString(Preference, Text)!.Apply();
+
+    /// <summary>The design as it is kept: for a screen, or for a keyboard of the list (<see cref="Keyboards"/>).</summary>
+    public string Text =>
+        $"{Width.ToString(CultureInfo.InvariantCulture)}|{string.Join(';', Rows.Select(row => string.Join(',', row)))}|{string.Join(',', Removed)}|"
+        + string.Join(',', Widths.Select(pair => $"{pair.Key}:{pair.Value.ToString(CultureInfo.InvariantCulture)}"));
+
+    /// <summary>A design kept as text (a keyboard of the list's), or none where it does not read.</summary>
+    public static KeyboardDesign? FromText(string? text) => Parse(text);
 
     /// <summary>The screen's keyboard as made again.</summary>
     public static void Forget(ISharedPreferences preferences) => preferences.Edit()!.Remove(Preference)!.Apply();

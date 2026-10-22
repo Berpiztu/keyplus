@@ -6,9 +6,11 @@
     abcDesign in the app's keyplus.<screen>.xml, through run-as, so a Debug
     build) on the device, and writes it to docs\tODO\designs as a new file,
     <date>_<time>_<device model>_<screen>.txt, when it differs from the
-    newest copy of that device and screen. A copy is never written over:
-    every change stays. Run it before installing, before touching an
-    emulator and before every commit.
+    newest copy of that device and screen; and the keyboards saved in the
+    list (Ajustes › Tema), each with its design (the preference keyboards in
+    keyplus.xml), as <date>_<time>_<device model>_keyboards.json. A copy is
+    never written over: every change stays. Run it before installing, before
+    touching an emulator and before every commit.
 .EXAMPLE
     .\backup-designs.ps1
 .EXAMPLE
@@ -39,6 +41,21 @@ foreach ($serial in $devices) {
     if ($files.Count -eq 0) {
         Write-Host "${model}: no designs readable (not installed, or not a Debug build)." -ForegroundColor Yellow
         continue
+    }
+
+    # The keyboards of the list, each with its design, kept for every screen in keyplus.xml.
+    $globalXml = (Invoke-Adb @("-s", $serial, "exec-out", "run-as", $KeyboardPackageId, "cat", "shared_prefs/keyplus.xml")) -join "`n"
+    if ($globalXml -match '<string name="keyboards">([^<]*)</string>') {
+        $keyboards = [System.Net.WebUtility]::HtmlDecode($Matches[1])
+        $newest = Get-ChildItem -LiteralPath $Folder -Filter "*_${model}_keyboards.json" -ErrorAction SilentlyContinue |
+            Sort-Object Name | Select-Object -Last 1
+        if ($newest -and ((Get-Content -LiteralPath $newest.FullName -Raw).Trim() -eq $keyboards)) {
+            Write-Host "${model} keyboards: unchanged since $($newest.Name)." -ForegroundColor DarkGray
+        } else {
+            $name = "{0}_{1}_keyboards.json" -f (Get-Date -Format "yyyy-MM-dd_HHmmss"), $model
+            Set-Content -LiteralPath (Join-Path $Folder $name) -Value $keyboards -NoNewline -Encoding utf8NoBOM
+            Write-Host "${model} keyboards: copied to docs\tODO\designs\$name" -ForegroundColor Green
+        }
     }
 
     foreach ($file in $files) {

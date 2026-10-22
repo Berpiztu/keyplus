@@ -3,6 +3,7 @@ using Android.Graphics;
 using Android.Graphics.Drawables;
 using Android.OS;
 using Android.Views;
+using System.Text;
 
 namespace Berpiztu.KeyPlus;
 
@@ -49,6 +50,19 @@ public sealed class StandardColors(Context context)
     /// <summary>The floating keyboard's handle: Gboard's 168 grey, the palette's nearest tone.</summary>
     public Color Handle { get; } = Read(context, Android.Resource.Color.SystemNeutral1300);
 
+    /// <summary>The grid customised (✏): ✓'s circle and the outlines, Gboard's blue, the palette's primary (#387AFF on the Fold); ✓ on it.</summary>
+    public Color Primary { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemPrimaryLight : Android.Resource.Color.SystemAccent1600);
+
+    public Color OnPrimary { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnPrimaryLight : Android.Resource.Color.SystemAccent10);
+
+    /// <summary>The emoji's ground, system_surface_container_low_light (#F1F1F3 on the Fold), and their grey pills, system_surface_container_high_light (#CCCCCE).</summary>
+    public Color Low { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowLight : Android.Resource.Color.SystemNeutral150);
+
+    public Color High { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighLight : Android.Resource.Color.SystemNeutral1200);
+
+    /// <summary>The grid customised: the ground inside its outlines, system_surface_dim_light (#DAD9E0 on the Fold).</summary>
+    public Color Dim { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceDimLight : Android.Resource.Color.SystemNeutral2100);
+
     public Color Outline { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineLight : Android.Resource.Color.SystemNeutral1500);
 
     /// <summary>The outline at half: on the Fold, a dot not in sight 180 where the ground is 228 and the outline 132.</summary>
@@ -64,7 +78,10 @@ public sealed class StandardColors(Context context)
 /// the finger lifts; held, a letter types its corner's symbol and ⌫ repeats;
 /// Shift twice quickly locks the capitals; a swipe over the letters is read
 /// as a word (<see cref="Swiped"/>) and a swipe along the space bar is the
-/// next language. Its sizes are Gboard's on a Pixel 7 (420 dpi): pixels
+/// next language. As Estándar PC (<see cref="Pc"/>), a PC's keys on one
+/// page in the same look: Ctrl, Alt, ⊞ and Alt Gr on until the next key,
+/// Bloq Mayús, the dead keys' accents on the next letter, the arrows going
+/// on while held. Its sizes are Gboard's on a Pixel 7 (420 dpi): pixels
 /// measured there over 2.625; its letters' size, signs and corners' symbols
 /// are shares of a letter row's height, so they grow with the keys.
 /// </summary>
@@ -108,6 +125,15 @@ public sealed class StandardKeyboard : View
     private const float LanguageShare = 52f / (800f / 960) / 124;
     private const float ReturnShare = 48f / (720f / 960) / 124;
 
+    /// <summary>How much of a function key's width its word may take.</summary>
+    private const float LabelRoomShare = 0.94f;
+
+    /// <summary>The steps a word goes down by, of its largest size, until it fits its key.</summary>
+    private static readonly float[] WordSteps = [1f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f, 0.4f, 0.3f];
+
+    /// <summary>A PC's words in a medium weight, as the owner asked: the regular one too thin when small.</summary>
+    private static readonly Typeface MediumWords = Typeface.Create("sans-serif-medium", TypefaceStyle.Normal)!;
+
     /// <summary>The comma's emoji: on the Fold, 20 px wide on an 86 px key, its centre at 0.30 of it, the comma's at 0.62.</summary>
     private const float EmojiShare = 20f / (800f / 960) / 86;
     private const float EmojiCentreShare = 0.30f;
@@ -128,10 +154,31 @@ public sealed class StandardKeyboard : View
     private readonly Dictionary<int, Drawable> icons = [];
     private readonly float density;
 
+    /// <summary>A dead key's accent and the combining mark it puts on the next letter.</summary>
+    private static readonly Dictionary<string, string> DeadMarks = new()
+    {
+        ["´"] = "\u0301",
+        ["`"] = "\u0300",
+        ["^"] = "\u0302",
+        ["¨"] = "\u0308",
+    };
+
     private StandardPage page = StandardPage.Letters;
     private ShiftState shift = ShiftState.Off;
+    private bool pc;
+    private bool ctrl;
+    private bool alt;
+    private bool meta;
+    private bool altGr;
+    private bool capsLock;
+
+    /// <summary>A dead key's accent typed, waiting for the letter it goes on.</summary>
+    private string? deadKey;
     private long shiftTappedAt;
     private List<(StandardKey Key, RectF Box)> laid = [];
+
+    /// <summary>Each function key's word size, one for its whole row.</summary>
+    private readonly Dictionary<StandardKey, float> wordSizes = [];
 
     /// <summary>The finger on a key: which, where it went down, and what it has done so far.</summary>
     private Finger? finger;
@@ -174,8 +221,27 @@ public sealed class StandardKeyboard : View
 
     public Action? Entered { get; set; }
 
+    /// <summary>A PC's key that is no character, or a character with Ctrl, Alt or ⊞: its key code and the modifiers on.</summary>
+    public Action<Keycode, MetaKeyStates>? KeyPressed { get; set; }
+
+    /// <summary>Whether the keys are a PC's (Estándar PC) rather than Gboard's.</summary>
+    public bool Pc
+    {
+        get => pc;
+        set
+        {
+            pc = value;
+            page = value ? StandardPage.Pc : StandardPage.Letters;
+            RequestLayout();
+            Lay();
+        }
+    }
+
     /// <summary>🌐, or a swipe along the space bar: the next language.</summary>
     public Action? NextLanguage { get; set; }
+
+    /// <summary>The comma held: the emoji, as Gboard opens them.</summary>
+    public Action? EmojisAsked { get; set; }
 
     /// <summary>A key whose part is not made yet: what it is, to say so.</summary>
     public Action<string>? NotMade { get; set; }
@@ -222,10 +288,23 @@ public sealed class StandardKeyboard : View
 
     private float LetterRow => Dp(LetterRowDp);
 
+    /// <summary>
+    /// Gboard's letter key, as wide as it is tall: (1080 − 2·12 − 9·14) / 10 =
+    /// 93 px across a 124 px row on the Pixel 7.
+    /// </summary>
+    private const float GboardKeyAspect = 93f / 124;
+
+    /// <summary>
+    /// The letters', signs' and corners' size, of Gboard's: 1 on Gboard's
+    /// keys, as much smaller as a narrower key (a PC's fifteen across) is.
+    /// </summary>
+    private float glyphScale = 1f;
+
     protected override void OnMeasure(int widthMeasureSpec, int heightMeasureSpec)
     {
         var width = MeasureSpec.GetSize(widthMeasureSpec);
-        var height = Dp(TopDp) + Dp(NumberRowDp) + (4 * LetterRow) + (4 * Dp(RowGapDp)) + Dp(BottomDp);
+        var rows = StandardKeys.Page(pc ? StandardPage.Pc : StandardPage.Letters, language).Count;
+        var height = Dp(TopDp) + Dp(NumberRowDp) + ((rows - 1) * (LetterRow + Dp(RowGapDp))) + Dp(BottomDp);
         SetMeasuredDimension(width, (int)Math.Ceiling(height));
     }
 
@@ -236,20 +315,24 @@ public sealed class StandardKeyboard : View
     }
 
     /// <summary>
-    /// The page's keys in place: ten keys' widths across the row with Gboard's
-    /// gaps, a shorter row in the middle; the letters page's number row lower
-    /// than its letters', a page of four rows sharing the same height alike.
+    /// The page's keys in place: its widest row's keys across (Gboard's ten, a
+    /// PC's fifteen) with Gboard's gaps, a shorter row in the middle; the
+    /// letters page's top row lower than its letters', the symbols' pages'
+    /// rows sharing the same height alike.
     /// </summary>
     private void Lay()
     {
         laid = [];
+        wordSizes.Clear();
         var rows = StandardKeys.Page(page, language);
         var side = Dp(SideDp);
         var gap = Dp(KeyGapDp);
-        var unit = (Width - (2 * side) - (9 * gap)) / 10;
+        var across = rows.Max(row => row.Sum(key => key.Width));
+        var unit = (Width - (2 * side) - ((across - 1) * gap)) / across;
+        glyphScale = Math.Min(1f, unit / (LetterRow * GboardKeyAspect));
         var rowGap = Dp(RowGapDp);
-        float[] heights = rows.Count == 5
-            ? [Dp(NumberRowDp), LetterRow, LetterRow, LetterRow, LetterRow]
+        float[] heights = page is StandardPage.Letters or StandardPage.Pc
+            ? [Dp(NumberRowDp), .. Enumerable.Repeat(LetterRow, rows.Count - 1)]
             : Enumerable.Repeat((Height - Dp(TopDp) - Dp(BottomDp) - ((rows.Count - 1) * rowGap)) / rows.Count, rows.Count).ToArray();
         var top = Dp(TopDp);
         for (var r = 0; r < rows.Count; r++)
@@ -268,6 +351,7 @@ public sealed class StandardKeyboard : View
             top += heights[r] + rowGap;
         }
 
+        SizeWords(laid);
         Invalidate();
     }
 
@@ -291,13 +375,13 @@ public sealed class StandardKeyboard : View
     {
         var pressed = finger is { Swiping: false } now && now.Key == key;
         var function = key.Look != StandardLook.Letter;
-        fill.Color = function
-            ? (pressed ? colors.FunctionPressed : colors.Function)
+        fill.Color = IsOn(key) ? colors.GridCircle
+            : function ? (pressed ? colors.FunctionPressed : colors.Function)
             : (pressed ? colors.Function : colors.Key);
         var corner = key.Look == StandardLook.Pill ? box.Height() / 2 : Dp(CornerDp);
         canvas.DrawRoundRect(box, corner, corner, fill);
         var glyph = function ? colors.FunctionGlyph : colors.Glyph;
-        var h = LetterRow;
+        var h = LetterRow * glyphScale;
 
         if (key.Action == StandardAction.Shift)
         {
@@ -341,24 +425,84 @@ public sealed class StandardKeyboard : View
             case StandardAction.Type:
                 break;
             default:
-                DrawText(canvas, key.Label, box.CenterX(), box.CenterY(), h * WordShare, glyph);
+                text.SetTypeface(pc ? MediumWords : Typeface.Default);
+                DrawText(canvas, key.Label, box.CenterX(), box.CenterY(), wordSizes.TryGetValue(key, out var size) ? size : h * LabelShare, glyph);
+                text.SetTypeface(Typeface.Default);
                 return;
         }
 
-        var showsHint = finger is { LongPressed: true } longPress && longPress.Key == key && key.Hint is not null;
+        // The corner's symbol in the key's place while held, or for every key while Alt Gr is on, as Shift shows its capitals.
+        var showsHint = key.Hint is not null && (altGr || (finger is { LongPressed: true } longPress && longPress.Key == key));
         DrawText(canvas, showsHint ? key.Hint! : LabelOf(key), box.CenterX(), box.CenterY(), h * LabelShare, glyph);
         if (key.Hint is not null && !showsHint)
         {
             text.TextAlign = Paint.Align.Right;
             text.TextSize = h * HintShare;
             text.Color = glyph;
-            canvas.DrawText(key.Hint, box.Right - (box.Height() * HintRightShare), box.Top + (box.Height() * HintTopShare) + (text.TextSize * CapHeight), text);
+            canvas.DrawText(key.Hint, box.Right - (box.Height() * glyphScale * HintRightShare), box.Top + (box.Height() * glyphScale * HintTopShare) + (text.TextSize * CapHeight), text);
             text.TextAlign = Paint.Align.Center;
         }
     }
 
     /// <summary>A key's label as Shift has it: a letter in capitals, a digit as its symbol.</summary>
-    private string LabelOf(StandardKey key) => shift != ShiftState.Off && key.Shifted is not null ? key.Shifted : key.Label;
+    private string LabelOf(StandardKey key) => ShiftedFor(key) && key.Shifted is not null ? key.Shifted : key.Label;
+
+    /// <summary>Whether a key types its Shift's: a letter with Shift or Bloq Mayús, not both; any other with Shift.</summary>
+    private bool ShiftedFor(StandardKey key) =>
+        key.Text is { Length: 1 } one && char.IsLetter(one[0]) ? (shift != ShiftState.Off) != capsLock : shift != ShiftState.Off;
+
+    /// <summary>Whether a modifier key is on, drawn so.</summary>
+    private bool IsOn(StandardKey key) => key.Action switch
+    {
+        StandardAction.Ctrl => ctrl,
+        StandardAction.Alt => alt,
+        StandardAction.Meta => meta,
+        StandardAction.AltGr => altGr,
+        StandardAction.CapsLock => capsLock,
+        _ => false,
+    };
+
+    /// <summary>
+    /// The page's function keys' words as large as most of them hold (three
+    /// in four), the same size, those that do not fit a step smaller at a
+    /// time (ImpPnt, Bloq Mayús): the owner's, room not to be wasted, the
+    /// keys even. Gboard's size at most on Gboard's keys, a letter's on a PC's. A
+    /// sign alone (an arrow, ⊞) is a letter's size.
+    /// </summary>
+    private void SizeWords(List<(StandardKey Key, RectF Box)> page)
+    {
+        var largest = LetterRow * (pc ? LabelShare : WordShare);
+        var own = page.Where(laidKey => Worded(laidKey.Key))
+            .Select(laidKey => (laidKey.Key, Size: largest * WordSteps.FirstOrDefault(share => Fits(laidKey.Key.Label, largest * share, laidKey.Box.Width() * LabelRoomShare), WordSteps[^1])))
+            .ToList();
+        if (own.Count == 0)
+        {
+            return;
+        }
+
+        var even = own.Select(word => word.Size).OrderDescending().ElementAt((int)Math.Ceiling(own.Count * MostWordsShare) - 1);
+        foreach (var (key, size) in own)
+        {
+            wordSizes[key] = Math.Min(size, even);
+        }
+    }
+
+    /// <summary>How many of a page's words its even size must fit.</summary>
+    private const float MostWordsShare = 0.75f;
+
+    /// <summary>Whether a key is drawn as a word: a function key with no sign and more than one character.</summary>
+    private static bool Worded(StandardKey key) =>
+        key.Icon == 0 && key.HintIcon == 0 && key.Label.Length > 1
+        && key.Action is not (StandardAction.Type or StandardAction.Space or StandardAction.Numbers or StandardAction.Shift);
+
+    private bool Fits(string label, float size, float room)
+    {
+        text.SetTypeface(pc ? MediumWords : Typeface.Default);
+        text.TextSize = size;
+        var fits = text.MeasureText(label) <= room;
+        text.SetTypeface(Typeface.Default);
+        return fits;
+    }
 
     private void DrawText(Canvas canvas, string label, float centreX, float centreY, float size, Color color)
     {
@@ -460,8 +604,13 @@ public sealed class StandardKeyboard : View
 
         if (hit.Key.Action == StandardAction.Delete)
         {
-            Deleted?.Invoke();
-            Hold(() => Deleted?.Invoke(), KeyPanel.RepeatIntervalMs, KeyPanel.RepeatDelayMs);
+            DeleteOnce();
+            Hold(DeleteOnce, KeyPanel.RepeatIntervalMs, KeyPanel.RepeatDelayMs);
+        }
+        else if (hit.Key.Repeats)
+        {
+            Press(hit.Key.Code);
+            Hold(() => Press(hit.Key.Code), KeyPanel.RepeatIntervalMs, KeyPanel.RepeatDelayMs);
         }
         else if (hit.Key.Hint is not null)
         {
@@ -474,6 +623,20 @@ public sealed class StandardKeyboard : View
                 }
 
                 Invalidate();
+            }, 0, LongPressMs);
+        }
+        else if (hit.Key.HintIcon == Resource.Drawable.ic_key_emoji)
+        {
+            // The comma with ☺ in its corner, held: the emoji at once, the finger still down, as Gboard's.
+            Hold(() =>
+            {
+                now.LongPressed = true;
+                if (Vibrates)
+                {
+                    PerformHapticFeedback(FeedbackConstants.LongPress);
+                }
+
+                EmojisAsked?.Invoke();
             }, 0, LongPressMs);
         }
 
@@ -515,14 +678,14 @@ public sealed class StandardKeyboard : View
         }
 
         var far = Math.Max(Math.Abs(x - now.X), Math.Abs(y - now.Y)) > Math.Min(now.Box.Width(), now.Box.Height()) * 0.6f;
-        if (far && page == StandardPage.Letters && Swiped is not null && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
+        if (far && page is StandardPage.Letters or StandardPage.Pc && Swiped is not null && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
         {
             now.Swiping = true;
             StopHolding();
             ShowTrail(now);
             Invalidate();
         }
-        else if (far && now.Key.Action != StandardAction.Delete)
+        else if (far && now.Key.Action != StandardAction.Delete && !now.Key.Repeats)
         {
             StopHolding();
         }
@@ -571,8 +734,11 @@ public sealed class StandardKeyboard : View
         }
         else if (longPressed)
         {
-            Typed?.Invoke(now.Key.Hint!);
-            ShiftUsed();
+            if (now.Key.Hint is { } hint)
+            {
+                Type(hint);
+                ModifiersUsed();
+            }
         }
         else if (SwipedAlong(now))
         {
@@ -593,11 +759,43 @@ public sealed class StandardKeyboard : View
         switch (key.Action)
         {
             case StandardAction.Type:
-                Typed?.Invoke(shift != ShiftState.Off && key.Shifted is not null ? key.Shifted : key.Text!);
-                ShiftUsed();
+                TypeKey(key);
+                break;
+            case StandardAction.Space when Combining:
+                Press(Keycode.Space);
+                ModifiersUsed();
                 break;
             case StandardAction.Space:
-                Typed?.Invoke(" ");
+                Type(" ");
+                break;
+            case StandardAction.Key when !key.Repeats:
+                FlushDead();
+                Press(key.Code);
+                ModifiersUsed();
+                break;
+            case StandardAction.Key:
+            case StandardAction.Delete when Combining:
+                ModifiersUsed();
+                break;
+            case StandardAction.Ctrl:
+                ctrl = !ctrl;
+                Invalidate();
+                break;
+            case StandardAction.Alt:
+                alt = !alt;
+                Invalidate();
+                break;
+            case StandardAction.Meta:
+                meta = !meta;
+                Invalidate();
+                break;
+            case StandardAction.AltGr:
+                altGr = !altGr;
+                Invalidate();
+                break;
+            case StandardAction.CapsLock:
+                capsLock = !capsLock;
+                Invalidate();
                 break;
             case StandardAction.Shift:
                 ToggleShift();
@@ -617,11 +815,148 @@ public sealed class StandardKeyboard : View
             case StandardAction.Language:
                 NextLanguage?.Invoke();
                 break;
+            case StandardAction.Enter when Combining:
+                Press(Keycode.Enter);
+                ModifiersUsed();
+                break;
             case StandardAction.Enter:
+                FlushDead();
                 Entered?.Invoke();
                 break;
         }
     }
+
+    /// <summary>
+    /// A character's key: with Ctrl, Alt or ⊞ on, its key code with them (a
+    /// letter's, a digit's, a sign's that has one); with Alt Gr, its corner's
+    /// symbol; a dead key's accent kept for the next letter; else its text.
+    /// </summary>
+    private void TypeKey(StandardKey key)
+    {
+        if (Combining && CodeOf(key.Text) is { } code)
+        {
+            Press(code);
+        }
+        else if (altGr && key.Hint is not null)
+        {
+            Type(key.Hint);
+        }
+        else
+        {
+            var typed = ShiftedFor(key) && key.Shifted is not null ? key.Shifted : key.Text!;
+            if (key.Dead && DeadMarks.ContainsKey(typed))
+            {
+                FlushDead();
+                deadKey = typed;
+            }
+            else
+            {
+                Type(typed);
+            }
+        }
+
+        ModifiersUsed();
+    }
+
+    /// <summary>Text typed, a dead key's accent on it where it has one with it (´ then a: á), or before it; a space types the accent alone.</summary>
+    private void Type(string typed)
+    {
+        if (deadKey is { } accent)
+        {
+            deadKey = null;
+            var composed = (typed + DeadMarks[accent]).Normalize(NormalizationForm.FormC);
+            typed = typed == " " ? accent : composed.Length == 1 ? composed : accent + typed;
+        }
+
+        Typed?.Invoke(typed);
+    }
+
+    /// <summary>A dead key's accent typed alone, for a key that takes none.</summary>
+    private void FlushDead()
+    {
+        if (deadKey is { } accent)
+        {
+            deadKey = null;
+            Typed?.Invoke(accent);
+        }
+    }
+
+    /// <summary>⌫: with Ctrl, Alt or ⊞ on, the key with them; a dead key's accent waiting, only that, dropped.</summary>
+    private void DeleteOnce()
+    {
+        if (Combining)
+        {
+            Press(Keycode.Del);
+        }
+        else if (deadKey is not null)
+        {
+            deadKey = null;
+        }
+        else
+        {
+            Deleted?.Invoke();
+        }
+    }
+
+    private void Press(Keycode code) => KeyPressed?.Invoke(code, Held());
+
+    /// <summary>Whether a key goes with Ctrl, Alt or ⊞ as a key code rather than as text.</summary>
+    private bool Combining => ctrl || alt || meta;
+
+    /// <summary>The modifiers on, Shift with them, as a key event's meta state.</summary>
+    private MetaKeyStates Held()
+    {
+        var held = MetaKeyStates.None;
+        if (ctrl)
+        {
+            held |= MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn;
+        }
+
+        if (alt)
+        {
+            held |= MetaKeyStates.AltOn | MetaKeyStates.AltLeftOn;
+        }
+
+        if (meta)
+        {
+            held |= MetaKeyStates.MetaOn | MetaKeyStates.MetaLeftOn;
+        }
+
+        if (shift != ShiftState.Off)
+        {
+            held |= MetaKeyStates.ShiftOn | MetaKeyStates.ShiftLeftOn;
+        }
+
+        return held;
+    }
+
+    /// <summary>A key gone with the modifiers: Ctrl, Alt, ⊞, Alt Gr and a once-only Shift off again.</summary>
+    private void ModifiersUsed()
+    {
+        if (ctrl || alt || meta || altGr)
+        {
+            ctrl = alt = meta = altGr = false;
+            Invalidate();
+        }
+
+        ShiftUsed();
+    }
+
+    /// <summary>The key code of a character a shortcut is made with: a letter's, a digit's, a few signs'.</summary>
+    private static Keycode? CodeOf(string? text) => text is { Length: 1 } one
+        ? one[0] switch
+        {
+            >= 'a' and <= 'z' => Keycode.A + (one[0] - 'a'),
+            >= '0' and <= '9' => Keycode.Num0 + (one[0] - '0'),
+            ',' => Keycode.Comma,
+            '.' => Keycode.Period,
+            '-' => Keycode.Minus,
+            '+' => Keycode.Plus,
+            '=' => Keycode.Equals,
+            '/' => Keycode.Slash,
+            _ => null,
+        }
+        : null;
 
     /// <summary>Shift: on for one key; tapped again within a long press's time, the capitals locked; tapped once more, off.</summary>
     private void ToggleShift()

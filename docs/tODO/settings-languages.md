@@ -39,9 +39,10 @@ tell it apart come later. In this order.
     ‹ (to the other side, the buttons then at the right with › —
     [fold-left.png](photos/gboard/fold-left.png)) and the dashed square
     (resize). Under them ⌨ (switch keyboard), and ∨ (hide) at the far right.
-- **PC**: the owner's designs (today's ABC), every key, for remote work.
-  The Keys strip (today's Keys mode) belongs to PC only.
-- A button switches between them.
+- **Standard PC**: a PC's keys in the same look (2c), for remote work.
+- The owner's earlier PC designs (the dark ABC, with the Keys strip) are
+  saved keyboards of the list (2c).
+- ⊞ switches between Standard and Standard PC.
 
 ## Texts
 
@@ -62,6 +63,18 @@ tell it apart come later. In this order.
   Minimizar, A−, A+, A↺, Cambiar de teclado.
 - Later: in landscape, where there is room, every button on one screen
   rather than in pages.
+- ✏, as Gboard's on the Fold: ✕ turns into ✓ in a blue circle (the
+  palette's primary), the toolbar's buttons each on a pill in a blue
+  outline, 🎤 ringed; "Mantén pulsado y arrastra para personalizar"; every
+  button in one list that scrolls, in a blue outline that scrolls with it,
+  two across, three on a wide keyboard. A button held lifts and follows the
+  finger as a whole pill, its sign and its name, to see which it is (the
+  owner's, not Gboard's round sign): over the toolbar, the toolbar opening
+  where it would go (full, its last button goes to the grid); over the
+  list, the list opening. Kept for every screen. — done
+- The owner's, beyond Gboard: the grid's pills as wide as the keyboard
+  leaves them, so names fit rather than scroll; the toolbar's buttons
+  show their names as the mouse rests on them.
 
 ## 2. The app's settings screen, as Gboard's
 
@@ -108,6 +121,56 @@ tell it apart come later. In this order.
   it moves out of the way when it stands over the field being typed in
   (the caret's place, which Android gives the keyboard). Thought for Windows
   too.
+
+## 2c. Keyboards (Ajustes › Tema)
+
+Agreed with the owner, 22 October 2026.
+
+- Two keyboards come with it, in Gboard's look and the device's colours:
+  **Estándar**, Gboard's keys as they are (accents and symbols on a long
+  press), and **Estándar PC**, a PC's keys (Spain ISO in Spanish, US ANSI
+  in English, 15 keys across): F1–F12 over the digits, Alt Gr's symbol in
+  each key's corner, ` and ´ dead keys (´ then a: á), Bloq Mayús, Ctrl, Alt
+  and ⊞ on until the next key, which goes with them, the arrows repeating.
+  Neither is changed nor deleted. — done
+- Each screen (phone, tablet upright, tablet on its side, DeX) keeps two:
+  the keyboard it shows docked and the one it shows floating. At first
+  Estándar on a phone and a tablet upright, Estándar PC on a tablet on its
+  side and on DeX. Tema lists the keyboards twice, Acoplado and Flotante,
+  the screen's marked; one button of ⊞ (or the toolbar) shows the
+  keyboard in sight, Estándar a phone, PC a computer, and switches to the
+  other, for the state the keyboard is in. — done
+- Flotante: the owner's sign, a computer's screen with keys on it,
+  crossed while the keyboard floats as Gboard crosses its own; a tap, the
+  other state. PC's sign a computer's screen reading "PC"; Estándar's a
+  phone. — done
+- The PC designs made before (the dark whole keyboard, one per screen) are
+  saved keyboards ("Mi diseño – móvil"…), designed as before; a screen that
+  showed PC shows its own, docked and floating. Tema › Guardados renames or
+  deletes them. — done
+- Next: Diseñar for the standard keyboards: the size, rows inserted, keys
+  taken from a list (Esc, Tab, Ctrl, Alt, ⊞, ImpPnt, the arrows, Inicio,
+  Fin, RePág, AvPág, Supr, F1–F12…), moved, widened, removed. Hecho saves a
+  new keyboard, which becomes the screen's for the state it was designed in
+  (docked or floating).
+- Later: previews; colours (Gboard's themes).
+
+## 2d. Emoji (as Gboard's on the owner's Fold)
+
+- The comma held (☺ in its corner) or ⊞'s Emojis: the emoji in the keys'
+  and the toolbar's place. Over them ← in a grey circle, Buscar and a tab
+  for each group (recent, then Unicode's), the one in sight in a blue
+  circle, scrolling across; the list by group, a grey name over each,
+  those typed lately first; under them ABC, the emoji (in use), GIF,
+  stickers, :-) and ⌫. Colours the palette's (surface_container_low, its
+  grey pills surface_container_high, accent1_200 for the one in use). — done
+- Over the toolbar, once one is typed, the emoji typed lately in a row,
+  each in its cell from the left; a tap types one. — done
+- Unicode's emoji-test.txt 15.1, those the device draws; skin tones and
+  Buscar, GIF, stickers and :-) not yet (they say so).
+- The PC keyboard's words (Esc, F1–F12, Ctrl, Alt, Alt Gr, Tab, Bloq Mayús)
+  as large as most of them fit, the same size, medium weight, almost the
+  whole key wide; one that does not fit a step smaller: the owner's.
 
 ## 3. Languages
 

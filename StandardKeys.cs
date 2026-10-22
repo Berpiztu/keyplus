@@ -1,3 +1,5 @@
+using Android.Views;
+
 namespace Berpiztu.KeyPlus;
 
 /// <summary>What a key of the standard keyboard does.</summary>
@@ -19,6 +21,16 @@ public enum StandardAction
     Language,
     Space,
     Enter,
+    /// <summary>A key of a PC's that is no character (Esc, Tab, F1–F12, the arrows, Supr): its key code sent, with the modifiers on.</summary>
+    Key,
+    /// <summary>Ctrl, Alt and ⊞: on until the next key, which goes with them.</summary>
+    Ctrl,
+    Alt,
+    Meta,
+    /// <summary>Alt Gr: on until the next key, which types its corner's symbol.</summary>
+    AltGr,
+    /// <summary>Bloq Mayús: the letters in capitals until pressed again.</summary>
+    CapsLock,
 }
 
 /// <summary>How a key is drawn, as Gboard draws it: a letter's key, a function key's tinted one, or a tinted pill.</summary>
@@ -33,7 +45,8 @@ public enum StandardLook
 /// A key of the standard keyboard: its label, what it does, the text it
 /// types (and with Shift), the symbol drawn in its corner that a long press
 /// types, its width in keys, how it is drawn and its icon, if a sign is drawn
-/// in place of its label.
+/// in place of its label; on a PC's, the key code it sends and whether it
+/// is a dead key, the accent it types going on the next letter.
 /// </summary>
 public sealed record StandardKey(
     string Label,
@@ -44,7 +57,13 @@ public sealed record StandardKey(
     float Width = 1f,
     StandardLook Look = StandardLook.Letter,
     int Icon = 0,
-    int HintIcon = 0);
+    int HintIcon = 0,
+    Keycode Code = Keycode.Unknown,
+    bool Dead = false)
+{
+    /// <summary>Whether held it goes on and on, as a PC's arrows do.</summary>
+    public bool Repeats => Code is Keycode.DpadLeft or Keycode.DpadRight or Keycode.DpadUp or Keycode.DpadDown;
+}
 
 /// <summary>The standard keyboard's pages.</summary>
 public enum StandardPage
@@ -52,6 +71,8 @@ public enum StandardPage
     Letters,
     Symbols,
     MoreSymbols,
+    /// <summary>Estándar PC's only page: a PC's keys, every symbol with Shift or Alt Gr.</summary>
+    Pc,
 }
 
 /// <summary>
@@ -112,6 +133,7 @@ public static class StandardKeys
             {
                 StandardPage.Symbols => SymbolsPage(language),
                 StandardPage.MoreSymbols => MoreSymbolsPage(language),
+                StandardPage.Pc => language == English ? UsPcPage() : SpanishPcPage(),
                 _ => LettersPage(language),
             };
         }
@@ -125,7 +147,7 @@ public static class StandardKeys
         [.. Letters(language.LetterRows[0], language.Hints[0])],
         [.. Letters(language.LetterRows[1], language.Hints[1])],
         [
-            new("Shift", StandardAction.Shift, Width: WideWidth, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_shift),
+            Shift(WideWidth),
             .. Letters(language.LetterRows[2], language.Hints[2]),
             Delete(),
         ],
@@ -176,6 +198,74 @@ public static class StandardKeys
             Enter(),
         ],
     ];
+
+    /// <summary>
+    /// Estándar PC in Spanish: a Spanish PC's keys (Spain, ISO), as wide as
+    /// it has them, 15 keys across: F1–F12 over the digits; Ç at the end of
+    /// the Q row, where a Spanish laptop of the narrow Enter has it; ` and ´
+    /// dead keys; Alt Gr's symbol in each key's corner.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> SpanishPcPage() =>
+    [
+        FunctionRow("ImpPnt", "Supr"),
+        [.. PcKeys("º1234567890'¡", "ª!\"·$%&/()=?¿", "\\|@#~€¬"), Delete() with { Width = 2f }],
+        [PcKey("Tab", Keycode.Tab, WideWidth), .. PcKeys("qwertyuiop`+", "QWERTYUIOP^*", "  €       []"), PcKeys("ç", "Ç", "}").Single() with { Width = WideWidth }],
+        [CapsLock("Bloq Mayús"), .. PcKeys("asdfghjklñ´", "ASDFGHJKLÑ¨", "          {"), Enter() with { Width = 2.25f }],
+        [Shift(1.25f), .. PcKeys("<zxcvbnm,.-", ">ZXCVBNM;:_", ""), PcKey("↑", Keycode.DpadUp), Shift(1.75f)],
+        BottomPcRow(new("Alt Gr", StandardAction.AltGr, Width: 1.25f, Look: StandardLook.Function)),
+    ];
+
+    /// <summary>Estándar PC in English: a US PC's keys (ANSI), 15 keys across, F1–F12 over the digits; no Alt Gr, two Alts.</summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> UsPcPage() =>
+    [
+        FunctionRow("PrtSc", "Del"),
+        [.. PcKeys("`1234567890-=", "~!@#$%^&*()_+", ""), Delete() with { Width = 2f }],
+        [PcKey("Tab", Keycode.Tab, WideWidth), .. PcKeys("qwertyuiop[]", "QWERTYUIOP{}", ""), PcKeys("\\", "|", "").Single() with { Width = WideWidth }],
+        [CapsLock("Caps Lock"), .. PcKeys("asdfghjkl;'", "ASDFGHJKL:\"", ""), Enter() with { Width = 2.25f }],
+        [Shift(2.25f), .. PcKeys("zxcvbnm,./", "ZXCVBNM<>?", ""), PcKey("↑", Keycode.DpadUp), Shift(1.75f)],
+        BottomPcRow(new("Alt", StandardAction.Alt, Width: 1.25f, Look: StandardLook.Function)),
+    ];
+
+    /// <summary>Esc, F1–F12, then print screen and the forward delete, as a laptop's top row.</summary>
+    private static IReadOnlyList<StandardKey> FunctionRow(string printScreen, string forwardDelete) =>
+    [
+        PcKey("Esc", Keycode.Escape),
+        .. Enumerable.Range(1, 12).Select(number => PcKey($"F{number}", Keycode.F1 + (number - 1))),
+        PcKey(printScreen, Keycode.Sysrq),
+        PcKey(forwardDelete, Keycode.ForwardDel),
+    ];
+
+    /// <summary>Ctrl, ⊞, Alt, 🌐, the space bar, the right Alt (Spanish's Alt Gr) and the arrows.</summary>
+    private static IReadOnlyList<StandardKey> BottomPcRow(StandardKey rightAlt) =>
+    [
+        new("Ctrl", StandardAction.Ctrl, Width: 1.25f, Look: StandardLook.Function),
+        new("⊞", StandardAction.Meta, Width: 1.25f, Look: StandardLook.Function),
+        new("Alt", StandardAction.Alt, Width: 1.25f, Look: StandardLook.Function),
+        new("🌐", StandardAction.Language, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_language),
+        Space() with { Width = 6f },
+        rightAlt,
+        PcKey("←", Keycode.DpadLeft),
+        PcKey("↓", Keycode.DpadDown),
+        PcKey("→", Keycode.DpadRight),
+    ];
+
+    /// <summary>A PC's characters: each with its Shift's and its Alt Gr's, a space none; ` and ´ dead keys.</summary>
+    private static IEnumerable<StandardKey> PcKeys(string texts, string shifted, string altGr) =>
+        texts.Select((text, at) => new StandardKey(
+            text.ToString(),
+            Text: text.ToString(),
+            Shifted: shifted[at].ToString(),
+            Hint: at < altGr.Length && altGr[at] != ' ' ? altGr[at].ToString() : null,
+            Dead: text is '`' or '´'));
+
+    private static StandardKey PcKey(string label, Keycode code, float width = 1f) =>
+        new(label, StandardAction.Key, Width: width, Look: StandardLook.Function, Code: code);
+
+    private static StandardKey CapsLock(string label) =>
+        new(label, StandardAction.CapsLock, Width: 1.75f, Look: StandardLook.Function);
+
+    private static StandardKey Shift(float width) =>
+        new("Shift", StandardAction.Shift, Width: width, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_shift);
 
     private static IEnumerable<StandardKey> Letters(string letters, string hints) =>
         letters.Zip(hints, (letter, hint) => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString(), Hint: hint.ToString()));
