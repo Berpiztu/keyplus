@@ -125,4 +125,8 @@
   <string name="add_row">+ Row</string>
   <string name="remove">Remove</string>
   <string name="saved_as">%1$s %2$s</string>
+  <string name="voice_listening">Listening…</string>
+  <string name="voice_transcribing">Transcribing…</string>
+  <string name="voice_unavailable">The speech service does not answer</string>
+  <string name="voice_no_microphone">No microphone to listen with</string>
 </resources>

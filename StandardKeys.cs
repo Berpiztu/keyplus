@@ -78,10 +78,11 @@ public enum StandardPage
 /// <summary>
 /// A language of the standard keyboard, as Gboard has it: its code, its
 /// name on the space bar, its letters' rows and the symbols in their corners,
-/// the second row of its ?123 and =\&lt; pages, and the word list a swipe is
-/// read with (Assets/dictionaries, AOSP LatinIME's).
+/// the second row of its ?123 and =\&lt; pages, the word list a swipe is
+/// read with (Assets/dictionaries, AOSP LatinIME's), and its locale, as the
+/// speech service (ia-voice) asks for a language.
 /// </summary>
-public sealed record StandardLanguage(string Code, string Name, string[] LetterRows, string[] Hints, string Symbols, string MoreSymbols, string WordList)
+public sealed record StandardLanguage(string Code, string Name, string[] LetterRows, string[] Hints, string Symbols, string MoreSymbols, string WordList, string Locale)
 {
     /// <summary>The letters a swipe is read over, in the order their centres are handed with it: the language's own, in Unicode's order.</summary>
     public string SwipeLetters { get; } = string.Concat(LetterRows.SelectMany(row => row).Order());
@@ -108,7 +109,8 @@ public static class StandardKeys
         ["%\\|=[]<>{}", "@#€_&-+()/", "*\"':;!?"],
         "@#€_&-+()/",
         "£¥$¢^°={}\\",
-        "dictionaries/es_wordlist.combined.gz");
+        "dictionaries/es_wordlist.combined.gz",
+        "es-ES");
 
     public static readonly StandardLanguage English = new(
         "en",
@@ -117,7 +119,8 @@ public static class StandardKeys
         ["%\\|=[]<>{}", "@#$_&-+()", "*\"':;!?"],
         "@#$_&-+()/",
         "£¢€¥^°={}\\",
-        "dictionaries/en_US_wordlist.combined.gz");
+        "dictionaries/en_US_wordlist.combined.gz",
+        "en-US");
 
     public static readonly IReadOnlyList<StandardLanguage> Languages = [Spanish, English];
 

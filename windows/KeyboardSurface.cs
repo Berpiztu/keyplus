@@ -169,6 +169,20 @@ public sealed class KeyboardSurface : FrameworkElement
         lastTyped = text.Length > 0 ? text[^1] : lastTyped;
     }
 
+    /// <summary>Words spoken (🎤), typed as a swiped word is: a space before them unless after a space or nothing.</summary>
+    public void TypeSpoken(string text)
+    {
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        EndSwipe(letter: false);
+        var spaced = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? text : " " + text;
+        KeySender.Type(spaced);
+        lastTyped = spaced[^1];
+    }
+
     /// <summary>⌫ from elsewhere (the emoji's), as the key's.</summary>
     public void DeleteBack() => DeleteOnce();
 

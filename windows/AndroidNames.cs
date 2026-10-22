@@ -65,6 +65,7 @@ namespace Berpiztu.KeyPlus
             public const int ic_emoji_objects = 18;
             public const int ic_emoji_symbols = 19;
             public const int ic_emoji_flags = 20;
+            public const int ic_tool_mic = 21;
         }
 
         public static class String
@@ -84,6 +85,10 @@ namespace Berpiztu.KeyPlus
             public const int emoji_symbols = 13;
             public const int emoji_flags = 14;
             public const int not_made_yet = 15;
+            public const int voice_listening = 16;
+            public const int voice_transcribing = 17;
+            public const int voice_unavailable = 18;
+            public const int voice_no_microphone = 19;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

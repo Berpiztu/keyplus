@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
@@ -41,6 +42,8 @@ public sealed class KeyboardWindow : Window
     private readonly TextBlock notice;
     private readonly SwipeEngine swipe = new();
     private readonly EmojiPanel emoji;
+    private readonly VoiceTyping voice = new();
+    private readonly SignButton mic;
 
     /// <summary>The words a swipe read as, in the toolbar's middle as Gboard's: the one typed in bold in the centre, one on each side, a tap on one taking its place.</summary>
     private readonly Grid suggestions = new() { Visibility = Visibility.Collapsed };
@@ -86,6 +89,8 @@ public sealed class KeyboardWindow : Window
         };
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
         close.Clicked += Close;
+        mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
+        mic.Clicked += Listen;
         notice = new TextBlock { Foreground = new SolidColorBrush(colors.Glyph), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, FontSize = 13 };
         noticeTimer.Tick += (_, _) =>
         {
@@ -109,9 +114,11 @@ public sealed class KeyboardWindow : Window
         };
         DockPanel.SetDock(smiley, Dock.Left);
         DockPanel.SetDock(close, Dock.Right);
+        DockPanel.SetDock(mic, Dock.Right);
         bar.Children.Add(switcher);
         bar.Children.Add(smiley);
         bar.Children.Add(close);
+        bar.Children.Add(mic);
         var middle = new Grid();
         middle.Children.Add(notice);
         middle.Children.Add(suggestions);
@@ -239,6 +246,45 @@ public sealed class KeyboardWindow : Window
         }
     }
 
+    /// <summary>
+    /// 🎤: a tap starts listening, 🎤 lit and "Escuchando…" in the toolbar; a
+    /// tap again sends what was heard to ia-voice and types its words where the
+    /// keys go, in the keyboard's language.
+    /// </summary>
+    private async void Listen()
+    {
+        if (!voice.Recording)
+        {
+            try
+            {
+                voice.Start();
+            }
+            catch (Exception none)
+            {
+                System.Diagnostics.Debug.WriteLine($"The microphone could not listen: {none.Message}");
+                Notice(Texts.Get(Resource.String.voice_no_microphone));
+                return;
+            }
+
+            mic.Lit = true;
+            Notice(Texts.Get(Resource.String.voice_listening), lasting: true);
+            return;
+        }
+
+        mic.Lit = false;
+        Notice(Texts.Get(Resource.String.voice_transcribing), lasting: true);
+        try
+        {
+            keys.TypeSpoken(await voice.Stop(keys.KeyLanguage.Locale));
+            Notice("");
+        }
+        catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException)
+        {
+            System.Diagnostics.Debug.WriteLine($"ia-voice did not answer: {failure.Message}");
+            Notice(Texts.Get(Resource.String.voice_unavailable));
+        }
+    }
+
     /// <summary>The emoji in the keys' place, as tall, those typed lately first.</summary>
     private void ShowEmoji()
     {
@@ -254,11 +300,15 @@ public sealed class KeyboardWindow : Window
         keys.Visibility = Visibility.Visible;
     }
 
-    private void Notice(string text)
+    /// <summary>A line in the toolbar's middle, gone after a while unless it lasts (Escuchando…) until the next.</summary>
+    private void Notice(string text, bool lasting = false)
     {
         notice.Text = text;
         noticeTimer.Stop();
-        noticeTimer.Start();
+        if (!lasting && text.Length > 0)
+        {
+            noticeTimer.Start();
+        }
     }
 
     /// <summary>A part that moves the window as it is dragged.</summary>
@@ -382,6 +432,18 @@ public sealed class SignButton(Palette colors) : FrameworkElement
 {
     private int sign;
     private bool down;
+    private bool lit;
+
+    /// <summary>Whether it is in use (🎤 listening): circled in the modifiers' tone.</summary>
+    public bool Lit
+    {
+        get => lit;
+        set
+        {
+            lit = value;
+            InvalidateVisual();
+        }
+    }
 
     public int Sign
     {
@@ -400,9 +462,9 @@ public sealed class SignButton(Palette colors) : FrameworkElement
     protected override void OnRender(DrawingContext context)
     {
         context.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
-        if (down)
+        if (down || lit)
         {
-            context.DrawEllipse(new SolidColorBrush(colors.Function), null, new Point(RenderSize.Width / 2, RenderSize.Height / 2), RenderSize.Height * 0.42, RenderSize.Height * 0.42);
+            context.DrawEllipse(new SolidColorBrush(lit ? colors.On : colors.Function), null, new Point(RenderSize.Width / 2, RenderSize.Height / 2), RenderSize.Height * 0.42, RenderSize.Height * 0.42);
         }
 
         Icons.Draw(context, sign, new Point(RenderSize.Width / 2, RenderSize.Height / 2), Size, colors.Glyph);

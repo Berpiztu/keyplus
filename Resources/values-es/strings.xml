@@ -119,4 +119,8 @@
   <string name="add_row">+ Fila</string>
   <string name="remove">Quitar</string>
   <string name="saved_as">%1$s %2$s</string>
+  <string name="voice_listening">Escuchando…</string>
+  <string name="voice_transcribing">Transcribiendo…</string>
+  <string name="voice_unavailable">El servicio de voz no responde</string>
+  <string name="voice_no_microphone">No hay micrófono para escuchar</string>
 </resources>
