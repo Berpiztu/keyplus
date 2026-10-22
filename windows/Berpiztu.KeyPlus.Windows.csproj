@@ -22,11 +22,23 @@
     <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
   </PropertyGroup>
 
+  <!-- Direct2D and DirectWrite (MIT): emoji drawn in colour as Windows draws
+       them, which WPF's own text cannot (EmojiArt.cs). -->
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Include="..\StandardKeys.cs" Link="Shared\StandardKeys.cs" />
     <Compile Include="..\SwipeWords.cs" Link="Shared\SwipeWords.cs" />
-    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_tool_close.xml"
+    <Compile Include="..\EmojiList.cs" Link="Shared\EmojiList.cs" />
+    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The words, the Android keyboard's, in English and Spanish (Texts.cs). -->
+    <Content Include="..\Resources\values\strings.xml" Link="strings\values\strings.xml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Resources\values-es\strings.xml" Link="strings\values-es\strings.xml" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Emoji: Unicode's list, drawn in colour by Direct2D (EmojiArt.cs). -->
+    <Content Include="..\Assets\emoji\*.txt" LinkBase="emoji" CopyToOutputDirectory="PreserveNewest" />
     <!-- Swipe typing: FUTO Swipe built for Windows (native\futo-swipe\windows\build.ps1),
          its encoder and AOSP's word lists, the Android keyboard's. -->
     <Content Include="..\native\futo-swipe\win-x64\keyplus_swipe.dll" Link="keyplus_swipe.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\native\futo-swipe\win-x64\keyplus_swipe.dll')" />

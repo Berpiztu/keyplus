@@ -99,6 +99,7 @@ a window that does.
 | [SettingsScreen.cs](SettingsScreen.cs) | The keyboard's settings as Gboard's: a big title, rows in rounded groups, a page beside the list on a wide screen, in the device's colours |
 | [AdbGrant.cs](AdbGrant.cs) | The app turned on over the device's own Wireless debugging: the pairing code taken in a notification, the ADB commands run, no computer |
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
+| [EmojiList.cs](EmojiList.cs) | The emoji list both keyboards offer (Unicode's, by group) and the recent ones' line |
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema): Estándar, Estándar PC and those saved; each screen's docked and floating one |
@@ -324,8 +325,10 @@ the other, and ✕; under them the handle moves it and the grip at its right
 makes it wider; its place, width, keyboard and language are kept. A drag
 over the letters is read by FUTO Swipe, built for Windows
 (`native/futo-swipe/windows/build.ps1`), and its words show in the
-toolbar as on Android. Emoji, the grid and the designer are not on Windows
-yet.
+toolbar as on Android. The comma held, or ☺ on the toolbar, opens the
+emoji, in colour as Windows draws them (Direct2D), those typed lately
+first; Windows draws no flags, so they are left out. The grid and the
+designer are not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj

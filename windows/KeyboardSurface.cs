@@ -155,8 +155,22 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>🌐, or the language changed: the language to show next.</summary>
     public event Action? NextLanguage;
 
-    /// <summary>The comma held, Estándar's ☺: the emoji (not made on Windows yet).</summary>
+    /// <summary>A key whose part is not made on Windows yet: what it is, to say so.</summary>
     public event Action<string>? NotMade;
+
+    /// <summary>The comma held, Estándar's ☺: the emoji, as Gboard opens them.</summary>
+    public event Action? EmojisAsked;
+
+    /// <summary>Text typed from elsewhere (an emoji), as a key's: a swipe's words gone, and known as typed last.</summary>
+    public void TypeText(string text)
+    {
+        EndSwipe(letter: false);
+        KeySender.Type(text);
+        lastTyped = text.Length > 0 ? text[^1] : lastTyped;
+    }
+
+    /// <summary>⌫ from elsewhere (the emoji's), as the key's.</summary>
+    public void DeleteBack() => DeleteOnce();
 
     /// <summary>A swipe over the letters, to be read as a word, and whether Shift or the capitals were on.</summary>
     public event Action<SwipeEngine.Swipe, bool, bool>? Swiped;
@@ -563,7 +577,9 @@ public sealed class KeyboardSurface : FrameworkElement
             {
                 now.LongPressed = true;
                 StopHolding();
-                NotMade?.Invoke("Emojis");
+                pressed = null;
+                InvalidateVisual();
+                EmojisAsked?.Invoke();
             }, LongPress);
         }
 

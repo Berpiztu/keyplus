@@ -40,6 +40,7 @@ public sealed class KeyboardWindow : Window
     private readonly SignButton switcher;
     private readonly TextBlock notice;
     private readonly SwipeEngine swipe = new();
+    private readonly EmojiPanel emoji;
 
     /// <summary>The words a swipe read as, in the toolbar's middle as Gboard's: the one typed in bold in the centre, one on each side, a tap on one taking its place.</summary>
     private readonly Grid suggestions = new() { Visibility = Visibility.Collapsed };
@@ -70,6 +71,11 @@ public sealed class KeyboardWindow : Window
         keys.NotMade += what => Notice($"{what}: todavía no está hecho");
         keys.Swiped += async (path, capital, capitals) => keys.TypeSwiped(await swipe.Words(path), capital, capitals);
         keys.Suggestions += ShowSuggestions;
+        keys.EmojisAsked += ShowEmoji;
+        emoji = new EmojiPanel(colors) { Visibility = Visibility.Collapsed };
+        emoji.Typed += keys.TypeText;
+        emoji.Deleted += keys.DeleteBack;
+        emoji.Closed += HideEmoji;
 
         switcher = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp };
         switcher.Clicked += () =>
@@ -89,8 +95,22 @@ public sealed class KeyboardWindow : Window
 
         var bar = new DockPanel { Height = BarDp, Background = Brushes.Transparent };
         DockPanel.SetDock(switcher, Dock.Left);
+        var smiley = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_key_emoji, ToolTip = "Emojis" };
+        smiley.Clicked += () =>
+        {
+            if (emoji.Visibility == Visibility.Visible)
+            {
+                HideEmoji();
+            }
+            else
+            {
+                ShowEmoji();
+            }
+        };
+        DockPanel.SetDock(smiley, Dock.Left);
         DockPanel.SetDock(close, Dock.Right);
         bar.Children.Add(switcher);
+        bar.Children.Add(smiley);
         bar.Children.Add(close);
         var middle = new Grid();
         middle.Children.Add(notice);
@@ -128,7 +148,10 @@ public sealed class KeyboardWindow : Window
         DockPanel.SetDock(bottom, Dock.Bottom);
         card.Children.Add(bar);
         card.Children.Add(bottom);
-        card.Children.Add(keys);
+        var middleKeys = new Grid();
+        middleKeys.Children.Add(keys);
+        middleKeys.Children.Add(emoji);
+        card.Children.Add(middleKeys);
 
         Content = new Border
         {
@@ -214,6 +237,21 @@ public sealed class KeyboardWindow : Window
             Grid.SetColumn(place, i);
             suggestions.Children.Add(place);
         }
+    }
+
+    /// <summary>The emoji in the keys' place, as tall, those typed lately first.</summary>
+    private void ShowEmoji()
+    {
+        emoji.Height = keys.ActualHeight;
+        emoji.Fill();
+        keys.Visibility = Visibility.Hidden;
+        emoji.Visibility = Visibility.Visible;
+    }
+
+    private void HideEmoji()
+    {
+        emoji.Visibility = Visibility.Collapsed;
+        keys.Visibility = Visibility.Visible;
     }
 
     private void Notice(string text)
