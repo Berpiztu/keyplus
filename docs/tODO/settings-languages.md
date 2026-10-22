@@ -60,6 +60,8 @@ tell it apart come later. In this order.
   - Page 3: Siguiente idioma, Edición de texto ›.
 - Ours join them the same way: PC/Estándar, Mover, Diseñar, Dos filas,
   Minimizar, A−, A+, A↺, Cambiar de teclado.
+- Later: in landscape, where there is room, every button on one screen
+  rather than in pages.
 
 ## 2. The app's settings screen, as Gboard's
 

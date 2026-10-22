@@ -10,8 +10,9 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// A word swiped over Berpiztu AI Keyboard's letters, read by FUTO Swipe
 /// (SwipeDecoder.java, native/futo-swipe): its encoder, which reads a swipe
-/// over any layout, and a trie of AOSP's Spanish word list, both loaded once
-/// and away from the main thread. The trie knows a word by its letters alone,
+/// over any layout, loaded once, and a trie of each language's AOSP word
+/// list, made the first time a swipe is read in it (Spanish at once), all
+/// away from the main thread. The trie knows a word by its letters alone,
 /// so a word with an accent ("también") is kept there as "tambien" and written
 /// back as the word list spells it, the commonest spelling first ("está",
 /// then "esta").
@@ -31,16 +32,23 @@ public sealed class SwipeTyping
     /// <summary>The native engine is used by one thread at a time.</summary>
     private readonly Lock engineLock = new();
 
+    private readonly Context context;
     private long engine;
-    private long dictionary;
 
-    /// <summary>Each word by its letters alone, as the trie knows it: its spellings in the word list, the commonest first.</summary>
-    private Dictionary<string, string[]> spellings = [];
+    /// <summary>
+    /// Each language's trie, and each word by its letters alone, as the trie
+    /// knows it: its spellings in the word list, the commonest first.
+    /// </summary>
+    private readonly Dictionary<StandardLanguage, (long Trie, Dictionary<string, string[]> Spellings)> languages = [];
 
-    /// <summary>The letters' centres last handed to the engine, so they are handed again only when the design changed.</summary>
+    /// <summary>The language and letters' centres last handed to the engine, so they are handed again only when they changed.</summary>
     private string? layout;
 
-    public SwipeTyping(Context context) => loaded = Task.Run(() => Load(context));
+    public SwipeTyping(Context context)
+    {
+        this.context = context;
+        loaded = Task.Run(Load);
+    }
 
     /// <summary>The words a swipe reads as, the likeliest first; none where FUTO Swipe could not be loaded or read nothing.</summary>
     public async Task<IReadOnlyList<string>> Words(KeyPanel.SwipePath path)
@@ -54,10 +62,15 @@ public sealed class SwipeTyping
         {
             lock (engineLock)
             {
-                var centres = $"{string.Join(',', path.KeyX)}|{string.Join(',', path.KeyY)}";
+                if (Prepared(path.Language) is not { } language)
+                {
+                    return (IReadOnlyList<string>)[];
+                }
+
+                var centres = $"{path.Language.Code}|{string.Join(',', path.KeyX)}|{string.Join(',', path.KeyY)}";
                 if (centres != layout)
                 {
-                    if (!SetLayout(path.KeyX, path.KeyY))
+                    if (!SetLayout(path.Language.SwipeLetters, path.KeyX, path.KeyY, language.Trie))
                     {
                         Log.Warn(Tag, "FUTO Swipe did not take the letters' places");
                         return (IReadOnlyList<string>)[];
@@ -68,31 +81,32 @@ public sealed class SwipeTyping
 
                 var read = Recognize(path.X, path.Y, path.T);
                 Log.Debug(Tag, $"{path.X.Length} points read as: {string.Join(", ", read)}");
-                return Spelled(read);
+                return Spelled(read, language.Spellings);
             }
         });
     }
 
+    private string Folder => Path.Combine(context.FilesDir!.AbsolutePath, "futo-swipe");
+
     /// <summary>
     /// The encoder copied out of the APK, where the native library reads it
-    /// from a path, with its metadata beside it; the word list made a trie;
-    /// the engine made.
+    /// from a path, with its metadata beside it; the engine made; Spanish's
+    /// trie made at once, the language the keyboard opens in.
     /// </summary>
-    private bool Load(Context context)
+    private bool Load()
     {
         try
         {
-            var folder = Path.Combine(context.FilesDir!.AbsolutePath, "futo-swipe");
-            Directory.CreateDirectory(folder);
-            var encoder = Path.Combine(folder, "model_fp32.pte");
-            CopyAsset(context, "futo-swipe/honorable_sturgeon/model_fp32.pte", encoder);
-            CopyAsset(context, "futo-swipe/honorable_sturgeon/metadata.json", Path.Combine(folder, "metadata.json"));
-            var words = Path.Combine(folder, "es.letters.combined");
-            spellings = WriteLetterForms(context, words);
+            Directory.CreateDirectory(Folder);
+            var encoder = Path.Combine(Folder, "model_fp32.pte");
+            CopyAsset("futo-swipe/honorable_sturgeon/model_fp32.pte", encoder);
+            CopyAsset("futo-swipe/honorable_sturgeon/metadata.json", Path.Combine(Folder, "metadata.json"));
             engine = CallLong("create", "(Ljava/lang/String;)J", encoder);
-            dictionary = CallLong("loadDictionary", "(Ljava/lang/String;Ljava/lang/String;)J", KeyPanel.SwipeLetters, words);
-            Log.Info(Tag, $"FUTO Swipe loaded: engine {engine != 0}, {spellings.Count} words");
-            return engine != 0 && dictionary != 0;
+            Log.Info(Tag, $"FUTO Swipe loaded: engine {engine != 0}");
+            lock (engineLock)
+            {
+                return engine != 0 && Prepared(StandardKeys.Spanish) is not null;
+            }
         }
         catch (Exception failure)
         {
@@ -101,7 +115,36 @@ public sealed class SwipeTyping
         }
     }
 
-    private static void CopyAsset(Context context, string asset, string path)
+    /// <summary>A language's trie and spellings, made from its word list the first time; none where it could not be made.</summary>
+    private (long Trie, Dictionary<string, string[]> Spellings)? Prepared(StandardLanguage language)
+    {
+        if (languages.TryGetValue(language, out var prepared))
+        {
+            return prepared;
+        }
+
+        try
+        {
+            var words = Path.Combine(Folder, $"{language.Code}.letters.combined");
+            var spellings = WriteLetterForms(language, words);
+            var trie = CallLong("loadDictionary", "(Ljava/lang/String;Ljava/lang/String;)J", language.SwipeLetters, words);
+            Log.Info(Tag, $"FUTO Swipe's {language.Code} words: {spellings.Count}");
+            if (trie == 0)
+            {
+                return null;
+            }
+
+            languages[language] = prepared = (trie, spellings);
+            return prepared;
+        }
+        catch (Exception failure)
+        {
+            Log.Warn(Tag, $"FUTO Swipe's {language.Code} words could not be made: {failure}");
+            return null;
+        }
+    }
+
+    private void CopyAsset(string asset, string path)
     {
         using var from = context.Assets!.Open(asset);
         using var to = File.Create(path);
@@ -109,19 +152,19 @@ public sealed class SwipeTyping
     }
 
     /// <summary>
-    /// AOSP's Spanish word list ("word=…,f=…" lines) written again by each
+    /// A language's AOSP word list ("word=…,f=…" lines) written again by each
     /// word's letters alone, the accents taken off, at the commonest
     /// frequency among its spellings, for the trie; the words with a letter
     /// the keyboard has no key for left out. Its spellings by letters, back.
     /// </summary>
-    private static Dictionary<string, string[]> WriteLetterForms(Context context, string path)
+    private Dictionary<string, string[]> WriteLetterForms(StandardLanguage language, string path)
     {
         var forms = new Dictionary<string, List<(string Word, int Frequency)>>();
-        using (var reader = new StreamReader(new GZipStream(context.Assets!.Open("dictionaries/es_wordlist.combined.gz"), CompressionMode.Decompress), Encoding.UTF8))
+        using (var reader = new StreamReader(new GZipStream(context.Assets!.Open(language.WordList), CompressionMode.Decompress), Encoding.UTF8))
         {
             while (reader.ReadLine() is { } line)
             {
-                if (Entry(line) is not { } entry || Letters(entry.Word) is not { } letters)
+                if (Entry(line) is not { } entry || Letters(entry.Word, language.SwipeLetters) is not { } letters)
                 {
                     continue;
                 }
@@ -184,7 +227,7 @@ public sealed class SwipeTyping
     }
 
     /// <summary>A word by its letters alone, lower case and its accents taken off ("Está" is "esta"); none where it has a letter the keyboard has no key for.</summary>
-    private static string? Letters(string word)
+    private static string? Letters(string word, string keys)
     {
         var letters = new StringBuilder(word.Length);
         foreach (var character in word.ToLowerInvariant())
@@ -198,7 +241,7 @@ public sealed class SwipeTyping
                 'ú' or 'ü' => 'u',
                 _ => character,
             };
-            if (!KeyPanel.SwipeLetters.Contains(plain))
+            if (!keys.Contains(plain))
             {
                 return null;
             }
@@ -210,16 +253,16 @@ public sealed class SwipeTyping
     }
 
     /// <summary>The words read, by their letters, spelled as the word list has them, the commonest spelling first.</summary>
-    private IReadOnlyList<string> Spelled(string[] read) =>
+    private static IReadOnlyList<string> Spelled(string[] read, Dictionary<string, string[]> spellings) =>
         read.SelectMany(letters => spellings.TryGetValue(letters, out var spelled) ? spelled : [letters])
             .Distinct()
             .Take(Offered)
             .ToList();
 
-    private bool SetLayout(float[] keyX, float[] keyY)
+    private bool SetLayout(string keys, float[] keyX, float[] keyY, long dictionary)
     {
         var method = JNIEnv.GetStaticMethodID(Decoder, "setLayout", "(JLjava/lang/String;[F[FJ)Z");
-        var letters = JNIEnv.NewString(KeyPanel.SwipeLetters);
+        var letters = JNIEnv.NewString(keys);
         var cx = JNIEnv.NewArray(keyX);
         var cy = JNIEnv.NewArray(keyY);
         try

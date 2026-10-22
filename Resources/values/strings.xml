@@ -7,4 +7,18 @@
   <string name="keyboard_app_name">Berpiztu AI Keyboard</string>
   <string name="keyboard_label">Berpiztu AI Keyboard</string>
   <string name="not_made_yet">Not made yet: %1$s</string>
+  <string name="stickers">Stickers</string>
+  <string name="one_handed">One-handed</string>
+  <string name="voice_typing">Voice typing</string>
+  <string name="floating">Floating</string>
+  <string name="split">Split</string>
+  <string name="translate">Translate</string>
+  <string name="theme">Theme</string>
+  <string name="share">Share</string>
+  <string name="undo">Undo</string>
+  <string name="next_language">Next language</string>
+  <string name="text_editing">Text editing</string>
+  <string name="move">Move</string>
+  <string name="switch_keyboard">Switch keyboard</string>
+  <string name="minimize">Minimize</string>
 </resources>

@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
   <string name="not_made_yet">Todavía no está hecho: %1$s</string>
+  <string name="stickers">Pegatinas</string>
+  <string name="one_handed">Teclado a una mano</string>
+  <string name="voice_typing">Escribir por voz</string>
+  <string name="floating">Flotante</string>
+  <string name="split">Dividido</string>
+  <string name="translate">Traducir</string>
+  <string name="theme">Tema</string>
+  <string name="share">Compartir</string>
+  <string name="undo">Deshacer</string>
+  <string name="next_language">Siguiente idioma</string>
+  <string name="text_editing">Edición de texto</string>
+  <string name="move">Mover</string>
+  <string name="switch_keyboard">Cambiar de teclado</string>
+  <string name="minimize">Minimizar</string>
 </resources>

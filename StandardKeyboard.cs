@@ -13,8 +13,11 @@ namespace Berpiztu.KeyPlus;
 /// system_surface_container_light, a key system_surface_container_lowest_light,
 /// its letters system_on_surface_light, a function key system_accent2_100 and
 /// its sign system_accent2_700); before Android 14, which has no surface
-/// colours, their neutral tones. The swipe's trail is system_accent1_600, as
-/// on Gboard on the emulator.
+/// colours, their neutral tones. The swipe's trail is system_accent1_600,
+/// the toolbar's ⊞ circled system_accent1_200 while words are suggested and
+/// the lines between the words system_neutral2_200, the grid's dots and ✏'s
+/// outline system_outline_light (the dots not in sight at half), as on
+/// Gboard on the emulator and the Fold.
 /// </summary>
 public sealed class StandardColors(Context context)
 {
@@ -32,6 +35,15 @@ public sealed class StandardColors(Context context)
     public Color FunctionGlyph { get; } = Read(context, Android.Resource.Color.SystemAccent2700);
 
     public Color Trail { get; } = Read(context, Android.Resource.Color.SystemAccent1600);
+
+    public Color GridCircle { get; } = Read(context, Android.Resource.Color.SystemAccent1200);
+
+    public Color Divider { get; } = Read(context, Android.Resource.Color.SystemNeutral2200);
+
+    public Color Outline { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineLight : Android.Resource.Color.SystemNeutral1500);
+
+    /// <summary>The outline at half: on the Fold, a dot not in sight 180 where the ground is 228 and the outline 132.</summary>
+    public Color FaintOutline => Color.Argb(128, Outline.R, Outline.G, Outline.B);
 
     private static Color Read(Context context, int color) => new(context.GetColor(color));
 }
@@ -140,15 +152,12 @@ public sealed class StandardKeyboard : View
         public bool Done { get; set; }
     }
 
-    public StandardKeyboard(Context context) : base(context)
+    public StandardKeyboard(Context context, StandardColors colors) : base(context)
     {
-        colors = new StandardColors(context);
+        this.colors = colors;
         density = context.Resources!.DisplayMetrics!.Density;
         HapticFeedbackEnabled = true;
     }
-
-    /// <summary>The device's colours, which the toolbar above and the ground take too.</summary>
-    public StandardColors Colors => colors;
 
     /// <summary>Text typed: a key's, a long press's symbol, a space.</summary>
     public Action<string>? Typed { get; set; }
@@ -167,8 +176,18 @@ public sealed class StandardKeyboard : View
     /// <summary>A swipe over the letters, to be read as a word, and whether Shift or the capitals' lock was on.</summary>
     public Action<KeyPanel.SwipePath, bool, bool>? Swiped { get; set; }
 
-    /// <summary>The language the space bar reads.</summary>
-    public string Language { get; set; } = "Español";
+    /// <summary>The language the keys are laid out for, the space bar reads and a swipe is read in.</summary>
+    public StandardLanguage Language
+    {
+        get => language;
+        set
+        {
+            language = value;
+            Lay();
+        }
+    }
+
+    private StandardLanguage language = StandardKeys.Spanish;
 
     /// <summary>The keys' size, 1 for Gboard's own.</summary>
     public float Scale
@@ -208,7 +227,7 @@ public sealed class StandardKeyboard : View
     private void Lay()
     {
         laid = [];
-        var rows = StandardKeys.Page(page);
+        var rows = StandardKeys.Page(page, language);
         var side = Dp(SideDp);
         var gap = Dp(KeyGapDp);
         var unit = (Width - (2 * side) - (9 * gap)) / 10;
@@ -297,7 +316,7 @@ public sealed class StandardKeyboard : View
         switch (key.Action)
         {
             case StandardAction.Space:
-                DrawText(canvas, Language, box.CenterX(), box.CenterY(), h * SpaceLabelShare, glyph);
+                DrawText(canvas, language.Name, box.CenterX(), box.CenterY(), h * SpaceLabelShare, glyph);
                 return;
             case StandardAction.Numbers:
                 DrawText(canvas, "12", box.CenterX(), box.CenterY() - (h * PadLabelShare * 0.45f), h * PadLabelShare, glyph);
@@ -472,7 +491,7 @@ public sealed class StandardKeyboard : View
         }
 
         var far = Math.Max(Math.Abs(x - now.X), Math.Abs(y - now.Y)) > Math.Min(now.Box.Width(), now.Box.Height()) * 0.6f;
-        if (far && page == StandardPage.Letters && Swiped is not null && now.Key.Text is { Length: 1 } letter && KeyPanel.SwipeLetters.Contains(letter))
+        if (far && page == StandardPage.Letters && Swiped is not null && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
         {
             now.Swiping = true;
             StopHolding();
@@ -602,8 +621,8 @@ public sealed class StandardKeyboard : View
     /// <summary>The swipe made FUTO Swipe's: the points and the letters' centres from 0 to 1 over the room the letters take.</summary>
     private void ReadSwipe(Finger now)
     {
-        var letters = laid.Where(laidKey => laidKey.Key.Text is { Length: 1 } letter && KeyPanel.SwipeLetters.Contains(letter)).ToList();
-        var centres = KeyPanel.SwipeLetters.Select(letter => letters.First(laidKey => laidKey.Key.Text == letter.ToString()).Box).ToList();
+        var letters = laid.Where(laidKey => laidKey.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter)).ToList();
+        var centres = language.SwipeLetters.Select(letter => letters.First(laidKey => laidKey.Key.Text == letter.ToString()).Box).ToList();
         var left = letters.Min(laidKey => laidKey.Box.Left);
         var top = letters.Min(laidKey => laidKey.Box.Top);
         var width = letters.Max(laidKey => laidKey.Box.Right) - left;
@@ -615,7 +634,8 @@ public sealed class StandardKeyboard : View
             [.. now.Points.Select(point => Y(point.Y))],
             [.. now.Points.Select(point => (float)(point.Time - now.Start))],
             [.. centres.Select(box => X(box.CenterX()))],
-            [.. centres.Select(box => Y(box.CenterY()))]);
+            [.. centres.Select(box => Y(box.CenterY()))],
+            language);
         var capitals = shift == ShiftState.Locked;
         var capital = shift == ShiftState.Once;
         ShiftUsed();

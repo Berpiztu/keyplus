@@ -59,6 +59,9 @@ public sealed class KeyPanel
     private const string WholeKeyboardPreference = "wholeKeyboard";
     private const string CompactPreference = "compact";
     private const string StandardPreference = "standard";
+
+    /// <summary>The standard keyboard's language, one for every screen, as Gboard's: kept by its code.</summary>
+    private const string LanguagePreference = "standardLanguage";
     private const string LabelScalePreference = "labelScale";
 
     /// <summary>How much A− and A+ change the labels' size at a press, and how far.</summary>
@@ -310,6 +313,28 @@ public sealed class KeyPanel
     /// <summary>The toolbar's and the menu bar's height, in dp: Gboard's.</summary>
     private const int ToolbarDp = 48;
 
+    /// <summary>
+    /// The standard keyboard's toolbar, as Gboard's on the emulator (pixels
+    /// over 2.625): each end's sign 59 px in, so its place 118 px wide; a
+    /// circle 89 px across; ⊞ drawn 40 px wide, of the 720 its 960 box fills;
+    /// the words 19 sp (a capital 35 px tall over Roboto's 0.711); the lines
+    /// between them 3 px wide and 63 px tall.
+    /// </summary>
+    private readonly LinearLayout standardBar;
+    private readonly StandardColors? standardColors;
+
+    /// <summary>The standard keyboard's grid (⊞), Gboard's, in the keys' place; none without the standard keyboard.</summary>
+    private readonly StandardGrid? standardGrid;
+
+    /// <summary>The grid's buttons the keyboard gives, Gboard's, before the panel's own (PC, Minimizar).</summary>
+    private IReadOnlyList<GridTile> gridTiles = [];
+    private const float ToolSlotDp = 118 / 2.625f;
+    private const float ToolCircleDp = 89 / 2.625f;
+    private const float ToolIconDp = 40 / (720f / 960) / 2.625f;
+    private const float SuggestionSp = 35 / 0.711f / 2.625f;
+    private const float SuggestionLineDp = 3 / 2.625f;
+    private const float SuggestionLineHeightDp = 63 / 2.625f;
+
     /// <summary>How long a copy shows as a chip in the toolbar, as Gboard shows the one just copied.</summary>
     private static readonly TimeSpan RecentCopyTime = TimeSpan.FromMinutes(5);
 
@@ -320,16 +345,16 @@ public sealed class KeyPanel
     /// <summary>What the clipboard's list held, to tell a new copy from a pin, an edit or a removal.</summary>
     private HashSet<(string? Text, string? Image)> knownCopies = [];
 
-    /// <summary>The letters a swipe is read over, in the order their centres are handed with it: Spanish's.</summary>
-    public const string SwipeLetters = "abcdefghijklmnopqrstuvwxyzñ";
+    /// <summary>The whole keyboard's letters a swipe is read over, in the order their centres are handed with it: Spanish's.</summary>
+    private static string SwipeLetters => StandardKeys.Spanish.SwipeLetters;
 
     /// <summary>
     /// A swipe over the whole keyboard's letters: its points and their
     /// times in milliseconds from its start, and each letter's centre (in
     /// <see cref="SwipeLetters"/>' order), all from 0 to 1 over the room the
-    /// letters take, as FUTO Swipe reads them.
+    /// letters take, as FUTO Swipe reads them; and the language it is read in.
     /// </summary>
-    public sealed record SwipePath(float[] X, float[] Y, float[] T, float[] KeyX, float[] KeyY);
+    public sealed record SwipePath(float[] X, float[] Y, float[] T, float[] KeyX, float[] KeyY, StandardLanguage Language);
 
     /// <summary>
     /// Reads a swipe over the letters as words, the likeliest first
@@ -506,6 +531,8 @@ public sealed class KeyPanel
         toolbarSettings.SetPadding(Dp(8), 0, Dp(8), 0);
         toolbar.AddView(toolbarSettings, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         toolbar.AddView(toolbarMiddle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        standardColors = standardKeys ? new StandardColors(context) : null;
+        standardBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
         menuBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
         foreach (var button in new View[]
         {
@@ -532,6 +559,7 @@ public sealed class KeyPanel
         strip.AddView(closeBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(chipBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(TitleBarDp)));
         strip.AddView(toolbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
+        strip.AddView(standardBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         strip.AddView(menuBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         clipboardRows = new LinearLayout(context) { Orientation = Orientation.Vertical };
         clipboardView = new ScrollView(context) { Visibility = ViewStates.Gone };
@@ -577,6 +605,11 @@ public sealed class KeyPanel
         settingsView = new ScrollView(context) { Visibility = ViewStates.Gone };
         settingsView.AddView(settingsRows);
         strip.AddView(settingsView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        if (standardColors is not null)
+        {
+            standardGrid = new StandardGrid(context, standardColors, () => NotMadeYet("✏")) { Visibility = ViewStates.Gone };
+            strip.AddView(standardGrid, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        }
         knownCopies = [.. clipboard.Entries.Select(CopyKey)];
         clipboard.Changed += NoteCopy;
         clipboard.Changed += RefillClipboard;
@@ -592,7 +625,7 @@ public sealed class KeyPanel
         strip.AddView(compact);
         if (standardKeys)
         {
-            standard = StandardKeys();
+            standard = MakeStandard();
             strip.AddView(standard, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         }
 
@@ -898,12 +931,6 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// The bar in the title bar's place: a question asked, the chips of what
-    /// was copied (<see cref="CopiedInTitleBar"/>) while there is any and
-    /// nothing else is in the keys' place, or the title bar's buttons. Made
-    /// small, the window has none of them.
-    /// </summary>
-    /// <summary>
     /// The toolbar's middle: the chip of what was copied last while it is
     /// recent, as Gboard shows it, else 📋; and once it is no longer recent,
     /// 📋 again by itself.
@@ -918,47 +945,169 @@ public sealed class KeyPanel
         if (swipeWords.Count > 0)
         {
             toolbarClipboard.Visibility = ViewStates.Gone;
-            // As Gboard's: the word typed in the centre, in bold; the next likeliest on each side.
-            var others = swipeWords.Where(word => word != swipedWord).Take(2).ToList();
-            var words = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-            foreach (var word in new[] { others.ElementAtOrDefault(0), swipedWord, others.ElementAtOrDefault(1) })
-            {
-                var typed = word == swipedWord;
-                var button = ToolButton(word ?? "", typed ? $"{word}, written" : $"Write {word} instead", 16, () =>
-                {
-                    if (word is not null && !typed)
-                    {
-                        ReplaceSwiped(word);
-                    }
-                });
-                // A long word smaller, whole: never cut.
-                button.SetPadding(Dp(2), 0, Dp(2), 0);
-                button.SetAutoSizeTextTypeUniformWithConfiguration(4, 16, 1, (int)ComplexUnitType.Sp);
-                if (typed)
-                {
-                    button.SetTypeface(null, TypefaceStyle.Bold);
-                }
-
-                words.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-            }
-
-            toolbarMiddle.AddView(words, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+            toolbarMiddle.AddView(SwipeWordsRow(16, divider: null), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
             return;
         }
 
         var recent = RecentCopy();
         toolbarClipboard.Visibility = recent is null ? ViewStates.Visible : ViewStates.Gone;
-        if (recent is null)
+        if (recent is not null)
         {
-            return;
+            toolbarMiddle.AddView(RecentChip(recent), RecentChipPlace());
+        }
+    }
+
+    /// <summary>
+    /// The last swipe's words as Gboard's suggestions: the word typed in the
+    /// centre, in bold, the next likeliest on each side, a tap on one taking
+    /// its place; a long word smaller, whole, never cut; lines between them
+    /// where the look has them.
+    /// </summary>
+    private LinearLayout SwipeWordsRow(float sp, Color? divider)
+    {
+        var others = swipeWords.Where(word => word != swipedWord).Take(2).ToList();
+        var words = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        words.SetGravity(GravityFlags.CenterVertical);
+        string?[] shown = [others.ElementAtOrDefault(0), swipedWord, others.ElementAtOrDefault(1)];
+        for (var i = 0; i < shown.Length; i++)
+        {
+            var word = shown[i];
+            var typed = i == 1;
+            if (divider is { } line && i > 0)
+            {
+                words.AddView(Divider(line), new LinearLayout.LayoutParams(Dp(SuggestionLineDp), Dp(SuggestionLineHeightDp)));
+            }
+
+            var button = ToolButton(word ?? "", typed ? $"{word}, written" : $"Write {word} instead", sp, () =>
+            {
+                if (word is not null && !typed)
+                {
+                    ReplaceSwiped(word);
+                }
+            });
+            button.SetPadding(Dp(2), 0, Dp(2), 0);
+            button.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(sp), 1, (int)ComplexUnitType.Sp);
+            if (typed)
+            {
+                button.SetTypeface(null, TypefaceStyle.Bold);
+            }
+
+            words.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
 
-        var chip = Chip(recent);
-        var layout = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent, GravityFlags.Center);
-        layout.SetMargins(0, Dp(6), 0, Dp(6));
-        toolbarMiddle.AddView(chip, layout);
+        return words;
+    }
+
+    private View Divider(Color color)
+    {
+        var line = new View(context);
+        line.SetBackgroundColor(color);
+        return line;
+    }
+
+    /// <summary>What was copied last as a chip, which shows while it is recent: the bars made again once it is not.</summary>
+    private LinearLayout RecentChip(ClipboardHistory.Entry recent)
+    {
         var left = RecentCopyTime - (DateTime.UtcNow - recentCopyAt);
         handler.PostDelayed(ShowBars, (long)left.TotalMilliseconds + 100);
+        return Chip(recent);
+    }
+
+    private FrameLayout.LayoutParams RecentChipPlace()
+    {
+        var layout = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent, GravityFlags.Center);
+        layout.SetMargins(0, Dp(6), 0, Dp(6));
+        return layout;
+    }
+
+    /// <summary>
+    /// The standard keyboard's toolbar, Gboard's as the owner's Fold has it:
+    /// ⊞ (the grid), 📋, stickers, resize, the app's settings, one-handed
+    /// and 🎤 in its circle, spread across; while words are suggested, or
+    /// something was copied lately, ⊞ circled, the words or the copy, and 🎤;
+    /// while the grid or the copied things are in the keys' place, ⊞ is ✕
+    /// in a function key's circle. Parts not made yet say so.
+    /// </summary>
+    private void FillStandardBar()
+    {
+        standardBar.RemoveAllViews();
+        var colors = standardColors!;
+        var recent = swipeWords.Count > 0 ? null : RecentCopy();
+        var suggesting = swipeWords.Count > 0 || recent is not null;
+        var first = covered is not null
+            ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
+            : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
+        standardBar.AddView(first, new LinearLayout.LayoutParams(Dp(ToolSlotDp), ViewGroup.LayoutParams.MatchParent));
+        if (swipeWords.Count > 0)
+        {
+            standardBar.AddView(SwipeWordsRow(SuggestionSp, colors.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        }
+        else if (recent is not null)
+        {
+            var middle = new FrameLayout(context);
+            middle.AddView(RecentChip(recent), RecentChipPlace());
+            standardBar.AddView(middle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        }
+        else
+        {
+            foreach (var tool in new[]
+            {
+                StandardTool(Resource.Drawable.ic_clipboard, "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard)),
+                StandardTool(Resource.Drawable.ic_tool_stickers, "Stickers", () => NotMadeYet(context.GetString(Resource.String.stickers))),
+                StandardTool(Resource.Drawable.ic_tool_resize, "Resize the keyboard", () => ResizeRequested?.Invoke()),
+                StandardTool(Resource.Drawable.ic_tool_settings, "The keyboard's settings", OpenApp),
+                StandardTool(Resource.Drawable.ic_tool_one_handed, "One-handed", () => NotMadeYet(context.GetString(Resource.String.one_handed))),
+            })
+            {
+                standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+                standardBar.AddView(tool, new LinearLayout.LayoutParams(Dp(ToolSlotDp), ViewGroup.LayoutParams.MatchParent));
+            }
+
+            standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        }
+
+        standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_mic, "Voice typing", () => NotMadeYet(context.GetString(Resource.String.voice_typing)), colors.Key),
+            new LinearLayout.LayoutParams(Dp(ToolSlotDp), ViewGroup.LayoutParams.MatchParent));
+    }
+
+    /// <summary>A sign of the standard keyboard's toolbar, centred in its place, in a circle where it has one; held still a moment, it moves the keyboard as the bar does.</summary>
+    private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null)
+    {
+        var sign = new ImageView(context) { ContentDescription = description };
+        sign.SetImageResource(icon);
+        sign.ImageTintList = ColorStateList.ValueOf(standardColors!.Glyph);
+        sign.SetScaleType(ImageView.ScaleType.FitCenter);
+        var inset = Dp((ToolCircleDp - ToolIconDp) / 2);
+        sign.SetPadding(inset, inset, inset, inset);
+        var ground = new GradientDrawable();
+        ground.SetShape(ShapeType.Oval);
+        ground.SetColor(circle ?? Color.Transparent);
+        sign.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null);
+        HoldToMove(sign, pressed, resizes: false);
+        var place = new FrameLayout(context);
+        place.AddView(sign, new FrameLayout.LayoutParams(Dp(ToolCircleDp), Dp(ToolCircleDp), GravityFlags.Center));
+        return place;
+    }
+
+    /// <summary>The standard keyboard's resize was pressed: the keyboard's frame to size it with, where the keyboard has one.</summary>
+    public event Action? ResizeRequested;
+
+    /// <summary>The grid's buttons the keyboard gives (Gboard's), which come before the panel's own.</summary>
+    public IReadOnlyList<GridTile> GridTiles
+    {
+        set => gridTiles = value;
+    }
+
+    /// <summary>The grid in the keys' place: the keyboard's buttons, then PC and Minimizar.</summary>
+    private void ShowGrid()
+    {
+        standardGrid!.Tiles =
+        [
+            .. gridTiles,
+            new("PC", Resource.Drawable.ic_grid_pc, () => SetStandard(false)),
+            new(context.GetString(Resource.String.minimize), Resource.Drawable.ic_grid_minimize, () => SetFolded(true)),
+        ];
+        Cover(standardGrid, settingsButton);
     }
 
     /// <summary>What was copied last, as the clipboard's list has it now, if it was copied within <see cref="RecentCopyTime"/>.</summary>
@@ -1062,6 +1211,13 @@ public sealed class KeyPanel
         yield return new("Ajustes de la app", OpenApp, "⚙");
     }
 
+    /// <summary>
+    /// The bar in the title bar's place: a question asked, the chips of what
+    /// was copied (<see cref="CopiedInTitleBar"/>) while there is any and
+    /// nothing else is in the keys' place, or the title bar's buttons; on a
+    /// phone, the toolbar, the standard keyboard's or PC's. Made small, the
+    /// window has none of them.
+    /// </summary>
     private void ShowBars()
     {
         var small = compact.Visibility == ViewStates.Visible;
@@ -1073,11 +1229,18 @@ public sealed class KeyPanel
             chipBar.Visibility = ViewStates.Gone;
             bottomBar.Visibility = ViewStates.Gone;
             closeBar.Visibility = asking is not null && !small ? ViewStates.Visible : ViewStates.Gone;
-            menuBar.Visibility = asking is null && !small && covered is not null ? ViewStates.Visible : ViewStates.Gone;
-            toolbar.Visibility = asking is null && !small && covered is null ? ViewStates.Visible : ViewStates.Gone;
+            var standardShown = covered?.Keys == standard || standard is { Visibility: ViewStates.Visible };
+            menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
+            toolbar.Visibility = asking is null && !small && covered is null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
+            standardBar.Visibility = asking is null && standardShown ? ViewStates.Visible : ViewStates.Gone;
             if (toolbar.Visibility == ViewStates.Visible)
             {
                 FillToolbar();
+            }
+
+            if (standardBar.Visibility == ViewStates.Visible)
+            {
+                FillStandardBar();
             }
 
             return;
@@ -1206,7 +1369,7 @@ public sealed class KeyPanel
         var chip = new LinearLayout(context)
         {
             Orientation = Orientation.Horizontal,
-            Background = Pill(CardColor),
+            Background = Pill(standard is { Visibility: ViewStates.Visible } ? standardColors!.Key : CardColor),
             ContentDescription = entry.IsImage ? "Paste the image" : $"Paste: {entry.Text}",
         };
         chip.SetGravity(GravityFlags.CenterVertical);
@@ -1228,7 +1391,7 @@ public sealed class KeyPanel
             }
             else
             {
-                var sign = new ImageView(context);
+                var sign = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(ToolGlyph) };
                 sign.SetImageResource(Resource.Drawable.ic_clipboard);
                 chip.AddView(sign, new LinearLayout.LayoutParams(Dp(18), Dp(18)));
             }
@@ -1237,7 +1400,7 @@ public sealed class KeyPanel
                 Text = entry.Text!.ReplaceLineEndings(" ").Trim(),
                 Ellipsize = Android.Text.TextUtils.TruncateAt.End,
             };
-            text.SetTextColor(Color.White);
+            text.SetTextColor(ToolGlyph);
             text.SetTextSize(ComplexUnitType.Sp, 14);
             text.SetMaxLines(1);
             text.SetMaxWidth(Dp(180));
@@ -1349,10 +1512,10 @@ public sealed class KeyPanel
     }
 
     /// <summary>The ground under the keys: the device's, Gboard's, under the standard keyboard; the panel's own under PC.</summary>
-    public Color GroundColor => standard is { Visibility: ViewStates.Visible } ? standard.Colors.Ground : PanelColor;
+    public Color GroundColor => standard is { Visibility: ViewStates.Visible } ? standardColors!.Ground : PanelColor;
 
     /// <summary>The toolbar's words and signs: the device's, on the standard keyboard; white on PC.</summary>
-    private Color ToolGlyph => standard is { Visibility: ViewStates.Visible } ? standard.Colors.Glyph : Color.White;
+    private Color ToolGlyph => standard is { Visibility: ViewStates.Visible } ? standardColors!.Glyph : Color.White;
 
     /// <summary>The ground and the toolbars in the look of the keys in sight: Gboard's, in the device's colours, or PC's.</summary>
     private void ApplyLook()
@@ -1360,6 +1523,7 @@ public sealed class KeyPanel
         strip.SetBackgroundColor(GroundColor);
         Tint(toolbar, ToolGlyph);
         Tint(menuBar, ToolGlyph);
+        ShowBars();
     }
 
     /// <summary>Every word and sign within a bar the colour given.</summary>
@@ -1389,7 +1553,7 @@ public sealed class KeyPanel
     /// Enter as keys, Enter as the field asks where the keyboard says how
     /// (<see cref="Enter"/>); its swipes read as the whole keyboard's.
     /// </summary>
-    private StandardKeyboard StandardKeys() => new(context)
+    private StandardKeyboard MakeStandard() => new(context, standardColors!)
     {
         Typed = text =>
         {
@@ -1417,17 +1581,28 @@ public sealed class KeyPanel
                 Send(Keycode.Enter, MetaKeyStates.None);
             }
         },
-        NextLanguage = () => NotMade("🌐"),
-        NotMade = NotMade,
+        Language = StandardKeys.Languages.FirstOrDefault(language => language.Code == KeyPlusPreferences.Global(context).GetString(LanguagePreference, null)) ?? StandardKeys.Spanish,
+        NextLanguage = NextLanguage,
+        NotMade = NotMadeYet,
         Swiped = (path, capital, capitals) => ReadSwipe(path, capital, capitals),
         Visibility = ViewStates.Gone,
     };
+
+    /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen.</summary>
+    private void NextLanguage()
+    {
+        EndSwipe(letter: false);
+        var languages = StandardKeys.Languages;
+        var next = languages[(languages.ToList().IndexOf(standard!.Language) + 1) % languages.Count];
+        standard.Language = next;
+        KeyPlusPreferences.Global(context).Edit()!.PutString(LanguagePreference, next.Code)!.Apply();
+    }
 
     /// <summary>Enter as the field asks (Go, Search, Send…), where the keyboard can say; none, the Enter key.</summary>
     public Action? Enter { get; set; }
 
     /// <summary>A key or button whose part is not made yet: said so, for a moment.</summary>
-    private void NotMade(string what) =>
+    public void NotMadeYet(string what) =>
         Toast.MakeText(context, context.GetString(Resource.String.not_made_yet, new Java.Lang.String(what)), ToastLength.Short)!.Show();
 
     /// <summary>
@@ -2762,7 +2937,8 @@ public sealed class KeyPanel
             [.. trace.Points.Select(point => Y(point.Y))],
             [.. trace.Points.Select(point => point.T)],
             [.. centres.Select(centre => X(centre.X))],
-            [.. centres.Select(centre => Y(centre.Y))]);
+            [.. centres.Select(centre => Y(centre.Y))],
+            StandardKeys.Spanish);
     }
 
     /// <summary>A swipe read: its likeliest word typed, the others in the toolbar to take its place.</summary>

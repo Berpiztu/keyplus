@@ -190,6 +190,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // Moved and sized from ⚙, or a corner's grip dragged, a large one.
             // What was copied in the title bar, as Gboard has it.
             panel.Settings = PhoneSettings();
+            panel.GridTiles = GridTiles();
             panel.CopiedInTitleBar = true;
 
             // Words swiped over the letters, as Gboard's (FUTO Swipe).
@@ -208,6 +209,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 dx,
                 dy);
             frame = new KeyboardFrame(this);
+            panel.ResizeRequested += () => frame.Show(resizing: true, sides: true);
             frame.Dragged += Adjust;
             frame.ResetRequested += ResetSize;
             frame.DoneRequested += frame.Hide;
@@ -259,6 +261,31 @@ public sealed class KeyPlusKeyboard : InputMethodService
             new("Modo normal", () => SetWindowed(false), "⬓", InUse: !windowed),
             new("Modo ventana", () => SetWindowed(true), "❐", InUse: windowed),
             new("Cambiar de teclado", ShowKeyboardPicker, "🌐"),
+        ];
+    }
+
+    /// <summary>
+    /// The standard keyboard's grid (⊞), Gboard's buttons in Gboard's order
+    /// as the owner's Fold has them, then the keyboard's own: Flotante is
+    /// Modo ventana, Deshacer Ctrl+Z; the rest not made yet say so.
+    /// </summary>
+    private IReadOnlyList<GridTile> GridTiles()
+    {
+        void NotMade(int name) => panel?.NotMadeYet(GetString(name));
+        return
+        [
+            new(GetString(Resource.String.floating), Resource.Drawable.ic_grid_keyboard, () => SetWindowed(placed?.Floating != true)),
+            new("GIF", Resource.Drawable.ic_grid_gif, () => panel?.NotMadeYet("GIF"), More: true),
+            new(GetString(Resource.String.split), Resource.Drawable.ic_grid_split, () => NotMade(Resource.String.split)),
+            new(GetString(Resource.String.translate), Resource.Drawable.ic_grid_translate, () => NotMade(Resource.String.translate)),
+            new(GetString(Resource.String.theme), Resource.Drawable.ic_grid_theme, () => NotMade(Resource.String.theme), More: true),
+            new(GetString(Resource.String.share), Resource.Drawable.ic_grid_share, () => NotMade(Resource.String.share)),
+            new("Emojis", Resource.Drawable.ic_key_emoji, () => panel?.NotMadeYet("Emojis"), More: true),
+            new(GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
+            new(GetString(Resource.String.next_language), Resource.Drawable.ic_key_language, () => NotMade(Resource.String.next_language)),
+            new(GetString(Resource.String.text_editing), Resource.Drawable.ic_grid_text_editing, () => NotMade(Resource.String.text_editing), More: true),
+            new(GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => frame?.Show(resizing: false, sides: false)),
+            new(GetString(Resource.String.switch_keyboard), Resource.Drawable.ic_grid_keyboard, ShowKeyboardPicker),
         ];
     }
 

@@ -55,11 +55,24 @@ public enum StandardPage
 }
 
 /// <summary>
-/// The standard keyboard's pages as Gboard lays out Spanish (Spain,
-/// QWERTY (Ñ)) with the number row on, as the owner's Fold has it
-/// (docs/tODO/photos/gboard/fold-*.png): Shift turns the number row into
+/// A language of the standard keyboard, as Gboard has it: its code, its
+/// name on the space bar, its letters' rows and the symbols in their corners,
+/// the second row of its ?123 and =\&lt; pages, and the word list a swipe is
+/// read with (Assets/dictionaries, AOSP LatinIME's).
+/// </summary>
+public sealed record StandardLanguage(string Code, string Name, string[] LetterRows, string[] Hints, string Symbols, string MoreSymbols, string WordList)
+{
+    /// <summary>The letters a swipe is read over, in the order their centres are handed with it: the language's own, in Unicode's order.</summary>
+    public string SwipeLetters { get; } = string.Concat(LetterRows.SelectMany(row => row).Order());
+}
+
+/// <summary>
+/// The standard keyboard's pages as Gboard lays them out with the number row
+/// on, as the owner's Fold has it (docs/tODO/photos/gboard/fold-*.png) and,
+/// for English, the emulator: Shift turns the number row into
 /// ! @ # $ % ^ &amp; * ( ); each letter's corner shows the symbol a long press
-/// types, the ?123 page's at that place.
+/// types, the ?123 page's at that place. Spanish (Spain, QWERTY (Ñ)) and
+/// English (US, QWERTY), in the order 🌐 goes through them.
 /// </summary>
 public static class StandardKeys
 {
@@ -67,14 +80,53 @@ public static class StandardKeys
     private const float SpaceWidth = 4f;
     private const float WideWidth = 1.5f;
 
-    private static readonly IReadOnlyList<IReadOnlyList<StandardKey>> LettersPage =
+    public static readonly StandardLanguage Spanish = new(
+        "es",
+        "Español",
+        ["qwertyuiop", "asdfghjklñ", "zxcvbnm"],
+        ["%\\|=[]<>{}", "@#€_&-+()/", "*\"':;!?"],
+        "@#€_&-+()/",
+        "£¥$¢^°={}\\",
+        "dictionaries/es_wordlist.combined.gz");
+
+    public static readonly StandardLanguage English = new(
+        "en",
+        "English",
+        ["qwertyuiop", "asdfghjkl", "zxcvbnm"],
+        ["%\\|=[]<>{}", "@#$_&-+()", "*\"':;!?"],
+        "@#$_&-+()/",
+        "£¢€¥^°={}\\",
+        "dictionaries/en_US_wordlist.combined.gz");
+
+    public static readonly IReadOnlyList<StandardLanguage> Languages = [Spanish, English];
+
+    /// <summary>Each language's pages, made once.</summary>
+    private static readonly Dictionary<(StandardPage, StandardLanguage), IReadOnlyList<IReadOnlyList<StandardKey>>> Made = [];
+
+    /// <summary>A page's rows, top to bottom, in a language.</summary>
+    public static IReadOnlyList<IReadOnlyList<StandardKey>> Page(StandardPage page, StandardLanguage language)
+    {
+        if (!Made.TryGetValue((page, language), out var rows))
+        {
+            Made[(page, language)] = rows = page switch
+            {
+                StandardPage.Symbols => SymbolsPage(language),
+                StandardPage.MoreSymbols => MoreSymbolsPage(language),
+                _ => LettersPage(language),
+            };
+        }
+
+        return rows;
+    }
+
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> LettersPage(StandardLanguage language) =>
     [
         [.. "1234567890".Zip("!@#$%^&*()", (digit, shifted) => new StandardKey(digit.ToString(), Text: digit.ToString(), Shifted: shifted.ToString()))],
-        [.. Letters("qwertyuiop", "%\\|=[]<>{}")],
-        [.. Letters("asdfghjklñ", "@#€_&-+()/")],
+        [.. Letters(language.LetterRows[0], language.Hints[0])],
+        [.. Letters(language.LetterRows[1], language.Hints[1])],
         [
             new("Shift", StandardAction.Shift, Width: WideWidth, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_shift),
-            .. Letters("zxcvbnm", "*\"':;!?"),
+            .. Letters(language.LetterRows[2], language.Hints[2]),
             Delete(),
         ],
         [
@@ -87,10 +139,10 @@ public static class StandardKeys
         ],
     ];
 
-    private static readonly IReadOnlyList<IReadOnlyList<StandardKey>> SymbolsPage =
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> SymbolsPage(StandardLanguage language) =>
     [
         [.. Characters("1234567890")],
-        [.. Characters("@#€_&-+()/")],
+        [.. Characters(language.Symbols)],
         [
             new("=\\<", StandardAction.MoreSymbols, Width: WideWidth, Look: StandardLook.Function),
             .. Characters("*\"':;!?"),
@@ -106,10 +158,10 @@ public static class StandardKeys
         ],
     ];
 
-    private static readonly IReadOnlyList<IReadOnlyList<StandardKey>> MoreSymbolsPage =
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> MoreSymbolsPage(StandardLanguage language) =>
     [
         [.. Characters("~`|•√π÷×§Δ")],
-        [.. Characters("£¥$¢^°={}\\")],
+        [.. Characters(language.MoreSymbols)],
         [
             new("?123", StandardAction.Symbols, Width: WideWidth, Look: StandardLook.Function),
             .. Characters("%©®™✓[]"),
@@ -124,18 +176,6 @@ public static class StandardKeys
             Enter(),
         ],
     ];
-
-    /// <summary>A page's rows, top to bottom.</summary>
-    public static IReadOnlyList<IReadOnlyList<StandardKey>> Page(StandardPage page) => page switch
-    {
-        StandardPage.Symbols => SymbolsPage,
-        StandardPage.MoreSymbols => MoreSymbolsPage,
-        _ => LettersPage,
-    };
-
-    /// <summary>The letters page's letters: what a swipe is read over.</summary>
-    public static IEnumerable<StandardKey> SwipeKeys =>
-        LettersPage.SelectMany(row => row).Where(key => key.Text is { Length: 1 } text && KeyPanel.SwipeLetters.Contains(text));
 
     private static IEnumerable<StandardKey> Letters(string letters, string hints) =>
         letters.Zip(hints, (letter, hint) => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString(), Hint: hint.ToString()));
