@@ -39,6 +39,12 @@ public sealed class KeyboardWindow : Window
     private readonly KeyboardSurface keys;
     private readonly SignButton switcher;
     private readonly TextBlock notice;
+    private readonly SwipeEngine swipe = new();
+
+    /// <summary>The words a swipe read as, in the toolbar's middle as Gboard's: the one typed in bold in the centre, one on each side, a tap on one taking its place.</summary>
+    private readonly Grid suggestions = new() { Visibility = Visibility.Collapsed };
+
+    private const double SuggestionSize = 15;
     private readonly DispatcherTimer noticeTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private Point? dragFrom;
     private (double Left, double Top, double Width) dragStart;
@@ -62,6 +68,8 @@ public sealed class KeyboardWindow : Window
         keys = new KeyboardSurface(colors);
         keys.NextLanguage += NextLanguage;
         keys.NotMade += what => Notice($"{what}: todavía no está hecho");
+        keys.Swiped += async (path, capital, capitals) => keys.TypeSwiped(await swipe.Words(path), capital, capitals);
+        keys.Suggestions += ShowSuggestions;
 
         switcher = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp };
         switcher.Clicked += () =>
@@ -84,7 +92,10 @@ public sealed class KeyboardWindow : Window
         DockPanel.SetDock(close, Dock.Right);
         bar.Children.Add(switcher);
         bar.Children.Add(close);
-        bar.Children.Add(notice);
+        var middle = new Grid();
+        middle.Children.Add(notice);
+        middle.Children.Add(suggestions);
+        bar.Children.Add(middle);
         Moves(bar);
 
         var handle = new Border
@@ -155,6 +166,54 @@ public sealed class KeyboardWindow : Window
         var languages = StandardKeys.Languages;
         keys.KeyLanguage = languages[(languages.ToList().IndexOf(keys.KeyLanguage) + 1) % languages.Count];
         Keep();
+    }
+
+    /// <summary>The swipe's words shown, the typed one in the centre in bold and the next likeliest on each side; none, the toolbar empty again.</summary>
+    private void ShowSuggestions(IReadOnlyList<string> words, string? typed)
+    {
+        suggestions.Children.Clear();
+        suggestions.ColumnDefinitions.Clear();
+        suggestions.Visibility = words.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (words.Count == 0)
+        {
+            return;
+        }
+
+        var others = words.Where(word => word != typed).Take(2).ToList();
+        string?[] shown = [others.ElementAtOrDefault(0), typed, others.ElementAtOrDefault(1)];
+        for (var i = 0; i < shown.Length; i++)
+        {
+            suggestions.ColumnDefinitions.Add(new ColumnDefinition());
+            if (shown[i] is not { } word)
+            {
+                continue;
+            }
+
+            var centre = i == 1;
+            var label = new TextBlock
+            {
+                Text = word,
+                FontSize = SuggestionSize,
+                FontWeight = centre ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = new SolidColorBrush(colors.Glyph),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            var place = new Border { Background = Brushes.Transparent, Child = label, Cursor = centre ? null : Cursors.Hand };
+            if (!centre)
+            {
+                place.MouseLeftButtonUp += (_, e) =>
+                {
+                    keys.ReplaceSwiped(word);
+                    e.Handled = true;
+                };
+                place.MouseLeftButtonDown += (_, e) => e.Handled = true;
+            }
+
+            Grid.SetColumn(place, i);
+            suggestions.Children.Add(place);
+        }
     }
 
     private void Notice(string text)

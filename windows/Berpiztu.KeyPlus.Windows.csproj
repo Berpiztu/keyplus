@@ -24,8 +24,15 @@
 
   <ItemGroup>
     <Compile Include="..\StandardKeys.cs" Link="Shared\StandardKeys.cs" />
+    <Compile Include="..\SwipeWords.cs" Link="Shared\SwipeWords.cs" />
     <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_tool_close.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Swipe typing: FUTO Swipe built for Windows (native\futo-swipe\windows\build.ps1),
+         its encoder and AOSP's word lists, the Android keyboard's. -->
+    <Content Include="..\native\futo-swipe\win-x64\keyplus_swipe.dll" Link="keyplus_swipe.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\native\futo-swipe\win-x64\keyplus_swipe.dll')" />
+    <Content Include="..\Assets\futo-swipe\honorable_sturgeon\*" LinkBase="futo-swipe\honorable_sturgeon" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Assets\futo-swipe\LICENSE.md" Link="futo-swipe\LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Assets\dictionaries\*.gz" LinkBase="dictionaries" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

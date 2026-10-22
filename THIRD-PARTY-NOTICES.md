@@ -22,7 +22,7 @@ public and the library is a separate artifact in the build
 
 | Part | Licence | Source |
 | --- | --- | --- |
-| FUTO swipe-library, built as `native/futo-swipe/*/libswipe_jni.so` by `native/futo-swipe/build.sh`, with KeyPlus's trie functions (`keyplus_trie_jni.cpp`); `SwipeDecoder.java` adapted from its Kotlin interface | GPL-3.0 | https://gitlab.futo.org/keyboard/swipe-library |
+| FUTO swipe-library, built as `native/futo-swipe/*/libswipe_jni.so` by `native/futo-swipe/build.sh` and, for Windows, as `native/futo-swipe/win-x64/keyplus_swipe.dll` (with ExecuTorch and XNNPACK in it) by `native/futo-swipe/windows/build.ps1`, with KeyPlus's trie functions (`keyplus_trie_jni.cpp`); `SwipeDecoder.java` adapted from its Kotlin interface | GPL-3.0 | https://gitlab.futo.org/keyboard/swipe-library |
 | FUTO Swipe encoder model (`Assets/futo-swipe/honorable_sturgeon`) | FUTO Model Weights License 1.0 (`Assets/futo-swipe/LICENSE.md`): the app says "powered by FUTO Swipe" | https://huggingface.co/futo-org/futo-swipe |
 | ExecuTorch, inside libswipe_jni.so | BSD | https://github.com/pytorch/executorch |
 | libc++_shared.so, from the Android NDK r27d | Apache-2.0 with LLVM exceptions | https://developer.android.com/ndk |

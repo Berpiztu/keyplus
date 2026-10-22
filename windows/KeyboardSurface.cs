@@ -15,7 +15,9 @@ namespace Berpiztu.KeyPlus;
 /// or the mouse lets go; held, a letter of Estándar types its corner's
 /// symbol, a key of Estándar PC goes on, ⌫ and the arrows repeat; Shift once
 /// or locked, Bloq Mayús, Ctrl, Alt, ⊞ and Alt Gr on until the next key, the
-/// dead keys' accents on the next letter; 🌐 the next language.
+/// dead keys' accents on the next letter; 🌐 the next language. A drag over
+/// the letters is a swipe, its trail drawn, read as a word (<see cref="Swiped"/>)
+/// and typed with a space before it and none after, as on Android.
 /// </summary>
 public sealed class KeyboardSurface : FrameworkElement
 {
@@ -90,14 +92,30 @@ public sealed class KeyboardSurface : FrameworkElement
     }
 
     /// <summary>The key under the finger or the mouse, and what holding it has done.</summary>
-    private sealed class Pressed(StandardKey key, Rect box, int? touch)
+    private sealed class Pressed(StandardKey key, Rect box, int? touch, Point start)
     {
         public StandardKey Key { get; } = key;
         public Rect Box { get; } = box;
         public int? Touch { get; } = touch;
+        public Point Start { get; } = start;
+        public DateTime StartedAt { get; } = DateTime.UtcNow;
+
+        /// <summary>The finger's or the mouse's path, each point with its milliseconds from the first.</summary>
+        public List<(Point Point, float Time)> Points { get; } = [(start, 0)];
         public bool LongPressed { get; set; }
         public bool Repeated { get; set; }
+        public bool Swiping { get; set; }
     }
+
+    /// <summary>The trail Gboard draws: 30 px wide at the finger, 14 px at its end, 93 % then 40 % opaque.</summary>
+    private const double TrailDp = 30 / PixelsPerDp;
+    private const double TrailTailDp = 14 / PixelsPerDp;
+    private const double TrailHeadAlpha = 0.93;
+    private const double TrailTailAlpha = 0.40;
+
+    /// <summary>The swiped word typed last, with the space before it, while nothing else has been typed; the last character typed, for the space a swiped word needs.</summary>
+    private string? swipedText;
+    private char? lastTyped;
 
     public KeyboardSurface(Palette colors)
     {
@@ -139,6 +157,72 @@ public sealed class KeyboardSurface : FrameworkElement
 
     /// <summary>The comma held, Estándar's ☺: the emoji (not made on Windows yet).</summary>
     public event Action<string>? NotMade;
+
+    /// <summary>A swipe over the letters, to be read as a word, and whether Shift or the capitals were on.</summary>
+    public event Action<SwipeEngine.Swipe, bool, bool>? Swiped;
+
+    /// <summary>The words a swipe read as, the one typed among them, for the toolbar; none, the toolbar as it was.</summary>
+    public event Action<IReadOnlyList<string>, string?>? Suggestions;
+
+    /// <summary>
+    /// A swipe's words: the likeliest typed, in capitals or with a capital as
+    /// Shift had it, with a space before it unless after a space or nothing,
+    /// none after; the words offered in the toolbar.
+    /// </summary>
+    public void TypeSwiped(IReadOnlyList<string> words, bool capital, bool capitals)
+    {
+        if (words.Count == 0)
+        {
+            return;
+        }
+
+        var word = Cased(words[0], capital, capitals);
+        var text = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? word : " " + word;
+        KeySender.Type(text);
+        lastTyped = text[^1];
+        swipedText = text;
+        Suggestions?.Invoke(words, words[0]);
+    }
+
+    /// <summary>A word of the toolbar taken in the swiped word's place, as Gboard's: the suggestions end; the next word still starts with its space.</summary>
+    public void ReplaceSwiped(string word)
+    {
+        if (swipedText is not { } typed)
+        {
+            return;
+        }
+
+        var old = typed.Trim();
+        var capital = old.Length > 0 && char.IsUpper(old[0]);
+        var text = (typed.StartsWith(' ') ? " " : "") + Cased(word, capital, capitals: false);
+        foreach (var _ in typed)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
+
+        KeySender.Type(text);
+        lastTyped = text[^1];
+        swipedText = text;
+        Suggestions?.Invoke([], null);
+    }
+
+    private static string Cased(string word, bool capital, bool capitals) =>
+        capitals ? word.ToUpper(CultureInfo.CurrentCulture)
+        : capital ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..]
+        : word;
+
+    /// <summary>Something else typed: the swipe's words gone; whether a space is owed first, a letter right after a swiped word starting the next word.</summary>
+    private bool EndSwipe(bool letter)
+    {
+        var owed = swipedText is not null && letter;
+        if (swipedText is not null)
+        {
+            swipedText = null;
+            Suggestions?.Invoke([], null);
+        }
+
+        return owed;
+    }
 
     private double LetterRow => LetterRowDp;
 
@@ -230,11 +314,16 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             DrawKey(context, key, box);
         }
+
+        if (pressed is { Swiping: true } now)
+        {
+            DrawTrail(context, now);
+        }
     }
 
     private void DrawKey(DrawingContext context, StandardKey key, Rect box)
     {
-        var down = pressed is { } now && now.Key == key;
+        var down = pressed is { Swiping: false } now && now.Key == key;
         var function = key.Look != StandardLook.Letter;
         var ground = IsOn(key) ? colors.On
             : function ? (down ? colors.FunctionPressed : colors.Function)
@@ -372,6 +461,53 @@ public sealed class KeyboardSurface : FrameworkElement
         e.Handled = true;
     }
 
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (e.StylusDevice is null && e.LeftButton == MouseButtonState.Pressed)
+        {
+            Track(e.GetPosition(this), null);
+        }
+    }
+
+    protected override void OnTouchMove(TouchEventArgs e)
+    {
+        Track(e.GetTouchPoint(this).Position, e.TouchDevice.Id);
+        e.Handled = true;
+    }
+
+    /// <summary>A point of the path: past a key's touch on a letter, a swipe, its trail drawn; on any other key, nothing held goes on.</summary>
+    private void Track(Point point, int? touch)
+    {
+        if (pressed is not { } now || now.Touch != touch)
+        {
+            return;
+        }
+
+        now.Points.Add((point, (float)(DateTime.UtcNow - now.StartedAt).TotalMilliseconds));
+        if (now.Swiping)
+        {
+            InvalidateVisual();
+            return;
+        }
+
+        if (now.LongPressed || now.Repeated)
+        {
+            return;
+        }
+
+        var far = Math.Max(Math.Abs(point.X - now.Start.X), Math.Abs(point.Y - now.Start.Y)) > Math.Min(now.Box.Width, now.Box.Height) * 0.6;
+        if (far && page is StandardPage.Letters or StandardPage.Pc && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
+        {
+            now.Swiping = true;
+            StopHolding();
+            InvalidateVisual();
+        }
+        else if (far && now.Key.Action != StandardAction.Delete && !now.Key.Repeats)
+        {
+            StopHolding();
+        }
+    }
+
     protected override void OnTouchUp(TouchEventArgs e)
     {
         ReleaseTouchCapture(e.TouchDevice);
@@ -392,7 +528,7 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
-        var now = new Pressed(hit.Key, hit.Box, touch);
+        var now = new Pressed(hit.Key, hit.Box, touch, point);
         pressed = now;
         if (hit.Key.Action == StandardAction.Delete)
         {
@@ -457,7 +593,11 @@ public sealed class KeyboardSurface : FrameworkElement
 
         StopHolding();
         pressed = null;
-        if (now.Repeated)
+        if (now.Swiping)
+        {
+            ReadSwipe(now);
+        }
+        else if (now.Repeated)
         {
             // Typed while held.
         }
@@ -489,6 +629,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 ModifiersUsed();
                 break;
             case StandardAction.Space:
+                EndSwipe(letter: false);
                 Type(" ");
                 break;
             case StandardAction.Key when key.Code == Keycode.Unknown:
@@ -540,12 +681,62 @@ public sealed class KeyboardSurface : FrameworkElement
                 ModifiersUsed();
                 break;
             case StandardAction.Enter:
+                EndSwipe(letter: false);
                 FlushDead();
                 Press(Keycode.Enter);
+                lastTyped = '\n';
                 break;
         }
 
         InvalidateVisual();
+    }
+
+    /// <summary>The swipe made FUTO Swipe's: the points and the letters' centres from 0 to 1 over the room the letters take.</summary>
+    private void ReadSwipe(Pressed now)
+    {
+        var letters = laid.Where(laidKey => laidKey.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter)).ToList();
+        if (letters.Count == 0)
+        {
+            return;
+        }
+
+        var centres = language.SwipeLetters.Select(letter => letters.First(laidKey => laidKey.Key.Text == letter.ToString()).Box).ToList();
+        var left = letters.Min(laidKey => laidKey.Box.Left);
+        var top = letters.Min(laidKey => laidKey.Box.Top);
+        var width = letters.Max(laidKey => laidKey.Box.Right) - left;
+        var height = letters.Max(laidKey => laidKey.Box.Bottom) - top;
+        float X(double x) => (float)((x - left) / width);
+        float Y(double y) => (float)((y - top) / height);
+        var path = new SwipeEngine.Swipe(
+            [.. now.Points.Select(point => X(point.Point.X))],
+            [.. now.Points.Select(point => Y(point.Point.Y))],
+            [.. now.Points.Select(point => point.Time)],
+            [.. centres.Select(box => X(box.X + (box.Width / 2)))],
+            [.. centres.Select(box => Y(box.Y + (box.Height / 2)))],
+            language);
+        var capitals = shift == Shift.Locked || capsLock;
+        var capital = shift == Shift.Once;
+        if (shift == Shift.Once)
+        {
+            shift = Shift.Off;
+        }
+
+        EndSwipe(letter: false);
+        Swiped?.Invoke(path, capital, capitals);
+    }
+
+    /// <summary>The swipe's trail as Gboard draws it, from its end, thin and faint, to the finger, wide and strong.</summary>
+    private void DrawTrail(DrawingContext context, Pressed now)
+    {
+        var points = now.Points;
+        for (var i = 1; i < points.Count; i++)
+        {
+            var share = (double)i / (points.Count - 1);
+            var alpha = TrailTailAlpha + ((TrailHeadAlpha - TrailTailAlpha) * share);
+            var color = Color.FromArgb((byte)(alpha * 255), colors.Primary.R, colors.Primary.G, colors.Primary.B);
+            var pen = new Pen(new SolidColorBrush(color), TrailTailDp + ((TrailDp - TrailTailDp) * share)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            context.DrawLine(pen, points[i - 1].Point, points[i].Point);
+        }
     }
 
     private void TypeKey(StandardKey key)
@@ -561,6 +752,11 @@ public sealed class KeyboardSurface : FrameworkElement
         else
         {
             var typed = ShiftedFor(key) && key.Shifted is not null ? key.Shifted : key.Text!;
+            if (EndSwipe(typed.Length == 1 && char.IsLetter(typed[0])))
+            {
+                Type(" ");
+            }
+
             if (key.Dead && DeadMarks.ContainsKey(typed))
             {
                 FlushDead();
@@ -586,6 +782,7 @@ public sealed class KeyboardSurface : FrameworkElement
         }
 
         KeySender.Type(typed);
+        lastTyped = typed.Length > 0 ? typed[^1] : lastTyped;
     }
 
     private void FlushDead()
@@ -599,6 +796,8 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void DeleteOnce()
     {
+        EndSwipe(letter: false);
+        lastTyped = null;
         if (Combining)
         {
             Press(Keycode.Del);
