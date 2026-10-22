@@ -117,6 +117,10 @@ public sealed class KeyboardSurface : FrameworkElement
     private string? swipedText;
     private char? lastTyped;
 
+    /// <summary>A dictation's words typed so far, with the space before them, while it goes on; none between dictations.</summary>
+    private string? spokenText;
+    private string spokenLead = "";
+
     public KeyboardSurface(Palette colors)
     {
         this.colors = colors;
@@ -172,15 +176,54 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Words spoken (🎤), typed as a swiped word is: a space before them unless after a space or nothing.</summary>
     public void TypeSpoken(string text)
     {
-        if (text.Length == 0)
+        TypeSpokenSoFar(text);
+        spokenText = null;
+    }
+
+    /// <summary>
+    /// A dictation's words so far, typed as they are heard, as Gboard and
+    /// Windows' own voice typing write them: in place of those typed before,
+    /// only what changed deleted and typed again, with a space before them
+    /// unless after a space or nothing.
+    /// </summary>
+    public void TypeSpokenSoFar(string text)
+    {
+        if (spokenText is null)
         {
-            return;
+            if (text.Length == 0)
+            {
+                return;
+            }
+
+            EndSwipe(letter: false);
+            spokenLead = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? "" : " ";
+            spokenText = "";
         }
 
-        EndSwipe(letter: false);
-        var spaced = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? text : " " + text;
-        KeySender.Type(spaced);
-        lastTyped = spaced[^1];
+        var wanted = text.Length == 0 ? "" : spokenLead + text;
+        var same = 0;
+        while (same < spokenText.Length && same < wanted.Length && spokenText[same] == wanted[same])
+        {
+            same++;
+        }
+
+        // A surrogate pair is deleted and typed whole.
+        if (same > 0 && char.IsHighSurrogate(wanted[same - 1]))
+        {
+            same--;
+        }
+
+        for (var gone = new StringInfo(spokenText[same..]).LengthInTextElements; gone > 0; gone--)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
+
+        KeySender.Type(wanted[same..]);
+        spokenText = wanted;
+        if (wanted.Length > 0)
+        {
+            lastTyped = wanted[^1];
+        }
     }
 
     /// <summary>⌫ from elsewhere (the emoji's), as the key's.</summary>
@@ -252,13 +295,24 @@ public sealed class KeyboardSurface : FrameworkElement
         return owed;
     }
 
-    private double LetterRow => LetterRowDp;
+    /// <summary>The least share of Gboard's row height the rows are made: half, keys a mouse still reads and hits.</summary>
+    public const double MinRowScale = 0.5;
+
+    /// <summary>The rows' height as a share of Gboard's, from the height the window gives the keys: 1 at Gboard's own; the gaps stay Gboard's.</summary>
+    public double RowScale { get; private set; } = 1;
+
+    /// <summary>The keys' height with the rows at a share of Gboard's, for the keyboard in use.</summary>
+    public double HeightAt(double scale) => TopDp + (NumberRowDp * scale) + ((BaseRows - 1) * ((LetterRowDp * scale) + RowGapDp)) + BottomDp;
+
+    /// <summary>The rows of the keyboard's first page, the one its height is made for.</summary>
+    private int BaseRows => StandardKeys.Page(pc ? StandardPage.Pc : StandardPage.Letters, language).Count;
+
+    private double LetterRow => LetterRowDp * RowScale;
 
     protected override Size MeasureOverride(Size available)
     {
-        var rows = StandardKeys.Page(pc ? StandardPage.Pc : StandardPage.Letters, language).Count;
         var width = double.IsInfinity(available.Width) ? 400 : available.Width;
-        return new Size(width, TopDp + NumberRowDp + ((rows - 1) * (LetterRow + RowGapDp)) + BottomDp);
+        return new Size(width, double.IsInfinity(available.Height) ? HeightAt(RowScale) : available.Height);
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo info)
@@ -279,11 +333,13 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
+        var gaps = TopDp + BottomDp + ((BaseRows - 1) * RowGapDp);
+        RowScale = ActualHeight > 0 ? Math.Max(MinRowScale, (ActualHeight - gaps) / (NumberRowDp + ((BaseRows - 1) * LetterRowDp))) : RowScale;
         var across = Math.Max(1, rows.Max(row => row.Sum(key => (double)key.Width)));
         var unit = (width - (2 * SideDp) - ((across - 1) * KeyGapDp)) / across;
         glyphScale = Math.Min(1, unit / (LetterRow * GboardKeyAspect));
         double[] heights = page is StandardPage.Letters or StandardPage.Pc
-            ? [NumberRowDp, .. Enumerable.Repeat(LetterRow, rows.Count - 1)]
+            ? [NumberRowDp * RowScale, .. Enumerable.Repeat(LetterRow, rows.Count - 1)]
             : [.. Enumerable.Repeat((ActualHeight - TopDp - BottomDp - ((rows.Count - 1) * RowGapDp)) / rows.Count, rows.Count)];
         var top = TopDp;
         for (var r = 0; r < rows.Count; r++)

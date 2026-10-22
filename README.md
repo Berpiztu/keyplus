@@ -321,16 +321,20 @@ standard keyboards, Estándar and Estándar PC, with the Android one's
 layouts and signs, in a card that floats over every window and never takes
 the focus from the one typed in: its keys go to that window as Windows'
 own. Over the keys, the keyboard in sight (a phone or a computer), a click
-the other, and ✕; under them the handle moves it and the grip at its right
-makes it wider; its place, width, keyboard and language are kept. A drag
+the other, and ✕; the toolbar and the handle under the keys move it, and
+its edges and corners make it larger or smaller as any window's, the rows
+growing with it; its place, size, keyboard and language are kept. A drag
 over the letters is read by FUTO Swipe, built for Windows
 (`native/futo-swipe/windows/build.ps1`), and its words show in the
 toolbar as on Android. The comma held, or ☺ on the toolbar, opens the
 emoji, in colour as Windows draws them (Direct2D), those typed lately
-first; Windows draws no flags, so they are left out. 🎤 listens until
-tapped again and types what ia-voice, the speech service on this computer
-(NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation), heard. The
-grid and the designer are not on Windows yet.
+first; Windows draws no flags, so they are left out. 🎤 types what
+ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
+on this computer or published, heard: the words are written as they
+are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
+the settings: the microphone, that silence, the gain, the service, and
+moving out of the way of the text, which keeps the keyboard off the
+caret of any window. The grid and the designer are not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj

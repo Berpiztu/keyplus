@@ -68,6 +68,8 @@
   <string name="dock_by_drag_summary">Arrastrado hasta abajo, el teclado flotante se acopla; arrastrado hacia arriba, el acoplado flota</string>
   <string name="avoid_caret">Apartarse del texto</string>
   <string name="avoid_caret_summary">En ventana, el teclado se pone encima o debajo de donde escribes cuando lo tapa</string>
+  <string name="avoid_menus">Apartarse también de los menús</string>
+  <string name="avoid_menus_summary">En ventana, cuando un menú abierto queda debajo del teclado, se aparta una vez y se queda ahí</string>
   <string name="reset_size">Restablecer</string>
   <string name="show_keyboard">Mostrar el teclado al escribir</string>
   <string name="show_keyboard_summary">Desactivado, no aparece nunca: para cuando usas otro teclado, y uno no pisa al otro</string>
@@ -123,4 +125,22 @@
   <string name="voice_transcribing">Transcribiendo…</string>
   <string name="voice_unavailable">El servicio de voz no responde</string>
   <string name="voice_no_microphone">No hay micrófono para escuchar</string>
+  <string name="voice_nothing_heard">No se oyó nada</string>
+  <string name="voice_microphone">Micrófono</string>
+  <string name="voice_microphone_default">El predeterminado del sistema</string>
+  <string name="voice_auto_stop">Parar solo al dejar de hablar</string>
+  <string name="voice_auto_stop_summary">Tras hablar, el silencio de abajo lo escribe y para; desactivado, para cuando pulsas 🎤</string>
+  <string name="voice_silence">Silencio para transcribir (seg)</string>
+  <string name="voice_silence_hint">Cuánto silencio espera antes de parar.</string>
+  <string name="voice_gain">Subir volumen (×)</string>
+  <string name="voice_gain_hint">Multiplica el volumen grabado: ×1 (igual) a ×4.</string>
+  <string name="voice_service">Servicio de voz</string>
+  <string name="voice_service_hint">Usuario y clave si la dirección los pide; se guardan solo en este dispositivo.</string>
+  <string name="voice_local">Local (este dispositivo)</string>
+  <string name="voice_address">Dirección</string>
+  <string name="voice_user">Usuario</string>
+  <string name="voice_password">Clave</string>
+  <string name="voice_sign_in_refused">El servicio de voz no acepta el usuario y la clave</string>
+  <string name="open_keyboard">Abrir el teclado</string>
+  <string name="quit">Salir</string>
 </resources>

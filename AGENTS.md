@@ -145,6 +145,7 @@ When the user requests a durable behavior change, record it here or in the relev
 - Install on the owner's phone or headset only when the owner says "install" for that build
 - The owner's keyboard designs are never lost: before any install, any change to an emulator (wipe, new image) and every commit, run `.\backup-designs.ps1`; it copies each design that changed since its last copy to `docs/tODO/designs/` as a new file, never over an old one, and those copies are committed
 - Space is never wasted: margins, padding and fixed widths are the least a finger and the text need, horizontal and vertical; a control is as wide as its content (a sign's button its sign and a finger's margin), and the room left goes to what holds text
+- Every feature or fix is made for the Android and the Windows keyboard alike; the settings are an app of their own on both, independent of the keyboard
 
 ## Child DOX Index
 

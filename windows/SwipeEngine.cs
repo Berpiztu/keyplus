@@ -59,7 +59,7 @@ public sealed class SwipeEngine
                 {
                     if (keyplus_swipe_set_layout(engine, path.Language.SwipeLetters, path.KeyX, path.KeyY, path.KeyX.Length, language.Trie) == 0)
                     {
-                        System.Diagnostics.Debug.WriteLine("FUTO Swipe did not take the letters' places");
+                        Log.Write("FUTO Swipe did not take the letters' places");
                         return (IReadOnlyList<string>)[];
                     }
 
@@ -94,7 +94,7 @@ public sealed class SwipeEngine
         }
         catch (Exception failure)
         {
-            System.Diagnostics.Debug.WriteLine($"FUTO Swipe could not be loaded: {failure}");
+            Log.Write($"FUTO Swipe could not be loaded: {failure}");
             return false;
         }
     }

@@ -74,6 +74,8 @@
   <string name="dock_by_drag_summary">Dragged to the bottom, the floating keyboard docks; dragged up, the docked one floats</string>
   <string name="avoid_caret">Move out of the way of the text</string>
   <string name="avoid_caret_summary">In a window, the keyboard moves above or below where you type when it covers it</string>
+  <string name="avoid_menus">Also move out of the way of menus</string>
+  <string name="avoid_menus_summary">In a window, when an open menu is under the keyboard, it moves away once and stays there</string>
   <string name="reset_size">Reset</string>
   <string name="show_keyboard">Show the keyboard when typing</string>
   <string name="show_keyboard_summary">Off, it never shows: for when another keyboard is in use, so one does not cover the other</string>
@@ -129,4 +131,22 @@
   <string name="voice_transcribing">Transcribing…</string>
   <string name="voice_unavailable">The speech service does not answer</string>
   <string name="voice_no_microphone">No microphone to listen with</string>
+  <string name="voice_nothing_heard">Nothing was heard</string>
+  <string name="voice_microphone">Microphone</string>
+  <string name="voice_microphone_default">The system\'s default</string>
+  <string name="voice_auto_stop">Stop by itself when you stop speaking</string>
+  <string name="voice_auto_stop_summary">After speaking, the silence below writes it and stops; off, it stops when you tap 🎤</string>
+  <string name="voice_silence">Silence to transcribe (s)</string>
+  <string name="voice_silence_hint">How long a silence it waits for before it stops.</string>
+  <string name="voice_gain">Raise the volume (×)</string>
+  <string name="voice_gain_hint">Multiplies the recorded volume: ×1 (the same) to ×4.</string>
+  <string name="voice_service">Speech service</string>
+  <string name="voice_service_hint">User and password if the address asks for them; kept only on this device.</string>
+  <string name="voice_local">Local (this device)</string>
+  <string name="voice_address">Address</string>
+  <string name="voice_user">User</string>
+  <string name="voice_password">Password</string>
+  <string name="voice_sign_in_refused">The speech service does not take the user and password</string>
+  <string name="open_keyboard">Open the keyboard</string>
+  <string name="quit">Quit</string>
 </resources>

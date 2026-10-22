@@ -66,6 +66,8 @@ namespace Berpiztu.KeyPlus
             public const int ic_emoji_symbols = 19;
             public const int ic_emoji_flags = 20;
             public const int ic_tool_mic = 21;
+            public const int ic_tool_settings = 22;
+            public const int ic_keyplus = 23;
         }
 
         public static class String
@@ -89,6 +91,40 @@ namespace Berpiztu.KeyPlus
             public const int voice_transcribing = 17;
             public const int voice_unavailable = 18;
             public const int voice_no_microphone = 19;
+            public const int voice_nothing_heard = 20;
+            public const int voice_microphone = 22;
+            public const int voice_microphone_default = 23;
+            public const int voice_silence = 24;
+            public const int voice_silence_hint = 25;
+            public const int voice_gain = 26;
+            public const int voice_gain_hint = 27;
+            public const int voice_service = 28;
+            public const int voice_service_hint = 29;
+            public const int voice_local = 32;
+            public const int voice_address = 33;
+            public const int voice_user = 34;
+            public const int voice_password = 35;
+            public const int voice_sign_in_refused = 36;
+            public const int settings_title = 37;
+            public const int preferences = 38;
+            public const int voice_typing = 39;
+            public const int avoid_caret = 40;
+            public const int avoid_caret_summary = 41;
+            public const int keyboard_settings = 42;
+            public const int show_keyboard = 43;
+            public const int show_keyboard_summary = 44;
+            public const int keyboard_icon = 45;
+            public const int keyboard_icon_summary = 46;
+            public const int focus_lost = 47;
+            public const int focus_lost_hide = 48;
+            public const int focus_lost_icon = 49;
+            public const int focus_lost_stay = 50;
+            public const int open_keyboard = 51;
+            public const int quit = 52;
+            public const int avoid_menus = 53;
+            public const int avoid_menus_summary = 54;
+            public const int voice_auto_stop = 55;
+            public const int voice_auto_stop_summary = 56;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>
