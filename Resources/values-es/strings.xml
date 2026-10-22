@@ -158,4 +158,5 @@
   <string name="headset_box">El teclado propio de las gafas</string>
   <string name="headset_box_summary">En las gafas, las teclas llenando la caja que dan a un teclado; desactivado, el teclado del móvil, como cualquier teclado Android. Cambia al volver a abrir el teclado</string>
   <string name="menus_watch_grant">Primero deja que la app active cosas por sí misma: emparéjala en Depuración inalámbrica y vuelve a pulsar Dejarle ver los menús</string>
+  <string name="windows_licences_summary">FUTO swipe-library (GPL-3.0), modelos FUTO Swipe (FUTO Model Weights License 1.0), ExecuTorch (BSD), listas de palabras de AOSP LatinIME, Vortice.Windows (MIT), NAudio (MIT), Material Symbols (Apache-2.0)</string>
 </resources>

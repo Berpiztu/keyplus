@@ -233,6 +233,12 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A swipe over the letters, to be read as a word, and whether Shift or the capitals were on.</summary>
     public event Action<SwipeEngine.Swipe, bool, bool>? Swiped;
 
+    /// <summary>Whether a drag over the letters is read as a word (Escritura deslizando el dedo); off, the letters are only tapped.</summary>
+    public bool Glides { get; set; } = true;
+
+    /// <summary>Whether a swipe draws its trail over the keys.</summary>
+    public bool ShowsTrail { get; set; } = true;
+
     /// <summary>The words a swipe read as, the one typed among them, for the toolbar; none, the toolbar as it was.</summary>
     public event Action<IReadOnlyList<string>, string?>? Suggestions;
 
@@ -445,7 +451,7 @@ public sealed class KeyboardSurface : FrameworkElement
             DrawKey(context, key, box);
         }
 
-        if (pressed is { Swiping: true } now)
+        if (pressed is { Swiping: true } now && ShowsTrail)
         {
             DrawTrail(context, now);
         }
@@ -626,7 +632,7 @@ public sealed class KeyboardSurface : FrameworkElement
         }
 
         var far = Math.Max(Math.Abs(point.X - now.Start.X), Math.Abs(point.Y - now.Start.Y)) > Math.Min(now.Box.Width, now.Box.Height) * 0.6;
-        if (far && page is StandardPage.Letters or StandardPage.Pc && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
+        if (far && Glides && page is StandardPage.Letters or StandardPage.Pc && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
         {
             now.Swiping = true;
             StopHolding();

@@ -164,4 +164,5 @@
   <string name="headset_box">The headset\'s own keyboard</string>
   <string name="headset_box_summary">On the glasses, the keys filling the box the headset gives a keyboard; off, the phone\'s keyboard, as any Android keyboard. It changes when the keyboard opens again</string>
   <string name="menus_watch_grant">First let the app turn things on by itself: pair it in Wireless debugging, then tap Let it see the menus again</string>
+  <string name="windows_licences_summary">FUTO swipe-library (GPL-3.0), FUTO Swipe models (FUTO Model Weights License 1.0), ExecuTorch (BSD), AOSP LatinIME word lists, Vortice.Windows (MIT), NAudio (MIT), Material Symbols (Apache-2.0)</string>
 </resources>

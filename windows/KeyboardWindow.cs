@@ -121,11 +121,8 @@ public sealed class KeyboardWindow : Window
         switcher = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp };
         switcher.Clicked += () =>
         {
-            var scale = keys.RowScale;
-            keys.Pc = !keys.Pc;
-            FitKeys(scale);
-            ShowSwitcher();
-            Keep();
+            ChooseKeyboard(!keys.Pc);
+            (preferences = preferences with { Pc = keys.Pc }).Keep();
         };
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
         close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
@@ -158,7 +155,7 @@ public sealed class KeyboardWindow : Window
         icon.Tapped += OpenByHand;
         icon.Moved += Keep;
         tray = new TrayIcon(OpenByHand, SettingsWindow.Start, Quit);
-        preferencesWatch = KeyboardPreferences.Watch(kept => preferences = kept);
+        preferencesWatch = KeyboardPreferences.Watch(Prefer);
         notice = new TextBlock { Foreground = new SolidColorBrush(colors.Glyph), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, FontSize = 13 };
         noticeTimer.Tick += (_, _) =>
         {
@@ -365,7 +362,42 @@ public sealed class KeyboardWindow : Window
     {
         var languages = StandardKeys.Languages;
         keys.KeyLanguage = languages[(languages.ToList().IndexOf(keys.KeyLanguage) + 1) % languages.Count];
+        (preferences = preferences with { Language = keys.KeyLanguage.Code }).Keep();
         Keep();
+    }
+
+    /// <summary>Estándar or Estándar PC shown, its rows as tall as they were.</summary>
+    private void ChooseKeyboard(bool pc)
+    {
+        if (keys.Pc == pc)
+        {
+            return;
+        }
+
+        var scale = keys.RowScale;
+        keys.Pc = pc;
+        FitKeys(scale);
+        ShowSwitcher();
+        Keep();
+    }
+
+    /// <summary>The preferences as the settings saved them: the keyboard, its language and swiping taken at once.</summary>
+    private void Prefer(KeyboardPreferences kept)
+    {
+        preferences = kept;
+        if (kept.Pc is { } pc)
+        {
+            ChooseKeyboard(pc);
+        }
+
+        if (kept.Language is { } code && code != keys.KeyLanguage.Code && StandardKeys.Languages.FirstOrDefault(language => language.Code == code) is { } chosen)
+        {
+            keys.KeyLanguage = chosen;
+            Keep();
+        }
+
+        keys.Glides = kept.Glide;
+        keys.ShowsTrail = kept.GlideTrail;
     }
 
     /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the window's thread.</summary>
@@ -672,8 +704,12 @@ public sealed class KeyboardWindow : Window
         var area = SystemParameters.WorkArea;
         var state = ReadState();
         Width = Math.Max(MinWidth, state?.Width ?? area.Width * 0.6);
-        keys.Pc = state?.Pc ?? true;
-        keys.KeyLanguage = StandardKeys.Languages.FirstOrDefault(language => language.Code == state?.Language) ?? StandardKeys.Spanish;
+        // The keyboard and language as the preferences have them; kept before they did, as the window kept them.
+        keys.Pc = preferences.Pc ?? state?.Pc ?? true;
+        var language = preferences.Language ?? state?.Language;
+        keys.KeyLanguage = StandardKeys.Languages.FirstOrDefault(known => known.Code == language) ?? StandardKeys.Spanish;
+        keys.Glides = preferences.Glide;
+        keys.ShowsTrail = preferences.GlideTrail;
         FitKeys(state?.RowScale ?? 1);
         if (state is not null && area.Contains(new Point(state.Left + 40, state.Top + 40)))
         {

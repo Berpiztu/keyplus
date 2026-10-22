@@ -8,11 +8,23 @@ namespace Berpiztu.KeyPlus;
 /// with Android's names and defaults: showing the keyboard when a text field
 /// takes the focus, what it does when the focus leaves (hides, becomes its ⌨
 /// icon or stays), the icon where it never shows by itself, moving out of
-/// the way of the text and, an extra of Windows', of open menus. Kept in
+/// the way of the text and of open menus; the keyboard (Estándar or
+/// Estándar PC) and its language, as Tema and Idiomas choose them and the
+/// keyboard's own buttons change them; swiping over the letters and its
+/// trail. Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
 /// </summary>
-public sealed record KeyboardPreferences(bool ShowKeyboard = true, string FocusLost = KeyboardPreferences.FocusLostHide, bool KeyboardIcon = true, bool AvoidCaret = true, bool AvoidMenus = true)
+public sealed record KeyboardPreferences(
+    bool ShowKeyboard = true,
+    string FocusLost = KeyboardPreferences.FocusLostHide,
+    bool KeyboardIcon = true,
+    bool AvoidCaret = true,
+    bool AvoidMenus = true,
+    bool? Pc = null,
+    string? Language = null,
+    bool Glide = true,
+    bool GlideTrail = true)
 {
     public const string FocusLostHide = "hide";
     public const string FocusLostIcon = "icon";
@@ -23,6 +35,9 @@ public sealed record KeyboardPreferences(bool ShowKeyboard = true, string FocusL
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", "preferences.json");
 
     public static KeyboardPreferences Default { get; } = new();
+
+    /// <summary>The preferences with Estándar PC chosen, or Estándar.</summary>
+    public KeyboardPreferences With(bool pc) => this with { Pc = pc };
 
     public static KeyboardPreferences Read()
     {

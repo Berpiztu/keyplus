@@ -38,8 +38,12 @@ public sealed class SettingsWindow : Window
 
         (string Name, Func<FrameworkElement> Page)[] pages =
         [
+            (Texts.Get(Resource.String.languages), LanguagesPage),
             (Texts.Get(Resource.String.preferences), PreferencesPage),
+            (Texts.Get(Resource.String.theme), ThemePage),
+            (Texts.Get(Resource.String.glide), GlidePage),
             (Texts.Get(Resource.String.voice_typing), VoicePage),
+            (Texts.Get(Resource.String.about), AboutPage),
         ];
         var list = new ListBox { Margin = new Thickness(0, MarginDp / 2, 0, 0) };
         foreach (var (name, _) in pages)
@@ -71,6 +75,63 @@ public sealed class SettingsWindow : Window
 
     /// <summary>The settings started as a program of their own; where they run already, that one comes to the front.</summary>
     public static void Start() => System.Diagnostics.Process.Start(Environment.ProcessPath!, Argument);
+
+    /// <summary>Idiomas: the keyboard's languages, the one in use marked; one chosen, the keyboard types in it, as 🌐 changes it.</summary>
+    private static FrameworkElement LanguagesPage()
+    {
+        var preferences = KeyboardPreferences.Read();
+        var form = Form(Resource.String.languages);
+        foreach (var language in StandardKeys.Languages)
+        {
+            var option = new RadioButton { Content = language.Name, IsChecked = (preferences.Language ?? StandardKeys.Spanish.Code) == language.Code, GroupName = "language" };
+            option.Checked += (_, _) => (preferences = KeyboardPreferences.Read() with { Language = language.Code }).Keep();
+            form.Children.Add(option);
+        }
+
+        return form;
+    }
+
+    /// <summary>Tema: the keyboard the card shows, Estándar or Estándar PC, as the toolbar's switch changes it.</summary>
+    private static FrameworkElement ThemePage()
+    {
+        var preferences = KeyboardPreferences.Read();
+        var pc = preferences.Pc ?? true;
+        var form = Form(Resource.String.theme);
+        foreach (var (name, isPc) in new[] { (Resource.String.keyboard_standard, false), (Resource.String.keyboard_standard_pc, true) })
+        {
+            var option = new RadioButton { Content = Texts.Get(name), IsChecked = pc == isPc, GroupName = "keyboard" };
+            option.Checked += (_, _) => KeyboardPreferences.Read().With(isPc).Keep();
+            form.Children.Add(option);
+        }
+
+        return form;
+    }
+
+    /// <summary>Escritura deslizando el dedo, as Android's: swiping over the letters and its trail; FUTO Swipe's notice in sight, as its licence asks.</summary>
+    private static FrameworkElement GlidePage()
+    {
+        var preferences = KeyboardPreferences.Read();
+        var form = Form(Resource.String.glide);
+        var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = preferences.Glide };
+        glide.Click += (_, _) => (KeyboardPreferences.Read() with { Glide = glide.IsChecked == true }).Keep();
+        var trail = new CheckBox { Content = Texts.Get(Resource.String.glide_trail), IsChecked = preferences.GlideTrail };
+        trail.Click += (_, _) => (KeyboardPreferences.Read() with { GlideTrail = trail.IsChecked == true }).Keep();
+        form.Children.Add(Field(null, glide, Resource.String.glide_summary));
+        form.Children.Add(Field(null, trail, Resource.String.glide_trail_summary));
+        form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
+        return form;
+    }
+
+    /// <summary>Información, as Android's: the version, FUTO Swipe's notice and the open source licences the Windows app carries.</summary>
+    private static FrameworkElement AboutPage()
+    {
+        var form = Form(Resource.String.about);
+        var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "";
+        form.Children.Add(Field(Resource.String.version, new TextBlock { Text = version }, null));
+        form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
+        form.Children.Add(Field(Resource.String.licences, new TextBlock { Text = Texts.Get(Resource.String.windows_licences_summary), TextWrapping = TextWrapping.Wrap }, null));
+        return form;
+    }
 
     /// <summary>
     /// Android's preferences that apply on Windows, as Android lays them out:

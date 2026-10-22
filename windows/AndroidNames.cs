@@ -128,6 +128,19 @@ namespace Berpiztu.KeyPlus
             public const int voice_lan = 57;
             public const int voice_remote = 58;
             public const int voice_lan_hint = 59;
+            public const int languages = 60;
+            public const int theme = 61;
+            public const int glide = 62;
+            public const int glide_summary = 63;
+            public const int glide_trail = 64;
+            public const int glide_trail_summary = 65;
+            public const int futo = 66;
+            public const int about = 67;
+            public const int version = 68;
+            public const int licences = 69;
+            public const int windows_licences_summary = 70;
+            public const int keyboard_standard = 71;
+            public const int keyboard_standard_pc = 72;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>
