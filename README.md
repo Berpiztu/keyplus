@@ -105,6 +105,7 @@ a window that does.
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
 | [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
+| [windows/](windows/) | Berpiztu AI Keyboard for Windows: [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
@@ -310,6 +311,21 @@ it in a window of its own over the app, or docks it again, at once; **Reset
 the keyboard**, after asking, brings it back as first installed, docked at
 the bottom as wide as the screen at its usual size, for one lost in a window
 too small for it.
+
+### Windows
+
+Berpiztu AI Keyboard for Windows (`windows/`, WPF, .NET 10) is the
+standard keyboards, Estándar and Estándar PC, with the Android one's
+layouts and signs, in a card that floats over every window and never takes
+the focus from the one typed in: its keys go to that window as Windows'
+own. Over the keys, the keyboard in sight (a phone or a computer), a click
+the other, and ✕; under them the handle moves it and the grip at its right
+makes it wider; its place, width, keyboard and language are kept. Swipe
+typing, emoji, the grid and the designer are not on Windows yet.
+
+```powershell
+dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj
+```
 
 ### Releasing
 

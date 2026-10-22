@@ -90,11 +90,13 @@ Default section order:
   - `Popup` (default): KeyPlus, `ai.berpiztu.keyplus`, an accessibility service whose key strip sits above the keyboard in use
   - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR)
 - `README.md` is the user and build guide and holds the file-by-file map of the sources
+- `windows/`: Berpiztu AI Keyboard for Windows, the standard keyboards in a floating card, a project of its own
 
 ### Ownership
 
 - This file owns the sources, scripts, `Resources/`, `packaging/`, `.github/workflows/` and the root docs; none has an AGENTS.md of its own
 - `doc/AGENTS.md` owns the design notes and the owner's reference captures
+- `windows/AGENTS.md` owns the Windows app
 - Release builds, APKs, releases and installs on the owner's devices belong to the owner
 
 ### Local Contracts
@@ -104,6 +106,7 @@ Default section order:
   - Keyboard only: `KeyPlusKeyboard.cs`, `KeyboardFrame.cs`, `ClipboardImages.cs`, `ScreenshotWatcher.cs`, `Resources/xml/keyplus_keyboard.xml`; the Keyboard build defines `KEYBOARD`
   - Everything else is shared; a new product-specific file joins the csproj's lists
 - Each product builds into `bin/<Product>/<Configuration>/` and `obj/<Product>/<Configuration>/`
+- `windows\**` is left out of the Android build; the Windows app compiles `StandardKeys.cs` as it is, so an Android name added there is added to `windows/AndroidNames.cs`
 - Turning on without a computer: `AdbGrant.cs` (a short foreground service, both products) takes the Wireless debugging pairing code in a notification and runs the product's ADB commands through `AdbShell.java` (Java, `AndroidJavaSource` with `Bind="false"`, called from C# by JNI); the key it pairs with is made per run and never stored
 - Java libraries come as `AndroidMavenLibrary` items with `Bind="false"`: libadb-android and spake2-android from JitPack, Bouncy Castle and Conscrypt from Maven Central; each version is checked for known vulnerabilities (OSV) before it is set, Bouncy Castle is held above the vulnerable one libadb asks for, and `THIRD-PARTY-NOTICES.md` lists them with their licences and is updated with them
 - security-watch's inventory reads NuGet packages only, so it does not see the Java libraries
@@ -132,7 +135,7 @@ Default section order:
 
 ### Verification
 
-- `dotnet build` (Debug, Popup) and `dotnet build -p:KeyPlusProduct=Keyboard` (Debug, Keyboard); there is no test project
+- `dotnet build` (Debug, Popup) and `dotnet build -p:KeyPlusProduct=Keyboard` (Debug, Keyboard); `dotnet build windows\Berpiztu.KeyPlus.Windows.csproj` (Windows); there is no test project
 
 ## User Preferences
 
@@ -148,6 +151,7 @@ When the user requests a durable behavior change, record it here or in the relev
 | Path | Doc | Covers |
 |------|-----|--------|
 | `doc/` | [doc/AGENTS.md](doc/AGENTS.md) | Design notes (key labels, Keys in two rows) and the owner's reference captures |
+| `windows/` | [windows/AGENTS.md](windows/AGENTS.md) | Berpiztu AI Keyboard for Windows: the standard keyboards in a floating card that never takes the focus |
 
 Root-owned paths without their own AGENTS.md:
 

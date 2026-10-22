@@ -84,6 +84,15 @@
     <AndroidJavaSource Update="AdbShell.java" Bind="false" />
   </ItemGroup>
 
+  <!-- windows\ is Berpiztu AI Keyboard for Windows, a project of its own
+       that compiles the standard keyboards' layouts from here: none of it
+       is Android's. -->
+  <ItemGroup>
+    <Compile Remove="windows\**" />
+    <None Remove="windows\**" />
+    <EmbeddedResource Remove="windows\**" />
+  </ItemGroup>
+
   <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
     <ApplicationId>ai.berpiztu.keyboard</ApplicationId>
     <DefineConstants>$(DefineConstants);KEYBOARD</DefineConstants>

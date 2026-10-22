@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Berpiztu AI Keyboard for Windows: the standard keyboards (Estándar and
+       Estándar PC) in a card that floats over every window, never taking the
+       focus from the one typed in, the keys sent to it as Windows' own. The
+       layouts and the keys' signs are the Android keyboard's, compiled from
+       ..\ as they are (StandardKeys.cs, Resources\drawable); the Android names
+       they use are AndroidNames.cs's. -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Windows 10 2004's SDK: UISettings, the user's accent colours. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Berpiztu.KeyPlus</RootNamespace>
+    <AssemblyName>BerpiztuKeyboard</AssemblyName>
+    <Product>Berpiztu AI Keyboard</Product>
+    <Authors>Berpiztu</Authors>
+    <Copyright>Copyright (c) 2026 Berpiztu</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\StandardKeys.cs" Link="Shared\StandardKeys.cs" />
+    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_tool_close.xml"
+             LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
