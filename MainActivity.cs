@@ -48,6 +48,8 @@ public sealed class MainActivity : Activity
     private const string WirelessDebuggingKey = "toggle_adb_wireless";
 
     private const int NotificationsRequest = 1;
+    private const int ExportRequest = 2;
+    private const int ImportRequest = 3;
 
 #if KEYBOARD
     /// <summary>The keyboard as Android names it.</summary>
@@ -106,6 +108,15 @@ public sealed class MainActivity : Activity
             "Android puts no screenshot on the clipboard: it saves it among your photos. Let the keyboard " +
             "read them, and each screenshot you take from then on joins the copied texts above the keys, to paste."));
         content.AddView(Button("Allow screenshots", () => RequestPermissions([ScreenshotWatcher.Permission], 0)));
+
+        // FUTO Swipe's model weights license asks for this notice in sight.
+        content.AddView(Text("Swipe a word over the letters to type it: swipe typing powered by FUTO Swipe."));
+
+        content.AddView(Text(
+            "Your keyboard designs (⚙ → Diseñar), every screen's, saved to a file to keep or to send to another " +
+            "device, and taken from one. The designs a file replaces, and a Reset clears, are kept on this device first."));
+        content.AddView(Button("Export designs", ExportDesigns));
+        content.AddView(Button("Import designs", ImportDesigns));
 #else
         content.AddView(Text(
             "KeyPlus adds Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End and the page keys " +
@@ -251,6 +262,138 @@ public sealed class MainActivity : Activity
         }
     }
 
+    /// <summary>A file of designs: every screen's, by the screen's name, as the keyboard keeps them.</summary>
+    private sealed record DesignsFile(string Kind, int Version, string Device, DateTime Exported, Dictionary<string, string> Designs);
+
+    private const string DesignsKind = "keyplus-designs";
+
+    /// <summary>Export designs: the file to write them to, where the user chooses (Downloads, Drive…).</summary>
+    private void ExportDesigns() =>
+        StartActivityForResult(new Intent(Intent.ActionCreateDocument)
+            .AddCategory(Intent.CategoryOpenable)
+            .SetType("application/json")
+            .PutExtra(Intent.ExtraTitle, $"keyplus-designs-{DateTime.Now:yyyy-MM-dd_HHmm}.json"), ExportRequest);
+
+    /// <summary>Import designs: the file to read them from, sent from anywhere.</summary>
+    private void ImportDesigns() =>
+        StartActivityForResult(new Intent(Intent.ActionOpenDocument)
+            .AddCategory(Intent.CategoryOpenable)
+            .SetType("*/*"), ImportRequest);
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        if (resultCode != Result.Ok || data?.Data is not { } file || requestCode is not (ExportRequest or ImportRequest))
+        {
+            return;
+        }
+
+        var exporting = requestCode == ExportRequest;
+        try
+        {
+            if (exporting)
+            {
+                WriteDesigns(file);
+            }
+            else
+            {
+                ReadDesigns(file);
+            }
+        }
+        catch (Exception failure)
+        {
+            Android.Util.Log.Warn("KeyPlusDesigns", $"Designs not {(exporting ? "exported" : "imported")}: {failure}");
+            Toast.MakeText(this, $"The designs could not be {(exporting ? "exported" : "imported")}: {failure.Message}", ToastLength.Long)!.Show();
+        }
+    }
+
+    /// <summary>Every screen's design, those it has, written to the file chosen.</summary>
+    private void WriteDesigns(Android.Net.Uri file)
+    {
+        var designs = Screens
+            .Select(screen => (Screen: screen.ToString(), Design: KeyboardDesign.Kept(KeyPlusPreferences.ForScreen(this, screen))))
+            .Where(kept => kept.Design is not null)
+            .ToDictionary(kept => kept.Screen, kept => kept.Design!);
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            new DesignsFile(DesignsKind, 1, Build.Model ?? "", DateTime.Now, designs),
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        using (var stream = ContentResolver!.OpenOutputStream(file, "wt")!)
+        using (var writer = new StreamWriter(stream))
+        {
+            writer.Write(json);
+        }
+
+        Toast.MakeText(this, designs.Count == 0
+            ? "No screen has a design yet: the file holds none."
+            : $"{designs.Count} design(s) exported: {string.Join(", ", designs.Keys.Select(ScreenWords))}.", ToastLength.Long)!.Show();
+    }
+
+    /// <summary>A file's designs read, and taken after asking which screens they replace.</summary>
+    private void ReadDesigns(Android.Net.Uri file)
+    {
+        string json;
+        using (var stream = ContentResolver!.OpenInputStream(file)!)
+        using (var reader = new StreamReader(stream))
+        {
+            json = reader.ReadToEnd();
+        }
+
+        var read = System.Text.Json.JsonSerializer.Deserialize<DesignsFile>(json);
+        var designs = (read?.Kind == DesignsKind ? read.Designs : null)?
+            .Where(design => Enum.TryParse<KeyPlusPreferences.Screen>(design.Key, out _) && KeyboardDesign.Reads(design.Value))
+            .ToDictionary(design => Enum.Parse<KeyPlusPreferences.Screen>(design.Key), design => design.Value);
+        if (designs is null || designs.Count == 0)
+        {
+            Toast.MakeText(this, "That file holds no keyboard design.", ToastLength.Long)!.Show();
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+            .SetMessage($"¿Importar los diseños de {string.Join(", ", designs.Keys.Select(screen => ScreenWords(screen.ToString())))}? " +
+                "Sustituyen a los de esas pantallas; los de ahora se guardan antes en el teléfono.")!
+            .SetPositiveButton("Sí", (_, _) =>
+            {
+                KeepDesignsAside();
+                foreach (var (screen, design) in designs)
+                {
+                    KeyboardDesign.Import(KeyPlusPreferences.ForScreen(this, screen), design);
+                }
+
+                Toast.MakeText(this, "Designs imported.", ToastLength.Long)!.Show();
+            })!
+            .SetNegativeButton("No", (_, _) => { })!
+            .Show();
+    }
+
+    /// <summary>
+    /// Every screen's design as it is now, each copied to a file of its own
+    /// in the app's files (designs-history), before an import replaces or a
+    /// Reset clears them: none is lost, none written over.
+    /// </summary>
+    private void KeepDesignsAside()
+    {
+        var folder = Path.Combine(FilesDir!.AbsolutePath, "designs-history");
+        Directory.CreateDirectory(folder);
+        var now = DateTime.Now.ToString("yyyy-MM-dd_HHmmss", System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var screen in Screens)
+        {
+            if (KeyboardDesign.Kept(KeyPlusPreferences.ForScreen(this, screen)) is { } design)
+            {
+                File.WriteAllText(Path.Combine(folder, $"{now}_{screen}.txt"), design);
+            }
+        }
+    }
+
+    /// <summary>A screen as the dialogs name it.</summary>
+    private static string ScreenWords(string screen) => screen switch
+    {
+        nameof(KeyPlusPreferences.Screen.Phone) => "móvil",
+        nameof(KeyPlusPreferences.Screen.TabletPortrait) => "tablet en vertical",
+        nameof(KeyPlusPreferences.Screen.TabletLandscape) => "tablet en horizontal",
+        nameof(KeyPlusPreferences.Screen.Dex) => "DeX",
+        _ => screen,
+    };
+
     /// <summary>
     /// Every screen's place, size, mode and labels forgotten: the keyboard
     /// as first installed, docked at the bottom as wide as the screen at its
@@ -258,6 +401,7 @@ public sealed class MainActivity : Activity
     /// </summary>
     private void ResetKeyboard()
     {
+        KeepDesignsAside();
         foreach (var screen in Screens)
         {
             KeyPlusPreferences.ForScreen(this, screen).Edit()!.Clear()!.Apply();

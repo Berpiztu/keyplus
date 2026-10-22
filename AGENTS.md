@@ -140,6 +140,8 @@ When the user requests a durable behavior change, record it here or in the relev
 
 - Galaxy XR support stays as it is: phone changes go through the non-headset path; never remove or alter the headset path (`OnHeadset`, `KeyWindowActivity.cs`, `KeyPlusKeyboard.FillBox`, `KeyPlusService.AttachKeys`)
 - Install on the owner's phone or headset only when the owner says "install" for that build
+- The owner's keyboard designs are never lost: before any install, any change to an emulator (wipe, new image) and every commit, run `.\backup-designs.ps1`; it copies each design that changed since its last copy to `docs/tODO/designs/` as a new file, never over an old one, and those copies are committed
+- Space is never wasted: margins, padding and fixed widths are the least a finger and the text need, horizontal and vertical; a control is as wide as its content (a sign's button its sign and a finger's margin), and the room left goes to what holds text
 
 ## Child DOX Index
 
@@ -157,6 +159,8 @@ Root-owned paths without their own AGENTS.md:
 | `*.ps1`, `packaging/` | Build, deploy, enable and release scripts |
 | `.github/workflows/release.yml` | Release build and publishing |
 | `docs/release-notes/` | Each release's notes, required by `deploy-release.ps1` |
-| `docs/tODO/` | The owner's work lists, schematic: `layout.md` (findings with their photos and scale), `designs.md` (keyboard designs); `photos/` |
+| `docs/tODO/` | The owner's work lists, schematic: `layout.md` (findings with their photos and scale), `designs.md` (keyboard designs); `photos/`; `designs/`, every version of the owner's designs, one file each (`backup-designs.ps1`), and `designs/import/`, each as a file Import designs reads |
 | `AdbShell.java` | The Java ADB client over Wireless debugging, on libadb-android |
+| `SwipeDecoder.java`, `native/futo-swipe/`, `Assets/` | Swipe typing (keyboard only): FUTO Swipe's Java side, its native libraries per ABI with `build.sh` (built in the `futo-swipe-build` wslc container), its model and the Spanish word list |
+| `backup-designs.ps1` | Copies each attached device's changed keyboard designs to `docs/tODO/designs/` |
 | `README.md`, `rules.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` | User and build guide, owner's rules, license, the bundled libraries' licences |

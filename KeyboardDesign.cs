@@ -18,6 +18,9 @@ public sealed class KeyboardDesign
 {
     private const string Preference = "abcDesign";
 
+    /// <summary>Written with designs imported, so the keyboard open is made again with them at once.</summary>
+    public const string ImportedPreference = "abcDesignImported";
+
     /// <summary>
     /// A row's whole weight as the keyboard is made: the rows under the
     /// digits' weigh 15.5 and the side column's keys 1 (PanelKeys.Spanish).
@@ -150,12 +153,24 @@ public sealed class KeyboardDesign
     }
 
     /// <summary>The screen's design, or none where its keyboard is as made (or what was kept no longer reads).</summary>
-    public static KeyboardDesign? Read(ISharedPreferences preferences)
+    public static KeyboardDesign? Read(ISharedPreferences preferences) => Parse(preferences.GetString(Preference, null));
+
+    /// <summary>The screen's design as it is kept, to export it; none where its keyboard is as made.</summary>
+    public static string? Kept(ISharedPreferences preferences) => preferences.GetString(Preference, null);
+
+    /// <summary>Whether a text is a design this keyboard reads, before it is imported.</summary>
+    public static bool Reads(string text) => Parse(text) is not null;
+
+    /// <summary>A design imported for the screen, the keyboard open told to take it.</summary>
+    public static void Import(ISharedPreferences preferences, string text) =>
+        preferences.Edit()!.PutString(Preference, text)!.PutLong(ImportedPreference, DateTime.UtcNow.Ticks)!.Apply();
+
+    /// <summary>A design as it is kept, or none where it does not read.</summary>
+    private static KeyboardDesign? Parse(string? kept)
     {
         // "width|row;row;…|removed|id:width,…": each row's cells and the removed keys,
         // comma-separated, a row maybe empty; then the keys − and + resized, which a
         // design kept before them has not.
-        var kept = preferences.GetString(Preference, null);
         if (string.IsNullOrEmpty(kept) || kept.Split('|') is not [var width, var rows, var removed, .. var more]
             || !float.TryParse(width, NumberStyles.Float, CultureInfo.InvariantCulture, out var weight)
             || ReadWidths(more.Length > 0 ? more[0] : "") is not { } widths)

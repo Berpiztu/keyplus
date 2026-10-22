@@ -76,7 +76,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         screenshots = new ScreenshotWatcher(this, clipboard);
         screenshots.Start();
+
+        // FUTO Swipe and its word list, loaded once, away from the main thread.
+        swipeTyping = new SwipeTyping(this);
     }
+
+    /// <summary>Words swiped over the letters, on a phone.</summary>
+    private SwipeTyping? swipeTyping;
 
     /// <summary>The keyboard opening: the screenshots watched, if the user has let it read the photos since.</summary>
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
@@ -160,7 +166,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
         Watch(preferences);
         placed = new PanelPlacement(preferences);
-        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText)
+        // It opens on its letters the first time, as a keyboard does, on a phone and on a headset.
+        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText, lettersFirst: true)
         {
             Dockable = false,
             PasteImage = PasteImage,
@@ -182,6 +189,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // What was copied in the title bar, as Gboard has it.
             panel.Settings = PhoneSettings();
             panel.CopiedInTitleBar = true;
+
+            // Words swiped over the letters, as Gboard's (FUTO Swipe).
+            panel.Swiping = swipeTyping is { } swiping ? swiping.Words : null;
+            panel.TextBeforeCaret = () => CurrentInputConnection?.GetTextBeforeCursorFormatted(1, 0)?.ToString();
             panel.LargeGrips = true;
             // A long press, on the bar's buttons, its free room or between the
             // keys, moves the keyboard (docked, up and down); a corner's grip
@@ -571,13 +582,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>
-    /// The app's Pop-up turned on or off, or its Reset: the keyboard made
+    /// The app's Pop-up turned on or off, its Reset or designs imported: the keyboard made
     /// again from what is kept now, at once. Its own changes, already in
     /// sight, are left alone.
     /// </summary>
     private void OnPreferenceChanged(ISharedPreferences preferences, string? key)
     {
-        var reset = key is null;
+        var reset = key is null || key == KeyboardDesign.ImportedPreference;
         var popupChanged = key == PanelPlacement.FloatingPreference && placed is not null
             && new PanelPlacement(preferences).Floating != placed.Floating;
         if (reset || popupChanged)

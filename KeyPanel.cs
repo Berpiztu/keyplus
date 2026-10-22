@@ -1,3 +1,4 @@
+using System.Globalization;
 using Android.Content;
 using Android.Content.Res;
 using Android.Graphics;
@@ -100,6 +101,9 @@ public sealed class KeyPanel
 
     /// <summary>The least the title bar's height goes down to with the keys, in dp: room for a finger to hold it.</summary>
     private const int LeastTitleBarDp = 24;
+
+    /// <summary>A swipe's trail's width where the finger is, in dp: Gboard's line.</summary>
+    private const int SwipeTrailDp = 5;
 
     // Opaque, the keys well apart from the ground: the window looks the same
     // over a white screen as over a black one.
@@ -281,10 +285,10 @@ public sealed class KeyPanel
 
     /// <summary>
     /// Berpiztu AI Keyboard on a phone (<see cref="CopiedInTitleBar"/>), as
-    /// Gboard's toolbar: ⚙ at the left, ABC or Keys at the right, and between
-    /// them what was copied last while it is recent, else 📋; one height and
-    /// one size of words, whatever the keys' size, and nothing drawn over
-    /// anything else.
+    /// Gboard's toolbar: ⚙ at the left and the rest of it what was copied
+    /// last while it is recent, else 📋, or a swipe's other words; one height
+    /// and one size of words, whatever the keys' size, and nothing drawn over
+    /// anything else. Keys and ABC switch from ⚙'s tiles.
     /// </summary>
     private readonly LinearLayout toolbar;
 
@@ -293,8 +297,7 @@ public sealed class KeyPanel
 
     /// <summary>The toolbar's middle: the recent copy's chip, or 📋.</summary>
     private readonly FrameLayout toolbarMiddle;
-    private readonly TextView toolbarClipboard;
-    private readonly TextView toolbarSwitchKeys;
+    private readonly View toolbarClipboard;
 
     /// <summary>The toolbar's and the menu bar's height, in dp: Gboard's.</summary>
     private const int ToolbarDp = 48;
@@ -308,6 +311,50 @@ public sealed class KeyPanel
 
     /// <summary>What the clipboard's list held, to tell a new copy from a pin, an edit or a removal.</summary>
     private HashSet<(string? Text, string? Image)> knownCopies = [];
+
+    /// <summary>The letters a swipe is read over, in the order their centres are handed with it: Spanish's.</summary>
+    public const string SwipeLetters = "abcdefghijklmnopqrstuvwxyzñ";
+
+    /// <summary>
+    /// A swipe over the whole keyboard's letters: its points and their
+    /// times in milliseconds from its start, and each letter's centre (in
+    /// <see cref="SwipeLetters"/>' order), all from 0 to 1 over the room the
+    /// letters take, as FUTO Swipe reads them.
+    /// </summary>
+    public sealed record SwipePath(float[] X, float[] Y, float[] T, float[] KeyX, float[] KeyY);
+
+    /// <summary>
+    /// Reads a swipe over the letters as words, the likeliest first
+    /// (Berpiztu AI Keyboard's FUTO Swipe); none, the letters are only
+    /// tapped and type on the touch.
+    /// </summary>
+    public Func<SwipePath, Task<IReadOnlyList<string>>>? Swiping { get; set; }
+
+    /// <summary>The text just before the caret, to tell whether a swiped word needs a space before it.</summary>
+    public Func<string?>? TextBeforeCaret { get; set; }
+
+    /// <summary>A finger on a letter while swiping is on: its points on the screen and times, and whether it left the letter's touch.</summary>
+    private sealed class SwipeTrace(PanelKey key, long start)
+    {
+        public PanelKey Key { get; } = key;
+        public long Start { get; } = start;
+        public List<(float X, float Y, float T)> Points { get; } = [];
+        public bool Moved { get; set; }
+    }
+
+    private SwipeTrace? swipeTrace;
+
+    /// <summary>The line the swiping finger draws over the whole keyboard, once it left its first letter.</summary>
+    private SwipeTrail? swipeTrail;
+
+    /// <summary>What the last swipe typed, which a word in the toolbar replaces; none once anything else is typed.</summary>
+    private string? swipedText;
+
+    /// <summary>The last swipe's words, the likeliest first, in the toolbar's middle as Gboard's suggestions.</summary>
+    private IReadOnlyList<string> swipeWords = [];
+
+    /// <summary>Which of the last swipe's words is typed now: the toolbar's centre.</summary>
+    private string? swipedWord;
 
     /// <summary>The settings ⚙ shows now: on a phone, the panel's own tiles first.</summary>
     private IReadOnlyList<Setting> shownSettings = [];
@@ -345,7 +392,8 @@ public sealed class KeyPanel
     /// <param name="type">Types text, as the phone's keyboard does.</param>
     /// <param name="preferences">The layout of the display the panel is on.</param>
     /// <param name="clipboard">The texts copied lately, which 📋 lists.</param>
-    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type)
+    /// <param name="lettersFirst">Whether a screen with no mode kept opens on the whole keyboard (ABC), as a keyboard opens on its letters, rather than on Keys.</param>
+    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type, bool lettersFirst = false)
     {
         this.context = context;
         this.clipboard = clipboard;
@@ -439,21 +487,21 @@ public sealed class KeyPanel
         chipBar.AddView(TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings)), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         chipBar.AddView(Grip("◥", Corner.TopRight), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
 
-        toolbarSwitchKeys = ToolButton("ABC", "Switch between the keys and a whole keyboard", 16, () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
-        toolbarClipboard = ToolButton("📋", "Everything copied lately", 20, () => Toggle(clipboardView!, ShowClipboard));
+        toolbarClipboard = ToolIcon(Resource.Drawable.ic_clipboard, "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard));
         toolbarMiddle = new FrameLayout(context);
         HoldToMove(toolbarMiddle, resizes: false);
         toolbarMiddle.AddView(toolbarClipboard, new FrameLayout.LayoutParams(Dp(56), ViewGroup.LayoutParams.MatchParent, GravityFlags.Center));
         toolbar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
-        toolbar.AddView(ToolButton("⚙", "Settings: sizes, moving, designing, the keyboard's app", 20, () => Toggle(settingsView!, ShowSettings)),
-            new LinearLayout.LayoutParams(Dp(56), ViewGroup.LayoutParams.MatchParent));
+        // ⚙ as wide as its sign and a finger's margin: the room left is the words'.
+        var toolbarSettings = ToolButton("⚙", "Settings: sizes, moving, designing, the keyboard's app", 20, () => Toggle(settingsView!, ShowSettings));
+        toolbarSettings.SetPadding(Dp(8), 0, Dp(8), 0);
+        toolbar.AddView(toolbarSettings, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         toolbar.AddView(toolbarMiddle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-        toolbar.AddView(toolbarSwitchKeys, new LinearLayout.LayoutParams(Dp(64), ViewGroup.LayoutParams.MatchParent));
         menuBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
-        foreach (var button in new[]
+        foreach (var button in new View[]
         {
             ToolButton("✕", "The keys again", 20, Uncover),
-            ToolButton("📋", "Everything copied lately", 20, () => Toggle(clipboardView!, ShowClipboard)),
+            ToolIcon(Resource.Drawable.ic_clipboard, "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard)),
         })
         {
             menuBar.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
@@ -548,7 +596,7 @@ public sealed class KeyPanel
         root.AddView(strip);
         root.AddView(tab);
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
-        ShowMode(preferences.GetBoolean(WholeKeyboardPreference, false), preferences.GetBoolean(CompactPreference, false));
+        ShowMode(preferences.GetBoolean(WholeKeyboardPreference, lettersFirst), preferences.GetBoolean(CompactPreference, false));
         ApplySizes();
         ShowHeld();
     }
@@ -846,6 +894,37 @@ public sealed class KeyPanel
             toolbarMiddle.RemoveViewAt(1);
         }
 
+        if (swipeWords.Count > 0)
+        {
+            toolbarClipboard.Visibility = ViewStates.Gone;
+            // As Gboard's: the word typed in the centre, in bold; the next likeliest on each side.
+            var others = swipeWords.Where(word => word != swipedWord).Take(2).ToList();
+            var words = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+            foreach (var word in new[] { others.ElementAtOrDefault(0), swipedWord, others.ElementAtOrDefault(1) })
+            {
+                var typed = word == swipedWord;
+                var button = ToolButton(word ?? "", typed ? $"{word}, written" : $"Write {word} instead", 16, () =>
+                {
+                    if (word is not null && !typed)
+                    {
+                        ReplaceSwiped(word);
+                    }
+                });
+                // A long word smaller, whole: never cut.
+                button.SetPadding(Dp(2), 0, Dp(2), 0);
+                button.SetAutoSizeTextTypeUniformWithConfiguration(4, 16, 1, (int)ComplexUnitType.Sp);
+                if (typed)
+                {
+                    button.SetTypeface(null, TypefaceStyle.Bold);
+                }
+
+                words.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            }
+
+            toolbarMiddle.AddView(words, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+            return;
+        }
+
         var recent = RecentCopy();
         toolbarClipboard.Visibility = recent is null ? ViewStates.Visible : ViewStates.Gone;
         if (recent is null)
@@ -903,6 +982,20 @@ public sealed class KeyPanel
         return view;
     }
 
+    /// <summary>A toolbar's button drawn as an icon, white as its words are; held still a moment, it moves the keyboard as the bar does.</summary>
+    private ImageView ToolIcon(int drawable, string description, Action pressed)
+    {
+        var view = new ImageView(context)
+        {
+            ContentDescription = description,
+            Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
+        };
+        view.SetImageResource(drawable);
+        view.SetScaleType(ImageView.ScaleType.Center);
+        HoldToMove(view, pressed, resizes: false);
+        return view;
+    }
+
     /// <summary>Ajustes de la app, among ⚙'s tiles: the keyboard's own app, where its settings are.</summary>
     private void OpenApp()
     {
@@ -929,6 +1022,9 @@ public sealed class KeyPanel
             yield return new("Dos filas", () => SetCompact(true), "▭");
         }
 
+        // Keys or the whole keyboard: the keyboard opens on its letters, so the switch is a tile, not the bar's.
+        var whole = wholeKeyboard.Visibility == ViewStates.Visible;
+        yield return new(whole ? "Teclas" : "ABC", () => SetWholeKeyboard(!whole), whole ? "⌨" : "ABC");
         yield return new("Minimizar", () => SetFolded(true), "–");
         yield return new("Ajustes de la app", OpenApp, "⚙");
     }
@@ -1091,9 +1187,18 @@ public sealed class KeyPanel
         }
         else
         {
-            var sign = new TextView(context) { Text = entry.Pinned ? "📌" : "📋" };
-            sign.SetTextSize(ComplexUnitType.Sp, 14);
-            chip.AddView(sign);
+            if (entry.Pinned)
+            {
+                var pin = new TextView(context) { Text = "📌" };
+                pin.SetTextSize(ComplexUnitType.Sp, 14);
+                chip.AddView(pin);
+            }
+            else
+            {
+                var sign = new ImageView(context);
+                sign.SetImageResource(Resource.Drawable.ic_clipboard);
+                chip.AddView(sign, new LinearLayout.LayoutParams(Dp(18), Dp(18)));
+            }
             var text = new TextView(context)
             {
                 Text = entry.Text!.ReplaceLineEndings(" ").Trim(),
@@ -1172,7 +1277,6 @@ public sealed class KeyPanel
         FitLegendsSoon();
         switchKeys.Text = whole ? "Keys" : "ABC";
         chipSwitchKeys.Text = switchKeys.Text;
-        toolbarSwitchKeys.Text = switchKeys.Text;
     }
 
     /// <summary>
@@ -2368,6 +2472,231 @@ public sealed class KeyPanel
         return at[0] + (view.Width / 2f);
     }
 
+    /// <summary>
+    /// A letter of the whole keyboard touched while swiping is on, as
+    /// Gboard's: it types when the finger lifts, unless the finger left it,
+    /// when the path drawn is read as a word. False, the key acts as ever.
+    /// </summary>
+    private bool SwipeTouch(PanelKey key, View view, MotionEvent motion)
+    {
+        if (Swiping is null || designing || !key.IsLetter || !SwipeLetters.Contains(key.Text!) || !Within(view, wholeKeyboard))
+        {
+            return false;
+        }
+
+        var at = new int[2];
+        view.GetLocationOnScreen(at);
+        switch (motion.ActionMasked)
+        {
+            case MotionEventActions.Down:
+                view.Pressed = true;
+                view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+                swipeTrace = new SwipeTrace(key, motion.EventTime);
+                Track(swipeTrace, at[0] + motion.GetX(), at[1] + motion.GetY(), motion.EventTime);
+                break;
+            case MotionEventActions.Move when swipeTrace is { } trace:
+                for (var i = 0; i < motion.HistorySize; i++)
+                {
+                    Track(trace, at[0] + motion.GetHistoricalX(i), at[1] + motion.GetHistoricalY(i), motion.GetHistoricalEventTime(i));
+                }
+
+                Track(trace, at[0] + motion.GetX(), at[1] + motion.GetY(), motion.EventTime);
+                var (startX, startY, _) = trace.Points[0];
+                if (!trace.Moved && Math.Max(Math.Abs(at[0] + motion.GetX() - startX), Math.Abs(at[1] + motion.GetY() - startY)) > Math.Min(view.Width, view.Height) * 0.6f)
+                {
+                    trace.Moved = true;
+                    view.Pressed = false;
+                    ShowTrail(trace);
+                }
+
+                break;
+            case MotionEventActions.Up when swipeTrace is { } trace:
+                view.Pressed = false;
+                swipeTrace = null;
+                HideTrail();
+                if (trace.Moved)
+                {
+                    Track(trace, at[0] + motion.GetX(), at[1] + motion.GetY(), motion.EventTime);
+                    ReadSwipe(trace);
+                }
+                else
+                {
+                    // Typed as the finger lifts, so nothing is held to repeat it.
+                    Press(trace.Key);
+                    StopRepeat();
+                }
+
+                break;
+            case MotionEventActions.Cancel:
+                view.Pressed = false;
+                swipeTrace = null;
+                HideTrail();
+                break;
+        }
+
+        return true;
+    }
+
+    /// <summary>A point of a swipe, on the screen, kept with its time from the swipe's start, and drawn on its trail once there is one.</summary>
+    private void Track(SwipeTrace trace, float x, float y, long time)
+    {
+        trace.Points.Add((x, y, time - trace.Start));
+        swipeTrail?.Add(x, y, time);
+    }
+
+    /// <summary>A swipe's trail shown over the whole keyboard, from the points the finger already drew.</summary>
+    private void ShowTrail(SwipeTrace trace)
+    {
+        var at = new int[2];
+        wholeKeyboard.GetLocationOnScreen(at);
+        swipeTrail = new SwipeTrail(Dp(SwipeTrailDp), HeldColor, at[0], at[1]);
+        swipeTrail.SetBounds(0, 0, wholeKeyboard.Width, wholeKeyboard.Height);
+        foreach (var (x, y, time) in trace.Points)
+        {
+            swipeTrail.Add(x, y, trace.Start + (long)time);
+        }
+
+        wholeKeyboard.Overlay!.Add(swipeTrail);
+    }
+
+    private void HideTrail()
+    {
+        if (swipeTrail is null)
+        {
+            return;
+        }
+
+        wholeKeyboard.Overlay!.Remove(swipeTrail);
+        swipeTrail = null;
+    }
+
+    /// <summary>Whether a view stands within another, at any depth.</summary>
+    private static bool Within(View view, View group)
+    {
+        for (var parent = view.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent == group)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A swipe's path made FUTO Swipe's: over the room the letters take, with each letter's centre; none where a letter has no key in sight.</summary>
+    private SwipePath? PathOf(SwipeTrace trace)
+    {
+        var centres = new List<(float X, float Y)>();
+        float left = float.MaxValue, top = float.MaxValue, right = float.MinValue, bottom = float.MinValue;
+        foreach (var letter in SwipeLetters)
+        {
+            var view = characterKeys.FirstOrDefault(key => key.Key.Text == letter.ToString() && key.View.IsShown && Within(key.View, wholeKeyboard)).View;
+            if (view is null || view.Width == 0)
+            {
+                return null;
+            }
+
+            var at = new int[2];
+            view.GetLocationOnScreen(at);
+            centres.Add((at[0] + (view.Width / 2f), at[1] + (view.Height / 2f)));
+            (left, top) = (Math.Min(left, at[0]), Math.Min(top, at[1]));
+            (right, bottom) = (Math.Max(right, at[0] + view.Width), Math.Max(bottom, at[1] + view.Height));
+        }
+
+        float X(float x) => (x - left) / (right - left);
+        float Y(float y) => (y - top) / (bottom - top);
+        return new SwipePath(
+            [.. trace.Points.Select(point => X(point.X))],
+            [.. trace.Points.Select(point => Y(point.Y))],
+            [.. trace.Points.Select(point => point.T)],
+            [.. centres.Select(centre => X(centre.X))],
+            [.. centres.Select(centre => Y(centre.Y))]);
+    }
+
+    /// <summary>A swipe read: its likeliest word typed, the others in the toolbar to take its place.</summary>
+    private async void ReadSwipe(SwipeTrace trace)
+    {
+        if (Swiping is null || PathOf(trace) is not { } path)
+        {
+            Log.Warn("KeyPlusSwipe", "A swipe was not read: a letter has no key in sight");
+            return;
+        }
+
+        try
+        {
+            var words = await Swiping(path);
+            if (words.Count == 0)
+            {
+                return;
+            }
+
+            ForgetSwipe();
+            TypeSwiped(words[0]);
+            swipeWords = words;
+            ShowBars();
+        }
+        catch (Exception failure)
+        {
+            Log.Warn("KeyPlusSwipe", $"The swipe could not be read: {failure}");
+        }
+    }
+
+    /// <summary>
+    /// A swiped word typed with a space before it unless the caret follows a
+    /// space or nothing, and none after, as Gboard's: ⌫ takes its last
+    /// letter, and the next word brings its own space; in capitals with Bloq May, its
+    /// first letter with Shift, which it lets go as a letter does.
+    /// </summary>
+    private void TypeSwiped(string word)
+    {
+        var cased = held.HasFlag(Held.CapsLock) ? word.ToUpper(CultureInfo.CurrentCulture)
+            : held.HasFlag(Held.Shift) ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..]
+            : word;
+        SetHeld(held & (Held.CapsLock | Held.Fn));
+        var before = TextBeforeCaret?.Invoke();
+        var text = (string.IsNullOrEmpty(before) || char.IsWhiteSpace(before[^1]) ? "" : " ") + cased;
+        Type(text);
+        swipedText = text;
+        swipedWord = word;
+    }
+
+    /// <summary>A word of the toolbar taken in place of the one the swipe typed: the centre now, the one it replaced at a side.</summary>
+    private void ReplaceSwiped(string word)
+    {
+        if (swipedText is not { } typed)
+        {
+            return;
+        }
+
+        foreach (var _ in typed)
+        {
+            Send(Keycode.Del, MetaKeyStates.None);
+        }
+
+        var old = typed.Trim();
+        var capital = old.Length > 0 && char.IsUpper(old[0]);
+        var text = (typed.StartsWith(' ') ? " " : "") + (capital ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..] : word);
+        Type(text);
+        swipedText = text;
+        swipedWord = word;
+        ShowBars();
+    }
+
+    /// <summary>The last swipe's words gone from the toolbar, anything else having been typed.</summary>
+    private void ForgetSwipe()
+    {
+        swipedText = null;
+        swipedWord = null;
+        if (swipeWords.Count == 0)
+        {
+            return;
+        }
+
+        swipeWords = [];
+        ShowBars();
+    }
+
     private TextView PanelKeyView(PanelKey key)
     {
         TextView view;
@@ -2415,7 +2744,7 @@ public sealed class KeyPanel
         view.Touch += (_, e) =>
         {
             e.Handled = true;
-            if (DesignTouch(view, e.Event!))
+            if (DesignTouch(view, e.Event!) || SwipeTouch(key, view, e.Event!))
             {
                 return;
             }
@@ -2690,6 +3019,7 @@ public sealed class KeyPanel
 
     private void Press(PanelKey key)
     {
+        // A modifier (Shift for a capital) keeps the swiped word's suggestions and the space the next word brings.
         if (key.IsModifier)
         {
             // Windows pressed twice, nothing between: Windows alone, the Start menu.
@@ -2702,6 +3032,10 @@ public sealed class KeyPanel
             return;
         }
 
+        // A letter right after a swiped word starts the next word, a space between, as Gboard's.
+        var spaceFirst = swipedText is not null && key.IsLetter;
+        ForgetSwipe();
+
         // With Shift held, a key that is another then (⌫ Supr) sends that one, without Shift.
         var shifted = held.HasFlag(Held.Shift) && key.ShiftCode is not null;
         var code = held.HasFlag(Held.Fn) && key.FnCode is { } fnCode ? fnCode
@@ -2709,6 +3043,11 @@ public sealed class KeyPanel
             : key.Code;
         if (code == key.Code && key.IsCharacter && ((held & KeyModifiers) == Held.None || key.Code == Keycode.Unknown))
         {
+            if (spaceFirst)
+            {
+                Type(" ");
+            }
+
             TypeCharacter(key);
             return;
         }

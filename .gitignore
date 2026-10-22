@@ -10,3 +10,5 @@ doc/clicbo/
 *.mp4
 *.jpg
 *.jpeg
+# Other apps' APKs tried on the emulator, never published.
+test/

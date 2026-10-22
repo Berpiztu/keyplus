@@ -17,3 +17,19 @@ spake2-android is LGPL-3.0: its source is at the address above, and anyone
 may build KeyPlus with a changed copy of it, since KeyPlus's own source is
 public and the library is a separate artifact in the build
 (`AndroidMavenLibrary` in the csproj).
+
+## Swipe typing (Berpiztu AI Keyboard)
+
+| Part | Licence | Source |
+| --- | --- | --- |
+| FUTO swipe-library, built as `native/futo-swipe/*/libswipe_jni.so` by `native/futo-swipe/build.sh`, with KeyPlus's trie functions (`keyplus_trie_jni.cpp`); `SwipeDecoder.java` adapted from its Kotlin interface | GPL-3.0 | https://gitlab.futo.org/keyboard/swipe-library |
+| FUTO Swipe encoder model (`Assets/futo-swipe/honorable_sturgeon`) | FUTO Model Weights License 1.0 (`Assets/futo-swipe/LICENSE.md`): the app says "powered by FUTO Swipe" | https://huggingface.co/futo-org/futo-swipe |
+| ExecuTorch, inside libswipe_jni.so | BSD | https://github.com/pytorch/executorch |
+| libc++_shared.so, from the Android NDK r27d | Apache-2.0 with LLVM exceptions | https://developer.android.com/ndk |
+| AOSP LatinIME's Spanish word list (`Assets/dictionaries/es_wordlist.combined.gz`) | AOSP LatinIME (to confirm) | https://android.googlesource.com/platform/packages/inputmethods/LatinIME |
+
+## Icons
+
+| Icon | Licence | Source |
+| --- | --- | --- |
+| The clipboard (`Resources/drawable/ic_clipboard.xml`), Material Icons' content_paste | Apache-2.0 | https://github.com/google/material-design-icons |
