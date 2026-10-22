@@ -101,13 +101,17 @@ a window that does.
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
 | [EmojiList.cs](EmojiList.cs) | The emoji list both keyboards offer (Unicode's, by group) and the recent ones' line |
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
+| [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
+| [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
+| [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Escribir por voz's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
+| [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema): Estándar, Estándar PC and those saved; each screen's docked and floating one |
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
 | [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
-| [windows/](windows/) | Berpiztu AI Keyboard for Windows: [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
+| [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
@@ -141,6 +145,16 @@ a window that does.
 - **Emoji**: the comma held, or ⊞'s Emojis, opens them in the keys' place,
   by group with a tab for each, those typed lately first; once one is
   typed, the latest are in a row over the toolbar.
+- **Words as you type**: while a word is typed letter by letter, the
+  toolbar offers the commonest words that start so, accents aside ("cancio"
+  offers "canción"), the likeliest in the centre; a tap writes it with a
+  space after it.
+- **🎤** writes what you say, the words in the field as they are heard,
+  until it is tapped again or, if Escribir por voz says so, after a
+  silence. Local is Android's own recognizer; Local network is ia-voice
+  (NVIDIA Nemotron 3.5 ASR) on a computer at home, by its IP; Remote is a
+  published one, with the user and password its proxy asks for, kept
+  sealed on the device.
 - **What was copied** is kept to paste again, the last 20. **📋** in the
   title bar shows it in the keys' place; a tap pastes it, **✕** takes it out
   of the list. Berpiztu AI Keyboard keeps whatever is copied in any app,

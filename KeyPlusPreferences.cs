@@ -64,6 +64,25 @@ public static class KeyPlusPreferences
     /// <summary>A keyboard in a window moves out of the way of the caret it covers (the owner's, thought for Windows too): on unless turned off.</summary>
     public const string AvoidCaretKey = "avoidCaret";
 
+    /// <summary>
+    /// On a headset (Galaxy XR), whether the keyboard is the headset's own,
+    /// its keys filling the box the headset gives a keyboard; off (the
+    /// default), it is the phone's keyboard, as any Android keyboard is.
+    /// </summary>
+    public const string HeadsetBoxKey = "headsetBox";
+
+    /// <summary>The system feature of Android XR's spatial windows: a headset.</summary>
+    public const string XrSpatialFeature = "android.software.xr.api.spatial";
+
+    /// <summary>Whether this device is a headset (Galaxy XR).</summary>
+    public static bool IsHeadset(Context context) => context.PackageManager?.HasSystemFeature(XrSpatialFeature) == true;
+
+    /// <summary>Whether Berpiztu AI Keyboard is the headset's own here: a headset, its box asked for in Preferencias.</summary>
+    public static bool HeadsetKeyboard(Context context) => IsHeadset(context) && Global(context).GetBoolean(HeadsetBoxKey, false);
+
+    /// <summary>Apartarse también de los menús, as on Windows: on by default, seen where the menu watch (MenuWatchService) is turned on.</summary>
+    public const string AvoidMenusKey = "avoidMenus";
+
     /// <summary>The keyboard shows when a field is typed in: on unless turned off, for when another keyboard is in use and one covered the other.</summary>
     public const string ShowKeyboardKey = "showKeyboard";
 

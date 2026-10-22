@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android's own recognizer for 🎤 Local (AndroidSpeech): since Android 11
+       an app sees the recognition services it names here. -->
+  <queries>
+    <intent>
+      <action android:name="android.speech.RecognitionService" />
+    </intent>
+  </queries>
   <!-- The label is each product's: MainActivity.AppLabel. Back goes to the
        app's own handlers (OnBackInvokedDispatcher), which close a settings'
-       page before the app. -->
+       page before the app. 🎤 by ia-voice goes to the address the user
+       writes, http:// as well (their own computer at home), so plain
+       traffic is let through. -->
   <application android:icon="@drawable/ic_keyplus"
                android:allowBackup="false"
                android:supportsRtl="true"
-               android:enableOnBackInvokedCallback="true" />
+               android:enableOnBackInvokedCallback="true"
+               android:usesCleartextTraffic="true" />
 </manifest>

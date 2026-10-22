@@ -169,6 +169,7 @@ public sealed class KeyboardSurface : FrameworkElement
     public void TypeText(string text)
     {
         EndSwipe(letter: false);
+        ForgetTyping();
         KeySender.Type(text);
         lastTyped = text.Length > 0 ? text[^1] : lastTyped;
     }
@@ -235,6 +236,50 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The words a swipe read as, the one typed among them, for the toolbar; none, the toolbar as it was.</summary>
     public event Action<IReadOnlyList<string>, string?>? Suggestions;
 
+    /// <summary>The words to offer for a word being typed in a language, the likeliest first (<see cref="WordSuggestions"/>); none, nothing is offered as letters are typed.</summary>
+    public Func<StandardLanguage, string, IReadOnlyList<string>>? Suggesting { get; set; }
+
+    /// <summary>The words offered for the word being typed, for the toolbar, each to be taken with a tap (<see cref="TakeSuggestion"/>); none, the toolbar as it was.</summary>
+    public event Action<IReadOnlyList<string>>? Offered;
+
+    /// <summary>
+    /// The word being typed letter by letter, as the keys typed it: Windows
+    /// tells a keyboard nothing of the field, so it is the keys' own count,
+    /// begun again by anything but a letter or ⌫.
+    /// </summary>
+    private string typingWord = "";
+
+    /// <summary>The word being typed changed: the words starting so offered, as Gboard's while a word is typed.</summary>
+    private void OfferWords()
+    {
+        IReadOnlyList<string> words = typingWord.Length > 0 && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
+        Offered?.Invoke(words);
+    }
+
+    /// <summary>The word being typed begun again, the words offered for it gone.</summary>
+    private void ForgetTyping()
+    {
+        if (typingWord.Length > 0)
+        {
+            typingWord = "";
+            Offered?.Invoke([]);
+        }
+    }
+
+    /// <summary>A word offered taken in place of the one being typed, with a space after it, as Gboard's.</summary>
+    public void TakeSuggestion(string word)
+    {
+        foreach (var _ in typingWord)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
+
+        KeySender.Type(word + " ");
+        lastTyped = ' ';
+        typingWord = "";
+        Offered?.Invoke([]);
+    }
+
     /// <summary>
     /// A swipe's words: the likeliest typed, in capitals or with a capital as
     /// Shift had it, with a space before it unless after a space or nothing,
@@ -247,6 +292,7 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
+        ForgetTyping();
         var word = Cased(words[0], capital, capitals);
         var text = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? word : " " + word;
         KeySender.Type(text);
@@ -722,6 +768,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 break;
             case StandardAction.Key when !key.Repeats:
                 FlushDead();
+                ForgetTyping();
                 Press(key.Code);
                 ModifiersUsed();
                 break;
@@ -768,6 +815,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 break;
             case StandardAction.Enter:
                 EndSwipe(letter: false);
+                ForgetTyping();
                 FlushDead();
                 Press(Keycode.Enter);
                 lastTyped = '\n';
@@ -869,6 +917,15 @@ public sealed class KeyboardSurface : FrameworkElement
 
         KeySender.Type(typed);
         lastTyped = typed.Length > 0 ? typed[^1] : lastTyped;
+        if (typed.Length > 0 && typed.All(char.IsLetter))
+        {
+            typingWord += typed;
+            OfferWords();
+        }
+        else
+        {
+            ForgetTyping();
+        }
     }
 
     private void FlushDead()
@@ -887,6 +944,7 @@ public sealed class KeyboardSurface : FrameworkElement
         if (Combining)
         {
             Press(Keycode.Del);
+            ForgetTyping();
         }
         else if (deadKey is not null)
         {
@@ -895,6 +953,11 @@ public sealed class KeyboardSurface : FrameworkElement
         else
         {
             KeySender.Press(Keycode.Del, KeySender.Held.None);
+            if (typingWord.Length > 0)
+            {
+                typingWord = typingWord[..^1];
+                OfferWords();
+            }
         }
     }
 

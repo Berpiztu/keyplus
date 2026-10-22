@@ -88,6 +88,9 @@ public sealed class FocusWatch : IDisposable
     /// <summary>The caret shown or moved: its rectangle.</summary>
     public event Action<Int32Rect>? CaretMoved;
 
+    /// <summary>What has the focus now, a field where text is typed: its place on the screen, in pixels; none where it gives none.</summary>
+    public Int32Rect? Field { get; private set; }
+
     /// <summary>A menu open: its rectangle.</summary>
     public event Action<Int32Rect>? MenuOpened;
 
@@ -151,6 +154,11 @@ public sealed class FocusWatch : IDisposable
             if (kind == ObjectFocus)
             {
                 focusSettling.Stop();
+                if (!menu)
+                {
+                    Field = Place(accessible, child) is { Width: > 0, Height: > 0 } place ? place : null;
+                }
+
                 var editable = role == TextRole && (accessible.get_accState(child) is not int state || (state & ReadOnlyState) == 0);
                 Log.Write($"Focus: {RoleName(role)} \"{Named(accessible, child)}\" in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
                 if (editable)

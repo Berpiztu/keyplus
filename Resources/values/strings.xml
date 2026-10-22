@@ -149,4 +149,19 @@
   <string name="voice_sign_in_refused">The speech service does not take the user and password</string>
   <string name="open_keyboard">Open the keyboard</string>
   <string name="quit">Quit</string>
+  <string name="voice_permission">Allow the microphone</string>
+  <string name="voice_permission_summary">Voice typing needs it to hear you</string>
+  <string name="voice_permission_asked">Voice typing needs the microphone: allow it in the settings</string>
+  <string name="voice_not_set">Not set</string>
+  <string name="menus_service_label">Berpiztu AI Keyboard: menus</string>
+  <string name="menus_service_summary">Moves the keyboard out of the way of the menus that open</string>
+  <string name="menus_service_description">Berpiztu AI Keyboard sees only the field it types in. With this on, it also sees where a menu opens, an app\'s or a list that drops down, to move out of its way (Preferences › Also move out of the way of menus). It reads nothing in the menus.</string>
+  <string name="menus_watch_off">Let it see the menus</string>
+  <string name="menus_watch_off_summary">Android shows other apps\' menus only to an accessibility service: a tap turns on Berpiztu AI Keyboard: menus</string>
+  <string name="voice_lan">Local network (IP)</string>
+  <string name="voice_remote">Remote</string>
+  <string name="voice_lan_hint">The IP of the computer with ia-voice on your network, such as 192.168.1.20; port 8060 unless you write another.</string>
+  <string name="headset_box">The headset\'s own keyboard</string>
+  <string name="headset_box_summary">On the glasses, the keys filling the box the headset gives a keyboard; off, the phone\'s keyboard, as any Android keyboard. It changes when the keyboard opens again</string>
+  <string name="menus_watch_grant">First let the app turn things on by itself: pair it in Wireless debugging, then tap Let it see the menus again</string>
 </resources>

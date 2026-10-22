@@ -128,7 +128,7 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
-    /// <summary>How 🎤 listens, as IA-BotMsgs' chat sets it, with its words: the microphone, whether it stops by itself after a silence, and how long, how much the volume is raised, and which ia-voice: the local one or one at an address, with its user and password.</summary>
+    /// <summary>How 🎤 listens, as IA-BotMsgs' chat sets it, with its words: the microphone, whether it stops by itself after a silence, and how long, how much the volume is raised, and which ia-voice: this computer's, one on the local network by its IP, or a remote one at an address, with its user and password.</summary>
     private static FrameworkElement VoicePage()
     {
         var settings = VoiceSettings.Read();
@@ -136,14 +136,16 @@ public sealed class SettingsWindow : Window
         var autoStop = new CheckBox { Content = Texts.Get(Resource.String.voice_auto_stop), IsChecked = settings.AutoStop };
         var silence = Stepped(VoiceSettings.LeastSilence, VoiceSettings.MostSilence, settings.SilenceSeconds);
         var gain = Stepped(1, VoiceSettings.MostGain, settings.Gain);
-        var local = new RadioButton { Content = Texts.Get(Resource.String.voice_local), IsChecked = settings.Local };
-        var remote = new RadioButton { Content = Texts.Get(Resource.String.voice_address), IsChecked = !settings.Local };
+        var local = new RadioButton { Content = Texts.Get(Resource.String.voice_local), IsChecked = settings.Choice == VoiceTyping.OnDevice };
+        var lan = new RadioButton { Content = Texts.Get(Resource.String.voice_lan), IsChecked = settings.Choice == VoiceTyping.OnLan };
+        var remote = new RadioButton { Content = Texts.Get(Resource.String.voice_remote), IsChecked = settings.Choice == VoiceTyping.Remote };
+        var lanAddress = new TextBox { Text = settings.LanAddress };
         var address = new TextBox { Text = settings.Address };
         var user = new TextBox { Text = settings.User };
         var password = new PasswordBox { Password = settings.Password };
 
         microphone.Items.Add(Texts.Get(Resource.String.voice_microphone_default));
-        foreach (var name in VoiceTyping.Microphones())
+        foreach (var name in NAudioMicrophone.Names())
         {
             microphone.Items.Add(name);
         }
@@ -151,7 +153,8 @@ public sealed class SettingsWindow : Window
         microphone.SelectedIndex = Math.Max(0, microphone.Items.IndexOf(settings.Microphone));
 
         void Keep() => new VoiceSettings(microphone.SelectedIndex <= 0 ? "" : (string)microphone.SelectedItem, autoStop.IsChecked == true, silence.Value, gain.Value,
-            local.IsChecked == true, address.Text, user.Text, password.Password).Keep();
+            lan.IsChecked == true ? VoiceTyping.OnLan : remote.IsChecked == true ? VoiceTyping.Remote : VoiceTyping.OnDevice,
+            lanAddress.Text, address.Text, user.Text, password.Password).Keep();
         microphone.SelectionChanged += (_, _) => Keep();
         silence.ValueChanged += (_, _) => Keep();
         autoStop.Click += (_, _) =>
@@ -162,22 +165,34 @@ public sealed class SettingsWindow : Window
         silence.IsEnabled = settings.AutoStop;
         gain.ValueChanged += (_, _) => Keep();
         local.Checked += (_, _) => Keep();
+        lan.Checked += (_, _) => Keep();
         remote.Checked += (_, _) => Keep();
+        lanAddress.TextChanged += (_, _) => Keep();
         address.TextChanged += (_, _) => Keep();
         user.TextChanged += (_, _) => Keep();
         password.PasswordChanged += (_, _) => Keep();
 
-        // The address, its user and password, only while the address is chosen.
+        // The local network's IP, and the remote address with its user and password, each only while it is chosen.
+        var onLan = new StackPanel { Margin = new Thickness(FieldGapDp + 12, 4, 0, FieldGapDp / 2) };
+        onLan.Children.Add(Field(null, lanAddress, Resource.String.voice_lan_hint, 0));
         var reached = new StackPanel { Margin = new Thickness(FieldGapDp + 12, 4, 0, 0) };
         reached.Children.Add(address);
         reached.Children.Add(Field(Resource.String.voice_user, user, null, FieldGapDp / 2));
         reached.Children.Add(Field(Resource.String.voice_password, password, null, FieldGapDp / 2));
-        void Reachable() => reached.IsEnabled = remote.IsChecked == true;
+        void Reachable()
+        {
+            onLan.IsEnabled = lan.IsChecked == true;
+            reached.IsEnabled = remote.IsChecked == true;
+        }
+
         local.Checked += (_, _) => Reachable();
+        lan.Checked += (_, _) => Reachable();
         remote.Checked += (_, _) => Reachable();
         Reachable();
         var service = new StackPanel();
         service.Children.Add(local);
+        service.Children.Add(lan);
+        service.Children.Add(onLan);
         service.Children.Add(remote);
         service.Children.Add(reached);
 

@@ -125,6 +125,9 @@ namespace Berpiztu.KeyPlus
             public const int avoid_menus_summary = 54;
             public const int voice_auto_stop = 55;
             public const int voice_auto_stop_summary = 56;
+            public const int voice_lan = 57;
+            public const int voice_remote = 58;
+            public const int voice_lan_hint = 59;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

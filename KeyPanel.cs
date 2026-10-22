@@ -174,7 +174,7 @@ public sealed class KeyPanel
     private LinearLayout wholeKeyboard;
 
     /// <summary>The keyboard of the list this screen shows, docked or floating (Ajustes › Tema); none in the popup.</summary>
-    private readonly KeyboardEntry? keyboard;
+    private KeyboardEntry? keyboard;
 
     /// <summary>Whether the keyboard floats: the keyboard chosen from here is the screen's floating one.</summary>
     private readonly bool floating;
@@ -508,6 +508,19 @@ public sealed class KeyPanel
     /// <summary>Which of the last swipe's words is typed now: the toolbar's centre.</summary>
     private string? swipedWord;
 
+    /// <summary>The words offered for the word being typed letter by letter, the likeliest first, in the toolbar's middle as Gboard's; and that word as it stands before the caret, which the one taken replaces.</summary>
+    private IReadOnlyList<string> typingWords = [];
+    private string typingWord = "";
+
+    /// <summary>Whether the toolbar's middle shows words: a swipe's, or those offered for the word being typed.</summary>
+    private bool OffersWords => swipeWords.Count > 0 || typingWords.Count > 0;
+
+    /// <summary>The words to offer for a word being typed in a language, the likeliest first (<see cref="WordSuggestions"/>); none, nothing is offered as letters are typed.</summary>
+    public Func<StandardLanguage, string, IReadOnlyList<string>>? Suggesting { get; set; }
+
+    /// <summary>The letters right before the caret, the word being typed; none or empty where there is none.</summary>
+    public Func<string?>? WordBeforeCaret { get; set; }
+
     /// <summary>The settings ⚙ shows now: on a phone, the panel's own tiles first.</summary>
     private IReadOnlyList<Setting> shownSettings = [];
 
@@ -551,7 +564,11 @@ public sealed class KeyPanel
     {
         this.context = context;
         this.clipboard = clipboard;
-        onHeadset = context.PackageManager?.HasSystemFeature("android.software.xr.api.spatial") == true;
+#if KEYBOARD
+        onHeadset = KeyPlusPreferences.HeadsetKeyboard(context);
+#else
+        onHeadset = KeyPlusPreferences.IsHeadset(context);
+#endif
         sendOut = send;
         typeOut = type;
         this.preferences = preferences;
@@ -1126,7 +1143,7 @@ public sealed class KeyPanel
             toolbarMiddle.RemoveViewAt(1);
         }
 
-        if (swipeWords.Count > 0)
+        if (OffersWords)
         {
             toolbarClipboard.Visibility = ViewStates.Gone;
             toolbarMiddle.AddView(SwipeWordsRow(16, divider: null), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
@@ -1149,14 +1166,18 @@ public sealed class KeyPanel
     /// </summary>
     private LinearLayout SwipeWordsRow(float sp, Color? divider)
     {
+        // Typing, the likeliest in the centre and the next on each side, each taken with a tap; after a swipe, its word typed in the centre.
+        var typing = swipeWords.Count == 0;
         var others = swipeWords.Where(word => word != swipedWord).Take(2).ToList();
         var words = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         words.SetGravity(GravityFlags.CenterVertical);
-        string?[] shown = [others.ElementAtOrDefault(0), swipedWord, others.ElementAtOrDefault(1)];
+        string?[] shown = typing
+            ? [typingWords.ElementAtOrDefault(1), typingWords.ElementAtOrDefault(0), typingWords.ElementAtOrDefault(2)]
+            : [others.ElementAtOrDefault(0), swipedWord, others.ElementAtOrDefault(1)];
         for (var i = 0; i < shown.Length; i++)
         {
             var word = shown[i];
-            var typed = i == 1;
+            var typed = i == 1 && !typing;
             if (divider is { } line && i > 0)
             {
                 words.AddView(Divider(line), new LinearLayout.LayoutParams(Dp(SuggestionLineDp), Dp(SuggestionLineHeightDp)));
@@ -1164,14 +1185,18 @@ public sealed class KeyPanel
 
             var button = ToolButton(word ?? "", typed ? $"{word}, written" : $"Write {word} instead", sp, () =>
             {
-                if (word is not null && !typed)
+                if (word is not null && typing)
+                {
+                    TakeSuggestion(word);
+                }
+                else if (word is not null && !typed)
                 {
                     ReplaceSwiped(word);
                 }
             });
             button.SetPadding(Dp(2), 0, Dp(2), 0);
             button.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(sp), 1, (int)ComplexUnitType.Sp);
-            if (typed)
+            if (i == 1)
             {
                 button.SetTypeface(null, TypefaceStyle.Bold);
             }
@@ -1228,13 +1253,13 @@ public sealed class KeyPanel
         }
 
         var colors = standardColors!;
-        var recent = swipeWords.Count > 0 ? null : RecentCopy();
-        var suggesting = swipeWords.Count > 0 || recent is not null;
+        var recent = OffersWords ? null : RecentCopy();
+        var suggesting = OffersWords || recent is not null;
         var first = covered is not null
             ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
             : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
         standardBar.AddView(first, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
-        if (swipeWords.Count > 0)
+        if (OffersWords)
         {
             standardBar.AddView(SwipeWordsRow(SuggestionSp, colors.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
@@ -1256,8 +1281,65 @@ public sealed class KeyPanel
             standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
 
-        standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_mic, "Voice typing", () => NotMadeYet(context.GetString(Resource.String.voice_typing)), colors.Key),
-            new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+        standardBar.AddView(MicTool(), new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+    }
+
+    /// <summary>🎤 tapped: a dictation started, or the one going on stopped.</summary>
+    public event Action? VoiceTapped;
+
+    /// <summary>The standard keyboard's language as a dictation asks for it, by its locale ("es-ES", "en-US").</summary>
+    public string DictationLocale => (standard?.Language ?? StandardKeys.Spanish).Locale;
+
+    /// <summary>🎤's circle, lit while listening and as wide as the voice is loud; its sign.</summary>
+    private View? micHalo;
+    private ImageView? micSign;
+    private bool listening;
+    private double listeningLevel;
+
+    /// <summary>
+    /// 🎤 as the Windows keyboard's: in the keys' tone, and while it listens
+    /// on a circle in the primary tone that beats with the voice's level, its
+    /// sign in the tone on it; a tap starts or stops the dictation.
+    /// </summary>
+    private FrameLayout MicTool()
+    {
+        var place = StandardTool(Resource.Drawable.ic_tool_mic, context.GetString(Resource.String.voice_typing), () => VoiceTapped?.Invoke(), standardColors!.Key);
+        var halo = new View(context);
+        var round = new GradientDrawable();
+        round.SetShape(ShapeType.Oval);
+        round.SetColor(standardColors.Primary);
+        halo.Background = round;
+        place.AddView(halo, 0, new FrameLayout.LayoutParams(Dp(ToolCircleDp), Dp(ToolCircleDp), GravityFlags.Center));
+        micHalo = halo;
+        micSign = (ImageView)place.GetChildAt(1)!;
+        ShowListening(listening, listeningLevel);
+        return place;
+    }
+
+    /// <summary>The circle's size as a share of 🎤's, in silence and at the loudest: Windows' 0.36 and 0.5 of the button's height over the pressed circle's 0.42.</summary>
+    private const float QuietHalo = 0.36f / 0.42f;
+    private const float LoudHalo = 0.5f / 0.42f;
+
+    /// <summary>Whether a dictation is listening, and its level, 0 to 1: 🎤 lit and beating, or as it was.</summary>
+    public void ShowListening(bool on, double level)
+    {
+        listening = on;
+        listeningLevel = level;
+        if (micHalo is null || micSign is null || standardColors is null)
+        {
+            return;
+        }
+
+        micHalo.Visibility = on ? ViewStates.Visible : ViewStates.Invisible;
+        var scale = QuietHalo + ((LoudHalo - QuietHalo) * (float)level);
+        micHalo.ScaleX = micHalo.ScaleY = scale;
+        micSign.ImageTintList = ColorStateList.ValueOf(on ? standardColors.OnPrimary : standardColors.Glyph);
+
+        // The sign's own circle, in the keys' tone, out of the way while the lit one beats behind it.
+        if (micSign.Background is { } own)
+        {
+            own.Alpha = on ? 0 : 255;
+        }
     }
 
     /// <summary>A toolbar sign's place: Gboard's, or, where seven of them do not fit (a narrow window), a seventh of the bar.</summary>
@@ -1444,13 +1526,16 @@ public sealed class KeyPanel
         Uncover();
         if (keep && standard.Design is { } designed && keyboard is { } shown)
         {
+            // The keyboard shown is then the one saved, as it now is: designed again, it opens as saved, and Hecho keeps it in its place.
             if (shown.BuiltIn)
             {
-                Keyboards.Select(preferences, floating, Keyboards.SaveAs(context, Keyboards.NewName(context, shown), shown.Base, designed.Text).Id);
+                keyboard = Keyboards.SaveAs(context, Keyboards.NewName(context, shown), shown.Base, designed.Text);
+                Keyboards.Select(preferences, floating, keyboard.Id);
             }
             else
             {
                 Keyboards.SetDesign(context, shown.Id, designed.Text);
+                keyboard = shown with { Design = designed.Text };
             }
         }
         else
@@ -2408,16 +2493,19 @@ public sealed class KeyPanel
             }
 
             Type(text);
+            OfferWords();
         },
         Deleted = () =>
         {
             EndSwipe(letter: false);
             Send(Keycode.Del, MetaKeyStates.None);
+            OfferWordsSoon();
         },
         KeyPressed = (code, meta) =>
         {
             EndSwipe(letter: false);
             Send(code, meta);
+            OfferWordsSoon();
         },
         Pc = keyboard?.Base == Keyboards.StandardPcBase,
         Design = keyboard is { Standard: true } ? StandardDesign.FromText(keyboard.Design) : null,
@@ -2425,6 +2513,7 @@ public sealed class KeyPanel
         Entered = () =>
         {
             EndSwipe(letter: false);
+            ForgetTyping();
             if (Enter is { } enter)
             {
                 enter();
@@ -3856,6 +3945,7 @@ public sealed class KeyPanel
             }
 
             ForgetSwipe();
+            typingWords = [];
             TypeSwiped(words[0], capital, capitals);
             swipeWords = words;
             ShowBars();
@@ -3927,6 +4017,69 @@ public sealed class KeyPanel
         var owed = swipedText is not null && letter;
         ForgetSwipe();
         return owed;
+    }
+
+    /// <summary>How long after a key the field is read again for the word before the caret: a key's event reaches the field a moment later than text.</summary>
+    private const int FieldSettleMs = 80;
+
+    /// <summary>
+    /// The word before the caret read and the words starting so offered in
+    /// the toolbar, as Gboard offers them while a word is typed; none where
+    /// there is no word, or a swipe's words are offered.
+    /// </summary>
+    public void OfferWords()
+    {
+        var word = swipedText is null && Suggesting is not null && standard is not null ? WordBeforeCaret?.Invoke() ?? "" : "";
+        IReadOnlyList<string> words = word.Length > 0 ? Suggesting!(standard!.Language, word) : [];
+        if (words.Count == 0 && typingWords.Count == 0)
+        {
+            return;
+        }
+
+        typingWords = words;
+        typingWord = word;
+        ShowBars();
+    }
+
+    /// <summary>The words offered again once a key (⌫, an arrow) has reached the field.</summary>
+    private void OfferWordsSoon()
+    {
+        handler.RemoveCallbacks(OfferWords);
+        handler.PostDelayed(OfferWords, FieldSettleMs);
+    }
+
+    /// <summary>A word offered taken in place of the one being typed, with a space after it, as Gboard's: the words gone from the toolbar.</summary>
+    private void TakeSuggestion(string word)
+    {
+        var text = word + " ";
+        if (ReplaceBeforeCaret is { } replace)
+        {
+            replace(typingWord.Length, text);
+        }
+        else
+        {
+            foreach (var _ in typingWord)
+            {
+                Send(Keycode.Del, MetaKeyStates.None);
+            }
+
+            Type(text);
+        }
+
+        ForgetTyping();
+    }
+
+    /// <summary>The words offered for the word being typed gone from the toolbar.</summary>
+    public void ForgetTyping()
+    {
+        typingWord = "";
+        if (typingWords.Count == 0)
+        {
+            return;
+        }
+
+        typingWords = [];
+        ShowBars();
     }
 
     /// <summary>The last swipe's words gone from the toolbar, anything else having been typed.</summary>

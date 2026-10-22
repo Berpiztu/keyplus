@@ -49,7 +49,8 @@ public sealed class KeyboardWindow : Window
     private readonly TextBlock notice;
     private readonly SwipeEngine swipe = new();
     private readonly EmojiPanel emoji;
-    private readonly VoiceTyping voice = new();
+    private readonly NAudioMicrophone microphone = new();
+    private readonly VoiceTyping voice;
     private readonly SignButton mic;
     private readonly FocusWatch focus = new();
     private readonly IDisposable preferencesWatch;
@@ -109,6 +110,8 @@ public sealed class KeyboardWindow : Window
         keys.NotMade += what => Notice($"{what}: todavía no está hecho");
         keys.Swiped += async (path, capital, capitals) => keys.TypeSwiped(await swipe.Words(path), capital, capitals);
         keys.Suggestions += ShowSuggestions;
+        keys.Offered += words => ShowSuggestions(words, null);
+        keys.Suggesting = Suggest;
         keys.EmojisAsked += ShowEmoji;
         emoji = new EmojiPanel(colors) { Visibility = Visibility.Collapsed };
         emoji.Typed += keys.TypeText;
@@ -128,13 +131,14 @@ public sealed class KeyboardWindow : Window
         close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
         mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
         mic.Clicked += Listen;
+        voice = new VoiceTyping(microphone, Log.Write);
         voice.Level += Heard;
         voice.Partial += keys.TypeSpokenSoFar;
         voice.Silence += EndListening;
         var settings = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_settings, ToolTip = Texts.Get(Resource.String.keyboard_settings) };
         settings.Clicked += SettingsWindow.Start;
-        focus.CaretMoved += at => Avoid(at, menu: false);
-        focus.MenuOpened += at => Avoid(at, menu: true);
+        focus.CaretMoved += AvoidText;
+        focus.MenuOpened += at => Avoid(Dips(at), menu: true);
         focus.MenuClosed += () => movedForMenu = false;
         focus.TextFocused += () =>
         {
@@ -364,7 +368,39 @@ public sealed class KeyboardWindow : Window
         Keep();
     }
 
-    /// <summary>The swipe's words shown, the typed one in the centre in bold and the next likeliest on each side; none, the toolbar empty again.</summary>
+    /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the window's thread.</summary>
+    private readonly Dictionary<StandardLanguage, Task<WordSuggestions?>> wordLists = [];
+
+    /// <summary>The words offered for a word being typed; none until the language's word list is read.</summary>
+    private IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
+    {
+        if (!wordLists.TryGetValue(language, out var reading))
+        {
+            wordLists[language] = reading = Task.Run(() =>
+            {
+                try
+                {
+                    using var wordList = File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, language.WordList));
+                    return WordSuggestions.Read(wordList, language);
+                }
+                catch (IOException failure)
+                {
+                    Log.Write($"The {language.Code} words to offer could not be read: {failure.Message}");
+                    return null;
+                }
+            });
+        }
+
+        return reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+    }
+
+    /// <summary>
+    /// Words in the toolbar's middle, as Gboard's: a swipe's, the typed one in
+    /// the centre in bold and the next likeliest on each side, a side one
+    /// taken in its place; or, with none typed, those offered for the word
+    /// being typed, the likeliest in the centre, each taken with a tap. None,
+    /// the toolbar empty again.
+    /// </summary>
     private void ShowSuggestions(IReadOnlyList<string> words, string? typed)
     {
         suggestions.Children.Clear();
@@ -375,8 +411,11 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
+        var typing = typed is null;
         var others = words.Where(word => word != typed).Take(2).ToList();
-        string?[] shown = [others.ElementAtOrDefault(0), typed, others.ElementAtOrDefault(1)];
+        string?[] shown = typing
+            ? [words.ElementAtOrDefault(1), words.ElementAtOrDefault(0), words.ElementAtOrDefault(2)]
+            : [others.ElementAtOrDefault(0), typed, others.ElementAtOrDefault(1)];
         for (var i = 0; i < shown.Length; i++)
         {
             suggestions.ColumnDefinitions.Add(new ColumnDefinition());
@@ -396,12 +435,21 @@ public sealed class KeyboardWindow : Window
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
             };
-            var place = new Border { Background = Brushes.Transparent, Child = label, Cursor = centre ? null : Cursors.Hand };
-            if (!centre)
+            var takes = typing || !centre;
+            var place = new Border { Background = Brushes.Transparent, Child = label, Cursor = takes ? Cursors.Hand : null };
+            if (takes)
             {
                 place.MouseLeftButtonUp += (_, e) =>
                 {
-                    keys.ReplaceSwiped(word);
+                    if (typing)
+                    {
+                        keys.TakeSuggestion(word);
+                    }
+                    else
+                    {
+                        keys.ReplaceSwiped(word);
+                    }
+
                     e.Handled = true;
                 };
                 place.MouseLeftButtonDown += (_, e) => e.Handled = true;
@@ -437,7 +485,9 @@ public sealed class KeyboardWindow : Window
         Topmost = false;
         try
         {
-            voice.Start(VoiceSettings.Read(), keys.KeyLanguage.Locale);
+            var settings = VoiceSettings.Read();
+            microphone.Name = settings.Microphone;
+            voice.Start(settings.Options(keys.KeyLanguage.Locale));
         }
         catch (Exception none)
         {
@@ -500,21 +550,51 @@ public sealed class KeyboardWindow : Window
     }
 
     /// <summary>
-    /// "Apartarse del texto", as on Android: the caret in any window under the
+    /// The caret shown or moved: what "Apartarse del texto" keeps clear of, as
+    /// on Android: the whole field where the keyboard fits above or below it,
+    /// so a field it covers in part is cleared too; else, a field too tall for
+    /// that (an editor), the line the caret is on, across the field; with no
+    /// field told, the caret alone.
+    /// </summary>
+    private void AvoidText(Int32Rect at)
+    {
+        if (Dips(at) is not { } caret)
+        {
+            return;
+        }
+
+        var card = ActualHeight - (2 * ShadowDp);
+        var area = SystemParameters.WorkArea;
+        var avoided = caret;
+        if (focus.Field is { } place && Dips(place) is { } field && field.Contains(new Point(caret.Left, caret.Top + (caret.Height / 2))))
+        {
+            var fits = field.Top - CaretGapDp - card >= area.Top || field.Bottom + CaretGapDp + card <= area.Bottom;
+            avoided = fits ? field : new Rect(field.Left, caret.Top, field.Width, caret.Height);
+        }
+
+        Avoid(avoided, menu: false);
+    }
+
+    /// <summary>A place on the screen in pixels as the window's units; none before the window is shown.</summary>
+    private Rect? Dips(Int32Rect at) => PresentationSource.FromVisual(this)?.CompositionTarget is { } target
+        ? new Rect(target.TransformFromDevice.Transform(new Point(at.X, at.Y)), target.TransformFromDevice.Transform(new Point(at.X + at.Width, at.Y + at.Height)))
+        : null;
+
+    /// <summary>
+    /// "Apartarse del texto": the text (<see cref="AvoidText"/>) under the
     /// card, the keyboard moves above it where there is room, else below it,
     /// <see cref="CaretGapDp"/> away, else to the side with more room, and
     /// stays where it went, as after a drag. "Apartarse también de los menús":
     /// an open menu the same, once a menu, the keyboard then still however the
     /// user goes through it, so its keys can be reached.
     /// </summary>
-    private void Avoid(Int32Rect at, bool menu)
+    private void Avoid(Rect? avoided, bool menu)
     {
-        if (!(menu ? preferences.AvoidMenus : preferences.AvoidCaret) || moving || !IsLoaded || (menu && movedForMenu) || PresentationSource.FromVisual(this)?.CompositionTarget is not { } target)
+        if (avoided is not { } shown || !(menu ? preferences.AvoidMenus : preferences.AvoidCaret) || moving || !IsLoaded || (menu && movedForMenu))
         {
             return;
         }
 
-        var shown = new Rect(target.TransformFromDevice.Transform(new Point(at.X, at.Y)), target.TransformFromDevice.Transform(new Point(at.X + at.Width, at.Y + at.Height)));
         var card = new Rect(Left + ShadowDp, Top + ShadowDp, ActualWidth - (2 * ShadowDp), ActualHeight - (2 * ShadowDp));
         if (shown.Bottom <= card.Top || shown.Top >= card.Bottom || shown.Right < card.Left || shown.Left > card.Right)
         {
@@ -528,7 +608,7 @@ public sealed class KeyboardWindow : Window
             : below + card.Height <= area.Bottom ? below
             : shown.Top - area.Top >= area.Bottom - shown.Bottom ? area.Top : area.Bottom - card.Height;
         movedForMenu = menu;
-        Log.Write($"Keyboard: moved out of the way of the {(menu ? "menu" : "caret")} at {at}, from {Top:0} to {cardTop - ShadowDp:0}");
+        Log.Write($"Keyboard: moved out of the way of the {(menu ? "menu" : "text")} at {shown}, from {Top:0} to {cardTop - ShadowDp:0}");
         Top = cardTop - ShadowDp;
         Keep();
     }

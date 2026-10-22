@@ -88,7 +88,7 @@ Default section order:
 - Android app (.NET 10, `net10.0-android`, API 33 and later, arm64 only) that sends the keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, arrows, Home, End, pages) to the focused editor
 - Two products from one code base, chosen by `-p:KeyPlusProduct`:
   - `Popup` (default): KeyPlus, `ai.berpiztu.keyplus`, an accessibility service whose key strip sits above the keyboard in use
-  - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR)
+  - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR), with an optional accessibility service of its own (`MenuWatchService.cs`) that only sees menus open and close, for Apartarse también de los menús; the user turns it on, and a debug install may turn it off again
 - `README.md` is the user and build guide and holds the file-by-file map of the sources
 - `windows/`: Berpiztu AI Keyboard for Windows, the standard keyboards in a floating card, a project of its own
 
@@ -106,7 +106,7 @@ Default section order:
   - Keyboard only: `KeyPlusKeyboard.cs`, `KeyboardFrame.cs`, `ClipboardImages.cs`, `ScreenshotWatcher.cs`, `Resources/xml/keyplus_keyboard.xml`; the Keyboard build defines `KEYBOARD`
   - Everything else is shared; a new product-specific file joins the csproj's lists
 - Each product builds into `bin/<Product>/<Configuration>/` and `obj/<Product>/<Configuration>/`
-- `windows\**` is left out of the Android build; the Windows app compiles `StandardKeys.cs`, `SwipeWords.cs` and `EmojiList.cs` as they are, so an Android name added to them is added to `windows/AndroidNames.cs`
+- `windows\**` is left out of the Android build; the Windows app compiles `StandardKeys.cs`, `SwipeWords.cs`, `EmojiList.cs`, `VoiceTyping.cs` and `WordSuggestions.cs` as they are, so an Android name added to them is added to `windows/AndroidNames.cs`
 - Turning on without a computer: `AdbGrant.cs` (a short foreground service, both products) takes the Wireless debugging pairing code in a notification and runs the product's ADB commands through `AdbShell.java` (Java, `AndroidJavaSource` with `Bind="false"`, called from C# by JNI); the key it pairs with is made per run and never stored
 - Java libraries come as `AndroidMavenLibrary` items with `Bind="false"`: libadb-android and spake2-android from JitPack, Bouncy Castle and Conscrypt from Maven Central; each version is checked for known vulnerabilities (OSV) before it is set, Bouncy Castle is held above the vulnerable one libadb asks for, and `THIRD-PARTY-NOTICES.md` lists them with their licences and is updated with them
 - security-watch's inventory reads NuGet packages only, so it does not see the Java libraries
@@ -141,7 +141,7 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
-- Galaxy XR support stays as it is: phone changes go through the non-headset path; never remove or alter the headset path (`OnHeadset`, `KeyWindowActivity.cs`, `KeyPlusKeyboard.FillBox`, `KeyPlusService.AttachKeys`)
+- Galaxy XR support stays as it is: phone changes go through the non-headset path; never remove or alter the headset path (`OnHeadset`, `KeyWindowActivity.cs`, `KeyPlusKeyboard.FillBox`, `KeyPlusService.AttachKeys`); on the headset Berpiztu AI Keyboard is the phone's keyboard by default, the headset's own (its box) where Preferencias asks for it (`KeyPlusPreferences.HeadsetBoxKey`)
 - Install on the owner's phone or headset only when the owner says "install" for that build
 - The owner's keyboard designs are never lost: before any install, any change to an emulator (wipe, new image) and every commit, run `.\backup-designs.ps1`; it copies each design that changed since its last copy to `docs/tODO/designs/` as a new file, never over an old one, and those copies are committed
 - Space is never wasted: margins, padding and fixed widths are the least a finger and the text need, horizontal and vertical; a control is as wide as its content (a sign's button its sign and a finger's margin), and the room left goes to what holds text

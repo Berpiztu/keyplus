@@ -82,10 +82,42 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         // FUTO Swipe and its word list, loaded once, away from the main thread.
         swipeTyping = new SwipeTyping(this);
+
+        MenuWatchService.MenuOpened += AvoidMenu;
+        MenuWatchService.MenuClosed += MenuGone;
     }
 
     /// <summary>Words swiped over the letters, on a phone.</summary>
     private SwipeTyping? swipeTyping;
+
+    /// <summary>How far back the field is read for the word being typed.</summary>
+    private const int WordReach = 48;
+
+    /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the main thread.</summary>
+    private readonly Dictionary<StandardLanguage, Task<WordSuggestions?>> suggestions = [];
+
+    /// <summary>The words offered for a word being typed; none until the language's word list is read.</summary>
+    private IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
+    {
+        if (!suggestions.TryGetValue(language, out var reading))
+        {
+            suggestions[language] = reading = Task.Run(() =>
+            {
+                try
+                {
+                    using var wordList = Assets!.Open(language.WordList);
+                    return WordSuggestions.Read(wordList, language);
+                }
+                catch (Exception failure)
+                {
+                    Android.Util.Log.Warn("KeyPlus", $"The {language.Code} words to offer could not be read: {failure.Message}");
+                    return null;
+                }
+            });
+        }
+
+        return reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+    }
 
     /// <summary>Swipes read as words, where the app's settings have it on (Escritura deslizando el dedo); none, the letters only tapped.</summary>
     private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() =>
@@ -154,6 +186,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         {
             panel.ReadSettings();
             panel.Swiping = SwipeOn();
+            panel.ForgetTyping();
 
             // Not shown, for another keyboard in use: its ⌨ icon in its place, which a tap opens. Made its
             // icon as the last field let it go, whole again for this one.
@@ -169,7 +202,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
             iconAsFieldLeft = false;
 
             // The caret's place on the screen, now and as it moves, for a keyboard in a window to keep clear of it.
-            CurrentInputConnection?.RequestCursorUpdates((int)(CursorUpdate.Immediate | CursorUpdate.Monitor));
+            var followed = CurrentInputConnection?.RequestCursorUpdates((int)(CursorUpdate.Immediate | CursorUpdate.Monitor)) == true;
+            caretSkipLogged = null;
+            Android.Util.Log.Info("KeyPlus", $"Field of {info?.PackageName}: its caret {(followed ? "followed" : "not told by the app")}");
         }
 
         screenshots?.Start();
@@ -183,8 +218,151 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
 
         screenshots?.Stop();
+        dictation?.Dispose();
+        MenuWatchService.MenuOpened -= AvoidMenu;
+        MenuWatchService.MenuClosed -= MenuGone;
         base.OnDestroy();
     }
+
+    /// <summary>🎤's dictation going on: by Android's own recognizer (Local) or ia-voice at an address, as Escribir por voz says.</summary>
+    private IDictation? dictation;
+    private bool transcribing;
+
+    /// <summary>The space a dictation's words need before them: none after a space or nothing.</summary>
+    private string spokenLead = "";
+
+    /// <summary>
+    /// 🎤 tapped: a dictation started, its words written in the field as they
+    /// are heard (Android's composing text, underlined as Gboard's), or the
+    /// one going on stopped and its words written for good. Without the
+    /// microphone's permission, the app asks for it.
+    /// </summary>
+    private void Dictate()
+    {
+        if (transcribing)
+        {
+            return;
+        }
+
+        if (dictation is { Recording: true })
+        {
+            EndDictation();
+            return;
+        }
+
+        if (CheckSelfPermission(Android.Manifest.Permission.RecordAudio) != Android.Content.PM.Permission.Granted)
+        {
+            Toast.MakeText(this, Resource.String.voice_permission_asked, ToastLength.Long)!.Show();
+            StartActivity(new Intent(this, typeof(MainActivity)).AddFlags(ActivityFlags.NewTask).PutExtra(MainActivity.AskMicrophoneExtra, true));
+            return;
+        }
+
+        var locale = panel?.DictationLocale ?? StandardKeys.Spanish.Locale;
+        var local = VoicePreferences.Local(this);
+        dictation?.Dispose();
+        IDictation made;
+        VoiceOptions options;
+        if (local)
+        {
+            var speech = new AndroidSpeech(this, LogVoice);
+            if (!speech.Available)
+            {
+                Toast.MakeText(this, Resource.String.voice_unavailable, ToastLength.Short)!.Show();
+                return;
+            }
+
+            made = speech;
+            options = new VoiceOptions(VoicePreferences.AutoStop(this), VoicePreferences.Silence(this), 1, "", "", "", locale);
+        }
+        else
+        {
+            made = new VoiceTyping(new AndroidMicrophone(), LogVoice);
+            options = VoicePreferences.Options(this, locale);
+        }
+
+        made.Level += level =>
+        {
+            if (dictation == made && made.Recording)
+            {
+                panel?.ShowListening(true, level);
+            }
+        };
+        made.Partial += text => CurrentInputConnection?.SetComposingText(text.Length == 0 ? "" : spokenLead + text, 1);
+        made.Silence += EndDictation;
+        var before = CurrentInputConnection?.GetTextBeforeCursor(1, 0)?.ToString();
+        spokenLead = string.IsNullOrEmpty(before) || char.IsWhiteSpace(before[^1]) ? "" : " ";
+        try
+        {
+            made.Start(options);
+        }
+        catch (Exception none) when (none is InvalidOperationException or Java.Lang.Exception)
+        {
+            LogVoice($"The microphone could not listen: {none.Message}");
+            Toast.MakeText(this, Resource.String.voice_no_microphone, ToastLength.Short)!.Show();
+            made.Dispose();
+            return;
+        }
+
+        dictation = made;
+        panel?.ShowListening(true, 0);
+    }
+
+    /// <summary>The dictation stopped: all its words written for good in its composing text's place.</summary>
+    private async void EndDictation()
+    {
+        if (dictation is not { Recording: true } going || transcribing)
+        {
+            return;
+        }
+
+        transcribing = true;
+        panel?.ShowListening(false, 0);
+        try
+        {
+            var text = await going.Stop();
+            if (text.Length > 0)
+            {
+                CurrentInputConnection?.CommitText(spokenLead + text, 1);
+            }
+            else
+            {
+                CurrentInputConnection?.FinishComposingText();
+                Toast.MakeText(this, Resource.String.voice_nothing_heard, ToastLength.Short)!.Show();
+            }
+        }
+        catch (VoiceTyping.SignInRefused)
+        {
+            LogVoice("ia-voice's proxy did not take the user and password.");
+            CurrentInputConnection?.FinishComposingText();
+            Toast.MakeText(this, Resource.String.voice_sign_in_refused, ToastLength.Long)!.Show();
+        }
+        catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            LogVoice($"ia-voice did not answer: {failure.Message}");
+            CurrentInputConnection?.FinishComposingText();
+            Toast.MakeText(this, Resource.String.voice_unavailable, ToastLength.Short)!.Show();
+        }
+        finally
+        {
+            transcribing = false;
+        }
+    }
+
+    /// <summary>The field let the keyboard go while dictating: the dictation dropped, the words so far left as written.</summary>
+    private void DropDictation()
+    {
+        if (dictation is not { Recording: true } going)
+        {
+            return;
+        }
+
+        going.Dispose();
+        dictation = null;
+        CurrentInputConnection?.FinishComposingText();
+        panel?.ShowListening(false, 0);
+    }
+
+    private static void LogVoice(string line) => Android.Util.Log.Info("KeyPlus", line);
 
     /// <summary>
     /// Something copied, in any app, kept in the copied list: an image, read
@@ -278,6 +456,19 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
             // Words swiped over the letters, as Gboard's (FUTO Swipe).
             panel.Swiping = SwipeOn();
+            panel.VoiceTapped += Dictate;
+            panel.Suggesting = Suggest;
+            panel.WordBeforeCaret = () =>
+            {
+                var before = CurrentInputConnection?.GetTextBeforeCursor(WordReach, 0)?.ToString() ?? "";
+                var start = before.Length;
+                while (start > 0 && char.IsLetter(before[start - 1]))
+                {
+                    start--;
+                }
+
+                return before[start..];
+            };
             panel.TextBeforeCaret = () => CurrentInputConnection?.GetTextBeforeCursorFormatted(1, 0)?.ToString();
             panel.ReplaceBeforeCaret = (length, text) =>
             {
@@ -430,44 +621,147 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>
-    /// The caret moved, or the field: a keyboard in a window that covers it,
-    /// keeping clear of the caret being on, moves above it where there is
-    /// room, else below it, <see cref="CaretGapDp"/> away. Where it stood is
-    /// kept, as after a drag: it stays clear of the text from then on.
+    /// The caret moved, or the field: a keyboard in a window that covers the
+    /// text (<see cref="Avoided"/>: the field, or the caret's line in a tall
+    /// one), keeping clear of it being on, moves above it where there is room,
+    /// else below it, <see cref="CaretGapDp"/> away, else to the side with more
+    /// room. Where it stood is kept, as after a drag: it stays clear of the
+    /// text from then on. Each choice is written to the log.
     /// </summary>
     public override void OnUpdateCursorAnchorInfo(CursorAnchorInfo? cursorAnchorInfo)
     {
         base.OnUpdateCursorAnchorInfo(cursorAnchorInfo);
-        if (cursorAnchorInfo is null || placed is not { Floating: true } || box is null || container is null || box.Height == 0 || OnHeadset
-            || !KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.AvoidCaretKey, true)
-            || float.IsNaN(cursorAnchorInfo.InsertionMarkerTop))
+        var skipped = cursorAnchorInfo is null ? "no caret told"
+            : placed is not { Floating: true } ? "docked"
+            : box is null || container is null || box.Height == 0 ? "not laid out"
+            : OnHeadset ? "on a headset"
+            : !KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.AvoidCaretKey, true) ? "turned off"
+            : float.IsNaN(cursorAnchorInfo.InsertionMarkerTop) && cursorAnchorInfo.EditorBoundsInfo?.EditorBounds is null ? "the app tells neither its caret nor its field"
+            : null;
+        if (skipped is not null || cursorAnchorInfo is null || placed is null || box is null || container is null)
         {
+            if (skipped != caretSkipLogged)
+            {
+                caretSkipLogged = skipped;
+                Android.Util.Log.Info("KeyPlus", $"Caret: not avoided, {skipped}");
+            }
+
             return;
         }
 
-        // The caret's top and bottom, from the field's own place to the screen's.
+        caretSkipLogged = null;
+
+        // The caret and the field, from the field's own place to the screen's.
+        var matrix = cursorAnchorInfo.Matrix;
         float[] caret = [cursorAnchorInfo.InsertionMarkerHorizontal, cursorAnchorInfo.InsertionMarkerTop, cursorAnchorInfo.InsertionMarkerHorizontal, cursorAnchorInfo.InsertionMarkerBottom];
-        cursorAnchorInfo.Matrix?.MapPoints(caret);
-        // Both on the room's terms, from the keyboard's window's top.
+        matrix?.MapPoints(caret);
+        Android.Graphics.RectF? field = null;
+        if (cursorAnchorInfo.EditorBoundsInfo?.EditorBounds is { } bounds)
+        {
+            field = new Android.Graphics.RectF(bounds);
+            matrix?.MapRect(field);
+        }
+
+        // All on the room's terms, from the keyboard's window's top.
         var origin = new int[2];
         container!.GetLocationOnScreen(origin);
         var at = new int[2];
         box.GetLocationOnScreen(at);
         var room = Room();
-        var (caretTop, caretBottom) = (caret[1] - origin[1], caret[3] - origin[1]);
+        var gap = Dp(CaretGapDp);
+        var avoided = Avoided(field, caret, origin, gap, room.Height);
         var top = at[1] - origin[1];
-        var covered = caretBottom > top && caretTop < top + box.Height && caret[0] >= at[0] && caret[0] <= at[0] + box.Width;
+        var covered = avoided.Bottom > top && avoided.Top < top + box.Height && avoided.Right > at[0] && avoided.Left < at[0] + box.Width;
         if (!covered)
+        {
+            if (caretSkipLogged != "clear")
+            {
+                caretSkipLogged = "clear";
+                Android.Util.Log.Info("KeyPlus", $"Text at {avoided.ToShortString()}, clear of the keyboard at {at[0]},{at[1]} ({box.Width}x{box.Height}), window from {origin[1]}");
+            }
+
+            return;
+        }
+
+        caretSkipLogged = null;
+        Android.Util.Log.Info("KeyPlus", $"Text at {avoided.ToShortString()} under the keyboard at {at[0]},{at[1]} ({box.Width}x{box.Height}): moved");
+        var above = (int)avoided.Top - gap - box.Height;
+        var below = (int)avoided.Bottom + gap;
+        placed.Y = above >= 0 ? above
+            : below + box.Height <= room.Height ? below
+            : avoided.Top >= room.Height - avoided.Bottom ? 0 : room.Height - box.Height;
+        placed.Save();
+        Place();
+    }
+
+    /// <summary>
+    /// What the keyboard keeps clear of, on the room's terms: the whole field
+    /// where the keyboard fits above or below it, so a field it covers in part
+    /// is cleared too; else, a field too tall for that (an editor), the line
+    /// the caret is on, across the field; with no field told, the caret alone.
+    /// </summary>
+    private Android.Graphics.RectF Avoided(Android.Graphics.RectF? field, float[] caret, int[] origin, int gap, int roomHeight)
+    {
+        var hasCaret = !float.IsNaN(caret[1]);
+        if (field is { } whole)
+        {
+            var shifted = new Android.Graphics.RectF(whole.Left - origin[0], whole.Top - origin[1], whole.Right - origin[0], whole.Bottom - origin[1]);
+            var fits = shifted.Top - gap - (box?.Height ?? 0) >= 0 || shifted.Bottom + gap + (box?.Height ?? 0) <= roomHeight;
+            if (fits || !hasCaret)
+            {
+                return new Android.Graphics.RectF(whole.Left, shifted.Top, whole.Right, shifted.Bottom);
+            }
+
+            return new Android.Graphics.RectF(whole.Left, caret[1] - origin[1], whole.Right, caret[3] - origin[1]);
+        }
+
+        return new Android.Graphics.RectF(caret[0], caret[1] - origin[1], caret[0] + 1, caret[3] - origin[1]);
+    }
+
+    /// <summary>Why the caret was last not avoided, written to the log once until it changes.</summary>
+    private string? caretSkipLogged;
+
+    /// <summary>Whether the open menu has moved the keyboard already: once a menu, so its keys can be reached.</summary>
+    private bool movedForMenu;
+
+    /// <summary>
+    /// Apartarse también de los menús, as on Windows: a menu (seen by the
+    /// menu watch, where the user turned it on) under a keyboard in a window,
+    /// the keyboard moves above it where there is room, else below it, else
+    /// to the side with more room, once a menu, and stays where it went.
+    /// </summary>
+    private void AvoidMenu(Android.Graphics.Rect menu)
+    {
+        if (movedForMenu || placed is not { Floating: true } || box is null || container is null || box.Height == 0 || OnHeadset
+            || !KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.AvoidMenusKey, true))
+        {
+            return;
+        }
+
+        var origin = new int[2];
+        container.GetLocationOnScreen(origin);
+        var at = new int[2];
+        box.GetLocationOnScreen(at);
+        var room = Room();
+        var (menuTop, menuBottom) = (menu.Top - origin[1], menu.Bottom - origin[1]);
+        var top = at[1] - origin[1];
+        if (menuBottom <= top || menuTop >= top + box.Height || menu.Right <= at[0] || menu.Left >= at[0] + box.Width)
         {
             return;
         }
 
         var gap = Dp(CaretGapDp);
-        var above = (int)caretTop - gap - box.Height;
-        placed.Y = above >= 0 ? above : Math.Min((int)caretBottom + gap, room.Height - box.Height);
+        var above = menuTop - gap - box.Height;
+        var below = menuBottom + gap;
+        placed.Y = above >= 0 ? above
+            : below + box.Height <= room.Height ? below
+            : menuTop >= room.Height - menuBottom ? 0 : room.Height - box.Height;
+        movedForMenu = true;
         placed.Save();
         Place();
     }
+
+    private void MenuGone() => movedForMenu = false;
 
     /// <summary>The room a keyboard in a window keeps between itself and the caret it moved away from, in dp.</summary>
     private const int CaretGapDp = 16;
@@ -896,15 +1190,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
     }
 
-    /// <summary>The system feature of Android XR's spatial windows: a headset.</summary>
-    private const string XrSpatialFeature = "android.software.xr.api.spatial";
-
     /// <summary>
     /// Whether this is a headset (Galaxy XR), which gives every keyboard a
     /// box of its own to stand in (1166 × 656 pixels on the Galaxy XR) that
-    /// the user moves: the keys fill it.
+    /// the user moves, and the user asked for the headset's keyboard there:
+    /// the keys fill it. Else, a headset too, the phone's keyboard.
     /// </summary>
-    private bool OnHeadset => PackageManager?.HasSystemFeature(XrSpatialFeature) == true;
+    private bool OnHeadset => KeyPlusPreferences.HeadsetKeyboard(this);
 
     /// <summary>
     /// The keyboard as tall as the headset's box, which sets its width: under
@@ -954,6 +1246,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnFinishInputView(bool finishingInput)
     {
         panel?.StopRepeat();
+        DropDictation();
         base.OnFinishInputView(finishingInput);
     }
 

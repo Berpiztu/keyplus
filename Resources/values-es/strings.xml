@@ -143,4 +143,19 @@
   <string name="voice_sign_in_refused">El servicio de voz no acepta el usuario y la clave</string>
   <string name="open_keyboard">Abrir el teclado</string>
   <string name="quit">Salir</string>
+  <string name="voice_permission">Permitir el micrófono</string>
+  <string name="voice_permission_summary">Escribir por voz lo necesita para oírte</string>
+  <string name="voice_permission_asked">Escribir por voz necesita el micrófono: permítelo en los ajustes</string>
+  <string name="voice_not_set">Sin poner</string>
+  <string name="menus_service_label">Berpiztu AI Keyboard: menús</string>
+  <string name="menus_service_summary">Aparta el teclado de los menús que se abren</string>
+  <string name="menus_service_description">Berpiztu AI Keyboard solo ve el campo en el que escribe. Con esto activado ve también dónde se abre un menú, de una app o una lista desplegable, para apartarse (Preferencias › Apartarse también de los menús). No lee nada de los menús.</string>
+  <string name="menus_watch_off">Dejarle ver los menús</string>
+  <string name="menus_watch_off_summary">Android solo muestra los menús de otras apps a un servicio de accesibilidad: un toque activa Berpiztu AI Keyboard: menús</string>
+  <string name="voice_lan">Red local (IP)</string>
+  <string name="voice_remote">Remoto</string>
+  <string name="voice_lan_hint">La IP del equipo con ia-voice en tu red, como 192.168.1.20; el puerto 8060 si no pones otro.</string>
+  <string name="headset_box">El teclado propio de las gafas</string>
+  <string name="headset_box_summary">En las gafas, las teclas llenando la caja que dan a un teclado; desactivado, el teclado del móvil, como cualquier teclado Android. Cambia al volver a abrir el teclado</string>
+  <string name="menus_watch_grant">Primero deja que la app active cosas por sí misma: emparéjala en Depuración inalámbrica y vuelve a pulsar Dejarle ver los menús</string>
 </resources>

@@ -52,6 +52,10 @@ public sealed class MainActivity : Activity
     private const string WirelessDebuggingKey = "toggle_adb_wireless";
 
     private const int NotificationsRequest = 1;
+    private const int MicrophoneRequest = 2;
+
+    /// <summary>The keyboard's 🎤 without the microphone's permission: this app opens on Escribir por voz and asks for it.</summary>
+    public const string AskMicrophoneExtra = "askMicrophone";
     private const int ExportRequest = 2;
     private const int ImportRequest = 3;
 
@@ -141,6 +145,20 @@ public sealed class MainActivity : Activity
         KeyPlusPreferences.SetHidden(this, false);
 #endif
         ShowStatus();
+#if KEYBOARD
+        if (Intent?.GetBooleanExtra(AskMicrophoneExtra, false) == true)
+        {
+            Intent.RemoveExtra(AskMicrophoneExtra);
+            settings!.Open(VoicePage());
+            AskMicrophone();
+        }
+#endif
+    }
+
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+        Intent = intent;
     }
 
     /// <summary>
@@ -170,6 +188,13 @@ public sealed class MainActivity : Activity
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Android.Content.PM.Permission[] grantResults)
     {
         base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+#if KEYBOARD
+        if (requestCode == MicrophoneRequest)
+        {
+            settings?.Refresh(VoicePage());
+            return;
+        }
+#endif
         if (requestCode != NotificationsRequest)
         {
             return;
@@ -291,7 +316,7 @@ public sealed class MainActivity : Activity
         [
             NotMadeRow(Resource.String.corrections, Resource.Drawable.ic_settings_spellcheck),
             new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage()), Opens: true),
-            NotMadeRow(Resource.String.voice_typing, Resource.Drawable.ic_tool_mic),
+            new(GetString(Resource.String.voice_typing), Icon: Resource.Drawable.ic_tool_mic, Tapped: () => settings!.Open(VoicePage()), Opens: true),
             NotMadeRow(Resource.String.write_fields, Resource.Drawable.ic_settings_stylus),
             NotMadeRow(Resource.String.emoji_settings, Resource.Drawable.ic_key_emoji),
         ],
@@ -371,6 +396,129 @@ public sealed class MainActivity : Activity
         })!
         .Show();
 
+    /// <summary>
+    /// Escribir por voz, the Windows keyboard's settings with Android's own:
+    /// the microphone's permission while it is missing; stopping by itself
+    /// when the user stops speaking, and after how long a silence; the
+    /// service, Local (Android's own recognizer), an ia-voice on the local
+    /// network by its IP, or a remote one at an address with its user and
+    /// password; the gain for the two ia-voice ones.
+    /// </summary>
+    private SettingsPage VoicePage()
+    {
+        var kept = KeyPlusPreferences.Global(this);
+        var allowed = CheckSelfPermission(Android.Manifest.Permission.RecordAudio) == Android.Content.PM.Permission.Granted;
+        var autoStop = VoicePreferences.AutoStop(this);
+        var choice = VoicePreferences.Choice(this);
+        var notSet = GetString(Resource.String.voice_not_set);
+        List<IReadOnlyList<SettingsRow>> groups = [];
+        if (!allowed)
+        {
+            groups.Add([new(GetString(Resource.String.voice_permission), GetString(Resource.String.voice_permission_summary), Tapped: AskMicrophone)]);
+        }
+
+        groups.Add(autoStop
+            ?
+            [
+                VoiceSwitch(),
+                new(GetString(Resource.String.voice_silence), $"{VoicePreferences.Silence(this):0.#} s", Tapped: () => ChooseVoiceStep(Resource.String.voice_silence, VoicePreferences.SilenceKey, VoicePreferences.Silences, VoicePreferences.SilenceDefault, step => $"{step:0.#} s")),
+            ]
+            : [VoiceSwitch()]);
+        groups.Add(
+        [
+            new(GetString(Resource.String.voice_service), GetString(Resource.String.voice_service_hint)),
+            new(GetString(Resource.String.voice_local), Chosen: choice == VoiceTyping.OnDevice, Tapped: () => ChooseVoiceService(VoiceTyping.OnDevice)),
+            new(GetString(Resource.String.voice_lan), Chosen: choice == VoiceTyping.OnLan, Tapped: () => ChooseVoiceService(VoiceTyping.OnLan)),
+            new(GetString(Resource.String.voice_remote), Chosen: choice == VoiceTyping.Remote, Tapped: () => ChooseVoiceService(VoiceTyping.Remote)),
+        ]);
+        var gainRow = new SettingsRow(GetString(Resource.String.voice_gain), $"×{VoicePreferences.Gain(this):0.#}",
+            Tapped: () => ChooseVoiceStep(Resource.String.voice_gain, VoicePreferences.GainKey, VoicePreferences.Gains, 1, step => $"×{step:0.#}"));
+        if (choice == VoiceTyping.OnLan)
+        {
+            groups.Add(
+            [
+                new(GetString(Resource.String.voice_lan), VoicePreferences.LanAddress(this) is { Length: > 0 } ip ? ip : GetString(Resource.String.voice_lan_hint),
+                    Tapped: () => AskText(Resource.String.voice_lan, VoicePreferences.LanAddress(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.LanAddressKey, text.Trim())!.Apply())),
+                gainRow,
+            ]);
+        }
+        else if (choice == VoiceTyping.Remote)
+        {
+            var password = VoicePreferences.Password(this);
+            groups.Add(
+            [
+                new(GetString(Resource.String.voice_address), VoicePreferences.Address(this) is { Length: > 0 } address ? address : notSet,
+                    Tapped: () => AskText(Resource.String.voice_address, VoicePreferences.Address(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.AddressKey, text.Trim())!.Apply())),
+                new(GetString(Resource.String.voice_user), VoicePreferences.User(this) is { Length: > 0 } user ? user : notSet,
+                    Tapped: () => AskText(Resource.String.voice_user, VoicePreferences.User(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.UserKey, text.Trim())!.Apply())),
+                new(GetString(Resource.String.voice_password), password.Length > 0 ? new string('•', 8) : notSet,
+                    Tapped: () => AskText(Resource.String.voice_password, "", secret: true, text => VoicePreferences.SetPassword(this, text))),
+                gainRow,
+            ]);
+        }
+
+        return new(GetString(Resource.String.voice_typing), groups);
+    }
+
+    /// <summary>Parar solo al dejar de hablar: turned, the page made again, the silence's row under it while it is on.</summary>
+    private SettingsRow VoiceSwitch() =>
+        new(GetString(Resource.String.voice_auto_stop), GetString(Resource.String.voice_auto_stop_summary), On: VoicePreferences.AutoStop(this), Switched: turned =>
+        {
+            KeyPlusPreferences.Global(this).Edit()!.PutBoolean(VoicePreferences.AutoStopKey, turned)!.Apply();
+            settings!.Refresh(VoicePage());
+        });
+
+    private void ChooseVoiceService(string choice)
+    {
+        KeyPlusPreferences.Global(this).Edit()!.PutString(VoicePreferences.ServiceKey, choice)!.Apply();
+        settings!.Refresh(VoicePage());
+    }
+
+    /// <summary>A step of a voice setting chosen among those offered, the one in use marked.</summary>
+    private void ChooseVoiceStep(int title, string key, float[] steps, float byDefault, Func<float, string> written)
+    {
+        var kept = KeyPlusPreferences.Global(this);
+        new AlertDialog.Builder(this)
+            .SetTitle(title)!
+            .SetSingleChoiceItems([.. steps.Select(written)], Array.IndexOf(steps, kept.GetFloat(key, byDefault)), (sender, chosen) =>
+            {
+                kept.Edit()!.PutFloat(key, steps[chosen.Which])!.Apply();
+                (sender as AlertDialog)?.Dismiss();
+                settings!.Refresh(VoicePage());
+            })!
+            .Show();
+    }
+
+    /// <summary>The microphone's permission asked, for 🎤.</summary>
+    private void AskMicrophone() => RequestPermissions([Android.Manifest.Permission.RecordAudio], MicrophoneRequest);
+
+    /// <summary>A text asked (an address, a user, a password, hidden as typed), the one it has offered; kept as written, an empty one too.</summary>
+    private void AskText(int title, string offered, bool secret, Action<string> written)
+    {
+        var field = new EditText(this) { Text = offered };
+        field.SetSingleLine(true);
+        if (secret)
+        {
+            field.InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationPassword;
+        }
+
+        field.SelectAll();
+        var padding = (int)(20 * Resources!.DisplayMetrics!.Density);
+        var frame = new FrameLayout(this);
+        frame.SetPadding(padding, padding / 2, padding, 0);
+        frame.AddView(field);
+        new AlertDialog.Builder(this)
+            .SetTitle(title)!
+            .SetView(frame)!
+            .SetPositiveButton(Resource.String.ok, (_, _) =>
+            {
+                written(field.Text ?? "");
+                settings!.Refresh(VoicePage());
+            })!
+            .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
+            .Show();
+    }
+
     /// <summary>A keyboard's name asked, the one it has offered; an empty one leaves it as it was.</summary>
     private void AskName(string offered, Action<string> named)
     {
@@ -419,6 +567,13 @@ public sealed class MainActivity : Activity
                 new(GetString(Resource.String.popup), GetString(Resource.String.popup_summary), On: new PanelPlacement(KeyPlusPreferences.ForScreen(this, here)).Floating, Switched: SetPopup),
                 Switch(Resource.String.dock_by_drag, Resource.String.dock_by_drag_summary, KeyPlusPreferences.DockByDragKey, byDefault: false),
                 Switch(Resource.String.avoid_caret, Resource.String.avoid_caret_summary, KeyPlusPreferences.AvoidCaretKey),
+                .. HeadsetRows(),
+                new(GetString(Resource.String.avoid_menus), GetString(Resource.String.avoid_menus_summary), On: kept.GetBoolean(KeyPlusPreferences.AvoidMenusKey, true), Switched: on =>
+                {
+                    kept.Edit()!.PutBoolean(KeyPlusPreferences.AvoidMenusKey, on)!.Apply();
+                    settings!.Refresh(PreferencesPage());
+                }),
+                .. MenuWatchRows(kept.GetBoolean(KeyPlusPreferences.AvoidMenusKey, true)),
                 new(GetString(Resource.String.reset), GetString(Resource.String.reset_summary), Tapped: () => new AlertDialog.Builder(this)
                     .SetMessage(Resource.String.reset_ask)!
                     .SetPositiveButton(Resource.String.yes, (_, _) => ResetKeyboard())!
@@ -430,6 +585,47 @@ public sealed class MainActivity : Activity
                 new(GetString(Resource.String.long_press), GetString(Resource.String.milliseconds, longPress), Tapped: ChooseLongPress),
             ],
         ]);
+    }
+
+    /// <summary>On a headset, the choice of the headset's own keyboard, in its box, over the phone's.</summary>
+    private IEnumerable<SettingsRow> HeadsetRows()
+    {
+        if (KeyPlusPreferences.IsHeadset(this))
+        {
+            yield return Switch(Resource.String.headset_box, Resource.String.headset_box_summary, KeyPlusPreferences.HeadsetBoxKey, byDefault: false);
+        }
+    }
+
+    /// <summary>Apartarse también de los menús on while the menu watch is off: the row that turns it on.</summary>
+    private IEnumerable<SettingsRow> MenuWatchRows(bool avoidMenus)
+    {
+        if (avoidMenus && !MenuWatchService.On(this))
+        {
+            yield return new(GetString(Resource.String.menus_watch_off), GetString(Resource.String.menus_watch_off_summary), Tapped: TurnOnMenuWatch);
+        }
+    }
+
+    /// <summary>
+    /// The menu watch turned on: by the app itself where it may write the
+    /// secure settings (granted once over Wireless debugging, as the keyboard
+    /// is turned on), added to the accessibility services already on; else
+    /// Wireless debugging, to grant it, the row tapped again after.
+    /// </summary>
+    private void TurnOnMenuWatch()
+    {
+        if (CheckSelfPermission(WriteSecureSettings) != Android.Content.PM.Permission.Granted)
+        {
+            Toast.MakeText(this, Resource.String.menus_watch_grant, ToastLength.Long)!.Show();
+            PairWithWirelessDebugging();
+            return;
+        }
+
+        var watch = new ComponentName(this, Java.Lang.Class.FromType(typeof(MenuWatchService))).FlattenToString();
+        var on = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledAccessibilityServices) ?? "";
+        var services = on.Split(':', StringSplitOptions.RemoveEmptyEntries).Append(watch).Distinct();
+        Settings.Secure.PutString(ContentResolver, Settings.Secure.EnabledAccessibilityServices, string.Join(':', services));
+        Settings.Secure.PutInt(ContentResolver, Settings.Secure.AccessibilityEnabled, 1);
+        settings!.Refresh(PreferencesPage());
     }
 
     /// <summary>Mostrar el teclado al escribir: turned, the page made again, the icon's choice under it while it is off.</summary>

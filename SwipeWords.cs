@@ -65,7 +65,7 @@ public static class SwipeWords
             .ToList();
 
     /// <summary>A word list's line, " word=está,f=200,flags=,…": its word and frequency; none for any other line.</summary>
-    private static (string Word, int Frequency)? Entry(string line)
+    internal static (string Word, int Frequency)? Entry(string line)
     {
         var text = line.AsSpan().TrimStart();
         if (!text.StartsWith("word="))
@@ -96,7 +96,7 @@ public static class SwipeWords
     }
 
     /// <summary>A word by its letters alone, lower case and its accents taken off ("Está" is "esta"); none where it has a letter the keyboard has no key for.</summary>
-    private static string? Letters(string word, string keys)
+    internal static string? Letters(string word, string keys)
     {
         var letters = new StringBuilder(word.Length);
         foreach (var character in word.ToLowerInvariant())
