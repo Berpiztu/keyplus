@@ -33,3 +33,4 @@ public and the library is a separate artifact in the build
 | Icon | Licence | Source |
 | --- | --- | --- |
 | The clipboard (`Resources/drawable/ic_clipboard.xml`), Material Icons' content_paste | Apache-2.0 | https://github.com/google/material-design-icons |
+| The standard keyboard's keys and toolbar (`Resources/drawable/ic_key_*.xml`, `ic_tool_*.xml`), Material Symbols (outlined) | Apache-2.0 | https://github.com/google/material-design-icons |

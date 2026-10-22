@@ -155,11 +155,11 @@ Root-owned paths without their own AGENTS.md:
 |------|--------|
 | `*.cs` | The app's sources, mapped file by file in `README.md` |
 | `Berpiztu.KeyPlus.csproj`, `AndroidManifest.xml` | Build, products, versions, signing, shared manifest |
-| `Resources/` | Icon (`drawable/`), strings (`values/`), the accessibility service and keyboard descriptors (`xml/`) |
+| `Resources/` | Icons (`drawable/`: the app's, and the standard keyboard's Material Symbols `ic_key_*`, `ic_tool_*`), strings in English and Spanish (`values/`, `values-es/`), the accessibility service and keyboard descriptors (`xml/`) |
 | `*.ps1`, `packaging/` | Build, deploy, enable and release scripts |
 | `.github/workflows/release.yml` | Release build and publishing |
 | `docs/release-notes/` | Each release's notes, required by `deploy-release.ps1` |
-| `docs/tODO/` | The owner's work lists, schematic: `layout.md` (findings with their photos and scale), `designs.md` (keyboard designs); `photos/`; `designs/`, every version of the owner's designs, one file each (`backup-designs.ps1`), and `designs/import/`, each as a file Import designs reads |
+| `docs/tODO/` | The owner's work lists, schematic: `layout.md` (findings with their photos and scale), `designs.md` (keyboard designs), `settings-languages.md` (Gboard copied: Standard and PC, the grid, the settings, languages) with `gboard-checklist.md` (what of it the owner marked to make now); `photos/` (`photos/gboard/`, Gboard as the owner's Fold and the emulator have it, the standard keyboard's model); `designs/`, every version of the owner's designs, one file each (`backup-designs.ps1`), and `designs/import/`, each as a file Import designs reads |
 | `AdbShell.java` | The Java ADB client over Wireless debugging, on libadb-android |
 | `SwipeDecoder.java`, `native/futo-swipe/`, `Assets/` | Swipe typing (keyboard only): FUTO Swipe's Java side, its native libraries per ABI with `build.sh` (built in the `futo-swipe-build` wslc container), its model and the Spanish word list |
 | `backup-designs.ps1` | Copies each attached device's changed keyboard designs to `docs/tODO/designs/` |

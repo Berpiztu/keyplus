@@ -31,6 +31,9 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// <summary>Keys made small: two rows and no title bar (doc/compact-keys.md).</summary>
     public const string CompactMode = "compact";
 
+    /// <summary>The standard keyboard, Gboard's (Berpiztu AI Keyboard on a phone).</summary>
+    public const string StandardMode = "standard";
+
     private const string FloatingKey = "floating";
 
     /// <summary>Whether the window floats, one for the screen whatever its mode: docked in three rows, it stays docked in two.</summary>

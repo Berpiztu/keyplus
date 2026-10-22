@@ -58,14 +58,15 @@ public sealed class KeyPanel
     private const string FoldedPreference = "folded";
     private const string WholeKeyboardPreference = "wholeKeyboard";
     private const string CompactPreference = "compact";
+    private const string StandardPreference = "standard";
     private const string LabelScalePreference = "labelScale";
 
     /// <summary>How much A− and A+ change the labels' size at a press, and how far.</summary>
     private const float LabelScaleStep = 0.1f;
     private const float SmallestLabelScale = 0.5f;
     private const float LargestLabelScale = 5f;
-    private const int RepeatDelayMs = 400;
-    private const int RepeatIntervalMs = 50;
+    internal const int RepeatDelayMs = 400;
+    internal const int RepeatIntervalMs = 50;
 
     /// <summary>How long a touch is held still before it moves or resizes the window.</summary>
     private const int LongPressMs = 450;
@@ -207,6 +208,13 @@ public sealed class KeyPanel
 
     /// <summary>Keys made small: two rows, no title bar.</summary>
     private readonly LinearLayout compact;
+
+    /// <summary>
+    /// The standard keyboard, Gboard's (Berpiztu AI Keyboard on a phone),
+    /// beside PC, which is the strip's keys and the whole keyboard with its
+    /// designs; none in the popup and on a headset.
+    /// </summary>
+    private readonly StandardKeyboard? standard;
     private readonly TextView makeSmall;
 
     /// <summary>The grips at the four corners, and the bar along the bottom that holds two of them.</summary>
@@ -393,7 +401,8 @@ public sealed class KeyPanel
     /// <param name="preferences">The layout of the display the panel is on.</param>
     /// <param name="clipboard">The texts copied lately, which 📋 lists.</param>
     /// <param name="lettersFirst">Whether a screen with no mode kept opens on the whole keyboard (ABC), as a keyboard opens on its letters, rather than on Keys.</param>
-    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type, bool lettersFirst = false)
+    /// <param name="standardKeys">Whether there is the standard keyboard, Gboard's, which a screen with no mode kept opens on; PC beside it.</param>
+    public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type, bool lettersFirst = false, bool standardKeys = false)
     {
         this.context = context;
         this.clipboard = clipboard;
@@ -581,6 +590,11 @@ public sealed class KeyPanel
         strip.AddView(terminal);
         strip.AddView(wholeKeyboard);
         strip.AddView(compact);
+        if (standardKeys)
+        {
+            standard = StandardKeys();
+            strip.AddView(standard, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        }
 
         // Between the keys, a long press moves or resizes the window as on a key.
         HoldToMove(strip);
@@ -597,6 +611,11 @@ public sealed class KeyPanel
         root.AddView(tab);
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
         ShowMode(preferences.GetBoolean(WholeKeyboardPreference, lettersFirst), preferences.GetBoolean(CompactPreference, false));
+        if (standard is not null && preferences.GetBoolean(StandardPreference, true))
+        {
+            ShowStandard();
+        }
+
         ApplySizes();
         ShowHeld();
     }
@@ -655,14 +674,16 @@ public sealed class KeyPanel
 
     /// <summary>The mode the window is in: the strip's keys or the whole keyboard (<see cref="PanelPlacement.KeysMode"/>, <see cref="PanelPlacement.WholeKeyboardMode"/>).</summary>
     public string Mode =>
-        ShownKeys == wholeKeyboard ? PanelPlacement.WholeKeyboardMode
+        ShownKeys == standard ? PanelPlacement.StandardMode
+        : ShownKeys == wholeKeyboard ? PanelPlacement.WholeKeyboardMode
         : ShownKeys == compact ? PanelPlacement.CompactMode
         : PanelPlacement.KeysMode;
 
     /// <summary>The keys of the mode the window is in, in sight or under the copied texts.</summary>
     private View ShownKeys =>
         covered?.Keys
-        ?? (wholeKeyboard.Visibility == ViewStates.Visible ? wholeKeyboard
+        ?? (standard is { Visibility: ViewStates.Visible } ? standard
+            : wholeKeyboard.Visibility == ViewStates.Visible ? wholeKeyboard
             : compact.Visibility == ViewStates.Visible ? compact
             : terminal);
 
@@ -975,7 +996,7 @@ public sealed class KeyPanel
             ContentDescription = description,
             Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
         };
-        view.SetTextColor(Color.White);
+        view.SetTextColor(ToolGlyph);
         view.SetTextSize(ComplexUnitType.Sp, sp);
         view.SetMaxLines(1);
         HoldToMove(view, pressed, resizes: false);
@@ -991,6 +1012,7 @@ public sealed class KeyPanel
             Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
         };
         view.SetImageResource(drawable);
+        view.ImageTintList = ColorStateList.ValueOf(ToolGlyph);
         view.SetScaleType(ImageView.ScaleType.Center);
         HoldToMove(view, pressed, resizes: false);
         return view;
@@ -1017,14 +1039,25 @@ public sealed class KeyPanel
             SetLabelScale(1f);
             UsualSizeRequested?.Invoke();
         }), "A↺");
-        if (wholeKeyboard.Visibility != ViewStates.Visible)
+        // The standard keyboard or PC, PC's own modes only within it.
+        var standardShown = standard is { Visibility: ViewStates.Visible };
+        if (standard is not null)
+        {
+            yield return new(standardShown ? "PC" : "Estándar", () => SetStandard(!standardShown), standardShown ? "PC" : "⌨");
+        }
+
+        if (!standardShown && wholeKeyboard.Visibility != ViewStates.Visible)
         {
             yield return new("Dos filas", () => SetCompact(true), "▭");
         }
 
         // Keys or the whole keyboard: the keyboard opens on its letters, so the switch is a tile, not the bar's.
         var whole = wholeKeyboard.Visibility == ViewStates.Visible;
-        yield return new(whole ? "Teclas" : "ABC", () => SetWholeKeyboard(!whole), whole ? "⌨" : "ABC");
+        if (!standardShown)
+        {
+            yield return new(whole ? "Teclas" : "ABC", () => SetWholeKeyboard(!whole), whole ? "⌨" : "ABC");
+        }
+
         yield return new("Minimizar", () => SetFolded(true), "–");
         yield return new("Ajustes de la app", OpenApp, "⚙");
     }
@@ -1264,6 +1297,11 @@ public sealed class KeyPanel
         }
 
         small &= !whole;
+        if (standard is not null)
+        {
+            standard.Visibility = ViewStates.Gone;
+        }
+
         terminal.Visibility = !whole && !small ? ViewStates.Visible : ViewStates.Gone;
         wholeKeyboard.Visibility = whole ? ViewStates.Visible : ViewStates.Gone;
         compact.Visibility = small ? ViewStates.Visible : ViewStates.Gone;
@@ -1277,7 +1315,120 @@ public sealed class KeyPanel
         FitLegendsSoon();
         switchKeys.Text = whole ? "Keys" : "ABC";
         chipSwitchKeys.Text = switchKeys.Text;
+        ApplyLook();
     }
+
+    /// <summary>The standard keyboard, or PC as it was left (the strip's keys or the whole keyboard), kept, and the mode's place and size taken.</summary>
+    private void SetStandard(bool on)
+    {
+        if (on)
+        {
+            ShowStandard();
+        }
+        else
+        {
+            ShowMode(preferences.GetBoolean(WholeKeyboardPreference, true), preferences.GetBoolean(CompactPreference, false));
+        }
+
+        preferences.Edit()!.PutBoolean(StandardPreference, on)!.Apply();
+        ModeChanged?.Invoke();
+    }
+
+    /// <summary>The standard keyboard in the keys' place, in the device's colours.</summary>
+    private void ShowStandard()
+    {
+        StopRepeat();
+        Uncover();
+        EndDesign();
+        Ask(null, null);
+        terminal.Visibility = ViewStates.Gone;
+        wholeKeyboard.Visibility = ViewStates.Gone;
+        compact.Visibility = ViewStates.Gone;
+        standard!.Visibility = ViewStates.Visible;
+        ApplyLook();
+    }
+
+    /// <summary>The ground under the keys: the device's, Gboard's, under the standard keyboard; the panel's own under PC.</summary>
+    public Color GroundColor => standard is { Visibility: ViewStates.Visible } ? standard.Colors.Ground : PanelColor;
+
+    /// <summary>The toolbar's words and signs: the device's, on the standard keyboard; white on PC.</summary>
+    private Color ToolGlyph => standard is { Visibility: ViewStates.Visible } ? standard.Colors.Glyph : Color.White;
+
+    /// <summary>The ground and the toolbars in the look of the keys in sight: Gboard's, in the device's colours, or PC's.</summary>
+    private void ApplyLook()
+    {
+        strip.SetBackgroundColor(GroundColor);
+        Tint(toolbar, ToolGlyph);
+        Tint(menuBar, ToolGlyph);
+    }
+
+    /// <summary>Every word and sign within a bar the colour given.</summary>
+    private static void Tint(View view, Color color)
+    {
+        switch (view)
+        {
+            case TextView words:
+                words.SetTextColor(color);
+                break;
+            case ImageView sign:
+                sign.ImageTintList = ColorStateList.ValueOf(color);
+                break;
+            case ViewGroup group:
+                for (var i = 0; i < group.ChildCount; i++)
+                {
+                    Tint(group.GetChildAt(i)!, color);
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The standard keyboard, its keys doing what PC's do: typing as the
+    /// panel types, a letter after a swiped word with its space first; ⌫ and
+    /// Enter as keys, Enter as the field asks where the keyboard says how
+    /// (<see cref="Enter"/>); its swipes read as the whole keyboard's.
+    /// </summary>
+    private StandardKeyboard StandardKeys() => new(context)
+    {
+        Typed = text =>
+        {
+            if (EndSwipe(text.Length == 1 && char.IsLetter(text[0])))
+            {
+                Type(" ");
+            }
+
+            Type(text);
+        },
+        Deleted = () =>
+        {
+            EndSwipe(letter: false);
+            Send(Keycode.Del, MetaKeyStates.None);
+        },
+        Entered = () =>
+        {
+            EndSwipe(letter: false);
+            if (Enter is { } enter)
+            {
+                enter();
+            }
+            else
+            {
+                Send(Keycode.Enter, MetaKeyStates.None);
+            }
+        },
+        NextLanguage = () => NotMade("🌐"),
+        NotMade = NotMade,
+        Swiped = (path, capital, capitals) => ReadSwipe(path, capital, capitals),
+        Visibility = ViewStates.Gone,
+    };
+
+    /// <summary>Enter as the field asks (Go, Search, Send…), where the keyboard can say; none, the Enter key.</summary>
+    public Action? Enter { get; set; }
+
+    /// <summary>A key or button whose part is not made yet: said so, for a moment.</summary>
+    private void NotMade(string what) =>
+        Toast.MakeText(context, context.GetString(Resource.String.not_made_yet, new Java.Lang.String(what)), ToastLength.Short)!.Show();
 
     /// <summary>
     /// A setting ⚙ shows: its words and what it does; with a sign, it shows
@@ -2615,11 +2766,22 @@ public sealed class KeyPanel
     }
 
     /// <summary>A swipe read: its likeliest word typed, the others in the toolbar to take its place.</summary>
-    private async void ReadSwipe(SwipeTrace trace)
+    private void ReadSwipe(SwipeTrace trace)
     {
-        if (Swiping is null || PathOf(trace) is not { } path)
+        if (PathOf(trace) is not { } path)
         {
             Log.Warn("KeyPlusSwipe", "A swipe was not read: a letter has no key in sight");
+            return;
+        }
+
+        ReadSwipe(path, held.HasFlag(Held.Shift), held.HasFlag(Held.CapsLock));
+    }
+
+    /// <summary>A swipe's path read: its likeliest word typed, with a capital or in capitals as Shift or the capitals' lock had it, the others in the toolbar.</summary>
+    private async void ReadSwipe(SwipePath path, bool capital, bool capitals)
+    {
+        if (Swiping is null)
+        {
             return;
         }
 
@@ -2632,7 +2794,7 @@ public sealed class KeyPanel
             }
 
             ForgetSwipe();
-            TypeSwiped(words[0]);
+            TypeSwiped(words[0], capital, capitals);
             swipeWords = words;
             ShowBars();
         }
@@ -2648,10 +2810,10 @@ public sealed class KeyPanel
     /// letter, and the next word brings its own space; in capitals with Bloq May, its
     /// first letter with Shift, which it lets go as a letter does.
     /// </summary>
-    private void TypeSwiped(string word)
+    private void TypeSwiped(string word, bool capital, bool capitals)
     {
-        var cased = held.HasFlag(Held.CapsLock) ? word.ToUpper(CultureInfo.CurrentCulture)
-            : held.HasFlag(Held.Shift) ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..]
+        var cased = capitals ? word.ToUpper(CultureInfo.CurrentCulture)
+            : capital ? char.ToUpper(word[0], CultureInfo.CurrentCulture) + word[1..]
             : word;
         SetHeld(held & (Held.CapsLock | Held.Fn));
         var before = TextBeforeCaret?.Invoke();
@@ -2681,6 +2843,18 @@ public sealed class KeyPanel
         swipedText = text;
         swipedWord = word;
         ShowBars();
+    }
+
+    /// <summary>
+    /// Something other than a swiped word typed: the swipe's words gone from
+    /// the toolbar; whether a space is owed first, a letter right after a
+    /// swiped word starting the next word, as Gboard's.
+    /// </summary>
+    private bool EndSwipe(bool letter)
+    {
+        var owed = swipedText is not null && letter;
+        ForgetSwipe();
+        return owed;
     }
 
     /// <summary>The last swipe's words gone from the toolbar, anything else having been typed.</summary>
@@ -3033,8 +3207,7 @@ public sealed class KeyPanel
         }
 
         // A letter right after a swiped word starts the next word, a space between, as Gboard's.
-        var spaceFirst = swipedText is not null && key.IsLetter;
-        ForgetSwipe();
+        var spaceFirst = EndSwipe(key.IsLetter);
 
         // With Shift held, a key that is another then (⌫ Supr) sends that one, without Shift.
         var shifted = held.HasFlag(Held.Shift) && key.ShiftCode is not null;
@@ -3387,6 +3560,11 @@ public sealed class KeyPanel
     /// <summary>Sizes the rows, the side column's keys and every label for the keys' size and the labels' size.</summary>
     private void ApplySizes()
     {
+        if (standard is not null)
+        {
+            standard.Scale = scale;
+        }
+
         foreach (var row in rowViews)
         {
             row.LayoutParameters!.Height = RowHeight;

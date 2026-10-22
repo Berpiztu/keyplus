@@ -8,6 +8,7 @@ Agreed with the owner, 21 October 2026.
 - Drag a key to another place, in its row or another; nothing else moves: it leaves a hole as wide as it, and takes a hole it is dropped on.
 - Dragged off the keys, a key goes to the trunk above them, from where it is dragged back.
 - Tap a key to mark it; − and + make it a quarter narrower or wider, the room given or taken as a hole after it.
+- Export designs / Import designs (app screen): every screen's design as one file, sent anywhere and imported on another device; the designs replaced are kept on the device first.
 - + Fila: an empty row at the top. Repartir: holes and empty rows gone, every key the same size, the longest row as wide as the keyboard. Restablecer: as made.
 
 ## To do
@@ -16,8 +17,7 @@ Agreed with the owner, 21 October 2026.
 2. Turning the device picks the vertical or horizontal half of the screen's design.
 3. Screens: phone (Fold closed) split into vertical and horizontal, as a normal phone; Fold open vertical and horizontal; DeX.
 4. From ⚙: choose a design, new (a copy of the current one), rename, delete.
-5. Export and import: a design saved as a file, sent anywhere (a folder, WhatsApp…), and imported on another device.
-6. Keys mode (the strip): not designed; it stays as it is.
+5. Keys mode (the strip): not designed; it stays as it is.
 
 ## The owner's design, 21 October 2026
 

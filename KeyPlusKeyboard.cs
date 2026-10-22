@@ -166,9 +166,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
         Watch(preferences);
         placed = new PanelPlacement(preferences);
-        // It opens on its letters the first time, as a keyboard does, on a phone and on a headset.
-        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText, lettersFirst: true)
+        // It opens on its letters the first time, as a keyboard does, on a phone and on a headset;
+        // on a phone, on the standard keyboard, Gboard's.
+        panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText, lettersFirst: true, standardKeys: !OnHeadset)
         {
+            Enter = PerformEnter,
             Dockable = false,
             PasteImage = PasteImage,
             Settings = [new("Cambiar de teclado", ShowKeyboardPicker)],
@@ -225,7 +227,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             };
             container = new FrameLayout(this);
             ground = new View(this);
-            ground.SetBackgroundColor(KeyPanel.PanelColor);
+            ground.SetBackgroundColor(panel.GroundColor);
             container.AddView(ground);
             container.AddView(box);
 
@@ -279,15 +281,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>
     /// The room the keyboard stands in: the screen's width, and its height
-    /// less the status and navigation bars; and the navigation bar's height
-    /// (Below), which the keyboard's window reaches under
-    /// and the keys keep clear of.
+    /// less the status and navigation bars; and the height the keys keep
+    /// clear of under them (Below): the keyboard's own navigation bar, where
+    /// Android draws ∨ and ⌨ (navigation_bar_frame_height, 48 dp), taller
+    /// than the gesture handle's inset, as Gboard keeps clear of it.
     /// </summary>
     private (int Width, int Height, int Below) Room()
     {
         var metrics = GetSystemService(WindowService).JavaCast<IWindowManager>()!.CurrentWindowMetrics;
         var bars = metrics.WindowInsets.GetInsetsIgnoringVisibility(WindowInsets.Type.SystemBars());
-        return (metrics.Bounds.Width(), metrics.Bounds.Height() - bars.Top - bars.Bottom, bars.Bottom);
+        var frame = Resources!.GetIdentifier("navigation_bar_frame_height", "dimen", "android");
+        var below = Math.Max(bars.Bottom, frame != 0 ? Resources.GetDimensionPixelSize(frame) : 0);
+        return (metrics.Bounds.Width(), metrics.Bounds.Height() - bars.Top - bars.Bottom, below);
     }
 
     /// <summary>
@@ -718,7 +723,26 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
+        ground?.SetBackgroundColor(panel.GroundColor);
         Place();
+    }
+
+    /// <summary>
+    /// The standard keyboard's Enter as the field asks, as Gboard's: its
+    /// action (Go, Search, Send, Next, Done) where it has one and wants it on
+    /// Enter, else a new line.
+    /// </summary>
+    private void PerformEnter()
+    {
+        var options = CurrentInputEditorInfo?.ImeOptions ?? 0;
+        var action = (ImeAction)((int)options & (int)ImeAction.ImeMaskAction);
+        if (options.HasFlag(ImeFlags.NoEnterAction) || action is ImeAction.None or ImeAction.Unspecified)
+        {
+            SendKey(Keycode.Enter, MetaKeyStates.None);
+            return;
+        }
+
+        CurrentInputConnection?.PerformEditorAction(action);
     }
 
     private void SendKey(Keycode code, MetaKeyStates meta)

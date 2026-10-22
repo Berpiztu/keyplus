@@ -98,6 +98,8 @@ a window that does.
 | [MainActivity.cs](MainActivity.cs) | The app's one screen: what it does, whether it is on, the way to Settings |
 | [AdbGrant.cs](AdbGrant.cs) | The app turned on over the device's own Wireless debugging: the pairing code taken in a notification, the ADB commands run, no computer |
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
+| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's pages as Gboard lays out Spanish: letters with the number row and the corners' symbols, ?123, =\< |
+| [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
 | [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder and the Spanish word list loaded once, a swipe read as words, accents put back |
 | [SwipeDecoder.java](SwipeDecoder.java) | FUTO Swipe's Java side over its native library ([native/futo-swipe](native/futo-swipe)), GPL-3.0 |
 | [SwipeTrail.cs](SwipeTrail.cs) | The line a swiping finger draws over the keys, thinning behind it |

@@ -6,4 +6,5 @@
   <string name="service_description">KeyPlus shows a strip of the keys a phone\'s keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, the arrows, Home, End, Page up and Page down) above the keyboard that is open, and sends them to the field being typed in. It reads where the keyboard is on the screen and nothing else.</string>
   <string name="keyboard_app_name">Berpiztu AI Keyboard</string>
   <string name="keyboard_label">Berpiztu AI Keyboard</string>
+  <string name="not_made_yet">Not made yet: %1$s</string>
 </resources>
