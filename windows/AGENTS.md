@@ -18,7 +18,9 @@
 - `Palette.cs`: the colours from Windows' accent tones and the theme's background and foreground (`UISettings`), never written by hand
 - `Program.cs`: one keyboard at a time (a mutex)
 - `Texts.cs`: the words are the Android keyboard's `strings.xml` (values, values-es), copied beside the app, read by an id's name; `AndroidNames.cs`'s `Resource` fields are named as the Android resources, and `Icons` and `Texts` find a file or a text by that name
-- Emoji: `EmojiPanel.cs` (the Android panel's layout), the list from `..\EmojiList.cs` (shared with Android) without Flags, which Windows does not draw; `EmojiArt.cs` draws each emoji in colour with Direct2D and DirectWrite (Vortice.Direct2D1), WPF's own text drawing them black and white; the recent ones in `%APPDATA%\Berpiztu\Keyboardecent-emoji.txt`; opened by the comma held or ☺ on the toolbar
+- 🎤: `VoiceTyping.cs` records the microphone (NAudio, 16 kHz mono) and sends it to ia-voice, the owner's speech service on this computer (`http://127.0.0.1:8060`, OpenAI's `/v1/audio/transcriptions`, NVIDIA Nemotron 3.5 ASR), with the keyboard language's locale (`StandardLanguage.Locale`, es-ES or en-US: the service refuses a bare es)
+- Emoji: `EmojiPanel.cs` (the Android panel's layout), the list from `..\EmojiList.cs` (shared with Android) without Flags, which Windows does not draw; `EmojiArt.cs` draws each emoji in colour with Direct2D and DirectWrite (Vortice.Direct2D1), WPF's own text drawing them black and white; the recent ones in `%APPDATA%\Berpiztu\Keyboard
+ecent-emoji.txt`; opened by the comma held or ☺ on the toolbar
 - Swipe typing: `SwipeEngine.cs` calls `keyplus_swipe.dll` (`native/futo-swipe/win-x64/`, built by `native/futo-swipe/windows/build.ps1` from FUTO's swipe-library and ExecuTorch with clang-cl, its C API in `keyplus_swipe.cpp`); the encoder and the word lists are the Android keyboard's `Assets/`, copied beside the app; the words are made with `..\SwipeWords.cs`, shared with Android; the letter forms are written to `%LOCALAPPDATA%\Berpiztu\Keyboard\futo-swipe`
 
 ## Work Guidance

@@ -26,6 +26,7 @@ public and the library is a separate artifact in the build
 | FUTO Swipe encoder model (`Assets/futo-swipe/honorable_sturgeon`) | FUTO Model Weights License 1.0 (`Assets/futo-swipe/LICENSE.md`): the app says "powered by FUTO Swipe" | https://huggingface.co/futo-org/futo-swipe |
 | ExecuTorch, inside libswipe_jni.so | BSD | https://github.com/pytorch/executorch |
 | libc++_shared.so, from the Android NDK r27d | Apache-2.0 with LLVM exceptions | https://developer.android.com/ndk |
+| NAudio.WinMM 2.2.1, with NAudio.Core, in the Windows app: the microphone for 🎤 | MIT | https://github.com/naudio/NAudio |
 | Vortice.Direct2D1 3.8.3 (Direct2D, DirectWrite and WIC for .NET), with Vortice.DXGI and SharpGen.Runtime, in the Windows app: emoji drawn in colour | MIT | https://github.com/amerkoleci/Vortice.Windows |
 | Unicode's emoji list, emoji-test.txt 15.1, its fully-qualified emoji by group (`Assets/emoji/emoji-15.1.txt`) | Unicode License v3 (terms of use) | https://unicode.org/Public/emoji/15.1/ |
 | AOSP LatinIME's Spanish and English (US) word lists (`Assets/dictionaries/es_wordlist.combined.gz`, `en_US_wordlist.combined.gz`) | AOSP LatinIME (to confirm) | https://android.googlesource.com/platform/packages/inputmethods/LatinIME |

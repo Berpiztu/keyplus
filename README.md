@@ -327,8 +327,10 @@ over the letters is read by FUTO Swipe, built for Windows
 (`native/futo-swipe/windows/build.ps1`), and its words show in the
 toolbar as on Android. The comma held, or ☺ on the toolbar, opens the
 emoji, in colour as Windows draws them (Direct2D), those typed lately
-first; Windows draws no flags, so they are left out. The grid and the
-designer are not on Windows yet.
+first; Windows draws no flags, so they are left out. 🎤 listens until
+tapped again and types what ia-voice, the speech service on this computer
+(NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation), heard. The
+grid and the designer are not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj
