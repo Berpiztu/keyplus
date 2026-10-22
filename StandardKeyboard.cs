@@ -203,6 +203,9 @@ public sealed class StandardKeyboard : View
         public List<(float X, float Y, long Time)> Points { get; } = [];
         public bool Swiping { get; set; }
         public bool LongPressed { get; set; }
+
+        /// <summary>A PC's key held: it went on by itself, so the finger lifting types nothing more.</summary>
+        public bool Repeated { get; set; }
         public bool Done { get; set; }
     }
 
@@ -644,6 +647,16 @@ public sealed class StandardKeyboard : View
             Press(hit.Key.Code);
             Hold(() => Press(hit.Key.Code), KeyPanel.RepeatIntervalMs, KeyPanel.RepeatDelayMs);
         }
+        else if (pc && hit.Key.Action is StandardAction.Type or StandardAction.Space or StandardAction.Enter)
+        {
+            // A PC's key held goes on as a PC's does, the owner's: once after the delay, then again and again;
+            // the corner's symbol is Alt Gr's. Moved off, it is a swipe and nothing repeats.
+            Hold(() =>
+            {
+                now.Repeated = true;
+                Act(now.Key);
+            }, KeyPanel.RepeatIntervalMs, KeyPanel.RepeatDelayMs);
+        }
         else if (hit.Key.Hint is not null)
         {
             Hold(() =>
@@ -759,10 +772,15 @@ public sealed class StandardKeyboard : View
         now.Done = true;
         var swiping = now.Swiping;
         var longPressed = now.LongPressed;
+        var repeated = now.Repeated;
         Forget();
         if (swiping)
         {
             ReadSwipe(now);
+        }
+        else if (repeated)
+        {
+            // Typed while held.
         }
         else if (longPressed)
         {
