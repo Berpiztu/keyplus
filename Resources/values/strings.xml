@@ -165,4 +165,15 @@
   <string name="headset_box_summary">On the glasses, the keys filling the box the headset gives a keyboard; off, the phone\'s keyboard, as any Android keyboard. It changes when the keyboard opens again</string>
   <string name="menus_watch_grant">First let the app turn things on by itself: pair it in Wireless debugging, then tap Let it see the menus again</string>
   <string name="windows_licences_summary">FUTO swipe-library (GPL-3.0), FUTO Swipe models (FUTO Model Weights License 1.0), ExecuTorch (BSD), AOSP LatinIME word lists, Vortice.Windows (MIT), NAudio (MIT), Material Symbols (Apache-2.0)</string>
+  <string name="avoid_menus_electron">VS Code and other Electron apps tell their menus only when started with --force-renderer-accessibility: add it to their shortcut (Properties › Target, after Code.exe).</string>
+  <string name="troubleshooting">Troubleshooting</string>
+  <string name="troubleshooting_vscode">VS Code menus</string>
+  <string name="troubleshooting_log">The keyboard\'s log</string>
+  <string name="troubleshooting_log_summary">What the keyboard saw and did, and every warning and error: open it when something does not work as it should.</string>
+  <string name="troubleshooting_menus">Menus no longer move the keyboard</string>
+  <string name="troubleshooting_menus_summary">Android may turn the keyboard\'s menu watch off when the app is updated: Preferences › Let it see the menus turns it on again.</string>
+  <string name="troubleshooting_vscode_button">Put it in VS Code\'s shortcuts</string>
+  <string name="troubleshooting_vscode_done">Put in %1$s shortcuts: close VS Code and open it again from one of them.</string>
+  <string name="troubleshooting_vscode_already">Every VS Code shortcut has it already.</string>
+  <string name="troubleshooting_vscode_none">No VS Code shortcut was found in the Start menu, the taskbar or on the desktop.</string>
 </resources>

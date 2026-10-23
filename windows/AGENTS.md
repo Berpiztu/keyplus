@@ -28,6 +28,7 @@
 ## Work Guidance
 
 - Not on Windows yet, saying so where asked: the grid, the designer, the clipboard, the emoji's recent row
+- VS Code (Electron) tells its menus, and its focus inside the page, only while its accessibility is on, which Electron turns on when something asks as a screen reader would and keeps until VS Code closes; the keyboard asks each window coming to the front (`FocusWatch.Awaken`: MSAA and UI Automation, Chromium's page windows too), which wakes Edge and Chrome but not VS Code. VS Code is started with `--force-renderer-accessibility` for its menus to be avoided: on the owner's PC it is in VS Code's Start menu and taskbar shortcuts (set 2026-10-23, the originals kept in the session's scratchpad); a VS Code update may write the Start menu shortcut again without it, and then menus in VS Code stop moving the keyboard until it is put back. The settings' Solución de problemas says so and puts it in the user's VS Code shortcuts with a button (`ElectronShortcuts.cs`: the Start menu's, the taskbar's and the desktop's that start Code.exe), and shows where the keyboard's log is
 
 ## Verification
 

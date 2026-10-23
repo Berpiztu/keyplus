@@ -20,6 +20,7 @@ namespace Berpiztu.KeyPlus;
 /// </summary>
 public sealed class FocusWatch : IDisposable
 {
+    private const uint ForegroundChanged = 0x0003;
     private const uint MenuPopupStart = 0x0006;
     private const uint MenuPopupEnd = 0x0007;
     private const uint ObjectShow = 0x8002;
@@ -27,6 +28,7 @@ public sealed class FocusWatch : IDisposable
     private const uint ObjectLocationChange = 0x800B;
     private const uint OutOfContext = 0;
     private const int CaretObject = -8;
+    private const int ClientObject = -4;
     private const int MenuBarRole = 2;
     private const int MenuPopupRole = 11;
     private const int MenuItemRole = 12;
@@ -54,7 +56,10 @@ public sealed class FocusWatch : IDisposable
     public FocusWatch()
     {
         seen = Seen;
-        hooks = [Hook(MenuPopupStart, MenuPopupEnd), Hook(ObjectShow, ObjectShow), Hook(ObjectFocus, ObjectFocus), Hook(ObjectLocationChange, ObjectLocationChange)];
+        hooks = [Hook(ForegroundChanged, ForegroundChanged), Hook(MenuPopupStart, MenuPopupEnd), Hook(ObjectShow, ObjectShow), Hook(ObjectFocus, ObjectFocus), Hook(ObjectLocationChange, ObjectLocationChange)];
+
+        // The window in front already, asked as those that come to the front later are.
+        Awaken(GetForegroundWindow());
         focusSettling.Tick += (_, _) =>
         {
             focusSettling.Stop();
@@ -111,6 +116,17 @@ public sealed class FocusWatch : IDisposable
 
     private void Seen(IntPtr hook, uint kind, IntPtr window, int objectId, int childId, uint thread, uint time)
     {
+        if (kind == ForegroundChanged)
+        {
+            Awaken(window);
+            return;
+        }
+
+        if (kind is MenuPopupStart or MenuPopupEnd)
+        {
+            Log.Write($"Menu: {(kind == MenuPopupStart ? "a popup started" : "a popup ended")} in {ProcessOf(window)}, object {objectId}");
+        }
+
         if (kind == MenuPopupEnd)
         {
             EndMenu();
@@ -118,8 +134,19 @@ public sealed class FocusWatch : IDisposable
         }
 
         var caret = objectId == CaretObject;
-        if ((kind is ObjectShow or ObjectLocationChange && !caret) || AccessibleObjectFromEvent(window, objectId, childId, out var accessible, out var child) != 0 || accessible is null)
+        if (kind is ObjectShow or ObjectLocationChange && !caret)
         {
+            return;
+        }
+
+        if (AccessibleObjectFromEvent(window, objectId, childId, out var accessible, out var child) != 0 || accessible is null)
+        {
+            // What the focus or a menu told but could not be read, for the log to say where it was lost.
+            if (kind is ObjectFocus or MenuPopupStart)
+            {
+                Log.Write($"Focus: {(kind == ObjectFocus ? "a focus" : "a popup")} in {ProcessOf(window)} could not be read");
+            }
+
             return;
         }
 
@@ -198,6 +225,70 @@ public sealed class FocusWatch : IDisposable
     }
 
     /// <summary>A menu ended, or the focus left it: closed unless another menu comes at once.</summary>
+    /// <summary>Windows already asked for their accessibility, so it is asked once a window.</summary>
+    private readonly HashSet<IntPtr> awakened = [];
+
+    /// <summary>
+    /// A window come to the front asked for its accessibility once, as a
+    /// screen reader or the Magnifier asks: Chromium's apps (VS Code, Edge,
+    /// Chrome) tell their focus, carets and menus only once something has
+    /// asked, and their menus are what a keyboard moves out of the way of.
+    /// </summary>
+    private void Awaken(IntPtr window)
+    {
+        if (window == IntPtr.Zero || !awakened.Add(window))
+        {
+            return;
+        }
+
+        var asked = false;
+        foreach (var part in ChromiumContent(window).Prepend(window))
+        {
+            var id = AccessibleId;
+            asked |= AccessibleObjectFromWindow(part, ClientObject, ref id, out var accessible) == 0 && accessible is not null;
+        }
+
+        // UI Automation's ask as well, Narrator's: Electron (VS Code) turns its accessibility on for a UI Automation client.
+        try
+        {
+            asked |= System.Windows.Automation.AutomationElement.FromHandle(window) is not null;
+        }
+        catch (Exception refused) when (refused is ArgumentException or InvalidOperationException or COMException or System.Windows.Automation.ElementNotAvailableException)
+        {
+            // The window went, or answers no UI Automation: the accessibility ask above stands.
+        }
+
+        if (asked)
+        {
+            Log.Write($"Focus: {ProcessOf(window)} asked for its accessibility");
+        }
+    }
+
+    /// <summary>The windows Chromium draws a page in, inside an app's window (VS Code's, Edge's): those a screen reader asks for the page's accessibility.</summary>
+    private static List<IntPtr> ChromiumContent(IntPtr window)
+    {
+        var found = new List<IntPtr>();
+        EnumChildWindows(window, (child, _) =>
+        {
+            var name = new StringBuilder(64);
+            if (GetClassName(child, name, name.Capacity) > 0 && name.ToString() == "Chrome_RenderWidgetHostHWND")
+            {
+                found.Add(child);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    private delegate bool ChildProc(IntPtr window, IntPtr data);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr parent, ChildProc callback, IntPtr data);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, StringBuilder name, int size);
+
     private void EndMenu()
     {
         if (inMenu && !menuSettling.IsEnabled)

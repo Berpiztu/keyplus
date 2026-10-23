@@ -43,6 +43,7 @@ public sealed class SettingsWindow : Window
             (Texts.Get(Resource.String.theme), ThemePage),
             (Texts.Get(Resource.String.glide), GlidePage),
             (Texts.Get(Resource.String.voice_typing), VoicePage),
+            (Texts.Get(Resource.String.troubleshooting), TroubleshootingPage),
             (Texts.Get(Resource.String.about), AboutPage),
         ];
         var list = new ListBox { Margin = new Thickness(0, MarginDp / 2, 0, 0) };
@@ -119,6 +120,29 @@ public sealed class SettingsWindow : Window
         form.Children.Add(Field(null, glide, Resource.String.glide_summary));
         form.Children.Add(Field(null, trail, Resource.String.glide_trail_summary));
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
+        return form;
+    }
+
+    /// <summary>Solución de problemas, as Android's: what an app or Windows needs for the keyboard to work with it, and where the keyboard's log is.</summary>
+    private static FrameworkElement TroubleshootingPage()
+    {
+        var form = Form(Resource.String.troubleshooting);
+        // VS Code's menus: what they need, and a button that puts it in VS Code's shortcuts, saying what it did.
+        var vscode = new StackPanel();
+        vscode.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.avoid_menus_electron), TextWrapping = TextWrapping.Wrap });
+        var done = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 12, Margin = new Thickness(0, 4, 0, 0) };
+        var put = new Button { Content = Texts.Get(Resource.String.troubleshooting_vscode_button), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, FieldGapDp / 2, 0, 0) };
+        put.Click += (_, _) =>
+        {
+            var result = ElectronShortcuts.AddSwitch();
+            done.Text = result.Changed > 0 ? Texts.Get(Resource.String.troubleshooting_vscode_done, result.Changed)
+                : result.Already > 0 ? Texts.Get(Resource.String.troubleshooting_vscode_already)
+                : Texts.Get(Resource.String.troubleshooting_vscode_none);
+        };
+        vscode.Children.Add(put);
+        vscode.Children.Add(done);
+        form.Children.Add(Field(Resource.String.troubleshooting_vscode, vscode, null));
+        form.Children.Add(Field(Resource.String.troubleshooting_log, new TextBox { Text = Log.File, IsReadOnly = true }, Resource.String.troubleshooting_log_summary));
         return form;
     }
 

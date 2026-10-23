@@ -141,6 +141,15 @@ namespace Berpiztu.KeyPlus
             public const int windows_licences_summary = 70;
             public const int keyboard_standard = 71;
             public const int keyboard_standard_pc = 72;
+            public const int avoid_menus_electron = 73;
+            public const int troubleshooting = 74;
+            public const int troubleshooting_vscode = 75;
+            public const int troubleshooting_log = 76;
+            public const int troubleshooting_log_summary = 77;
+            public const int troubleshooting_vscode_button = 78;
+            public const int troubleshooting_vscode_done = 79;
+            public const int troubleshooting_vscode_already = 80;
+            public const int troubleshooting_vscode_none = 81;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

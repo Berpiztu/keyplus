@@ -414,6 +414,11 @@ is signed in as in its `submitters.txt`. GitHub Actions only asks;
 
 ## Limits
 
+- On Windows, VS Code (and other Electron apps) tells its menus only while
+  its accessibility is on: start it with `--force-renderer-accessibility`
+  (in its shortcut; the keyboard's settings, Solución de problemas, put it
+  there with a button) for the keyboard to move out of the way of its menus.
+  Edge, Chrome and Windows' own menus need nothing.
 - Android 13 or later: before it, only a keyboard or root can send keys to
   another app.
 - An app that reads only text, not key events, ignores Esc and the arrows.

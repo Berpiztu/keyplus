@@ -329,6 +329,7 @@ public sealed class MainActivity : Activity
             NotMadeRow(Resource.String.privacy, Resource.Drawable.ic_settings_shield),
             NotMadeRow(Resource.String.share, Resource.Drawable.ic_grid_share),
             new(GetString(Resource.String.about), Icon: Resource.Drawable.ic_settings_info, Tapped: () => settings!.Open(AboutPage()), Opens: true),
+            new(GetString(Resource.String.troubleshooting), Icon: Resource.Drawable.ic_settings_help, Tapped: () => settings!.Open(TroubleshootingPage()), Opens: true),
             NotMadeRow(Resource.String.help, Resource.Drawable.ic_settings_help),
         ],
     ]);
@@ -710,6 +711,12 @@ public sealed class MainActivity : Activity
             new(GetString(Resource.String.export_designs), GetString(Resource.String.export_summary), Tapped: ExportDesigns),
             new(GetString(Resource.String.import_designs), GetString(Resource.String.import_summary), Tapped: ImportDesigns),
         ],
+    ]);
+
+    /// <summary>Solución de problemas, as Windows': what Android needs for the keyboard to work as asked.</summary>
+    private SettingsPage TroubleshootingPage() => new(GetString(Resource.String.troubleshooting),
+    [
+        [new(GetString(Resource.String.troubleshooting_menus), GetString(Resource.String.troubleshooting_menus_summary))],
     ]);
 
     private SettingsPage AboutPage() => new(GetString(Resource.String.about),

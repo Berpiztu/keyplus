@@ -159,4 +159,15 @@
   <string name="headset_box_summary">En las gafas, las teclas llenando la caja que dan a un teclado; desactivado, el teclado del móvil, como cualquier teclado Android. Cambia al volver a abrir el teclado</string>
   <string name="menus_watch_grant">Primero deja que la app active cosas por sí misma: emparéjala en Depuración inalámbrica y vuelve a pulsar Dejarle ver los menús</string>
   <string name="windows_licences_summary">FUTO swipe-library (GPL-3.0), modelos FUTO Swipe (FUTO Model Weights License 1.0), ExecuTorch (BSD), listas de palabras de AOSP LatinIME, Vortice.Windows (MIT), NAudio (MIT), Material Symbols (Apache-2.0)</string>
+  <string name="avoid_menus_electron">VS Code y otras apps de Electron solo avisan de sus menús si se abren con --force-renderer-accessibility: añádelo en su acceso directo (Propiedades › Destino, detrás de Code.exe).</string>
+  <string name="troubleshooting">Solución de problemas</string>
+  <string name="troubleshooting_vscode">Menús de VS Code</string>
+  <string name="troubleshooting_log">El registro del teclado</string>
+  <string name="troubleshooting_log_summary">Lo que el teclado vio e hizo, y cada aviso y error: ábrelo cuando algo no funcione como debe.</string>
+  <string name="troubleshooting_menus">Los menús ya no apartan el teclado</string>
+  <string name="troubleshooting_menus_summary">Android puede apagar el servicio de menús del teclado al actualizar la app: Preferencias › Dejarle ver los menús lo vuelve a encender.</string>
+  <string name="troubleshooting_vscode_button">Ponerlo en los accesos directos de VS Code</string>
+  <string name="troubleshooting_vscode_done">Puesto en %1$s accesos directos: cierra VS Code y vuelve a abrirlo desde uno de ellos.</string>
+  <string name="troubleshooting_vscode_already">Todos los accesos directos de VS Code ya lo tienen.</string>
+  <string name="troubleshooting_vscode_none">No se encontró ningún acceso directo de VS Code en el menú Inicio, la barra de tareas ni el escritorio.</string>
 </resources>
