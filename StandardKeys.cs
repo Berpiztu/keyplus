@@ -48,7 +48,10 @@ public enum StandardLook
 /// types (and with Shift), the symbol drawn in its corner that a long press
 /// types, its width in keys, how it is drawn and its icon, if a sign is drawn
 /// in place of its label; on a PC's, the key code it sends and whether it
-/// is a dead key, the accent it types going on the next letter.
+/// is a dead key, the accent it types going on the next letter. A shaped
+/// key (an Enter of + Tecla) goes on into the row below: its lower part,
+/// as wide as Below, right-aligned under it, laid there as a key of that
+/// row marked Lower, which does what the key does and shows no label.
 /// </summary>
 public sealed record StandardKey(
     string Label,
@@ -61,7 +64,9 @@ public sealed record StandardKey(
     int Icon = 0,
     int HintIcon = 0,
     Keycode Code = Keycode.Unknown,
-    bool Dead = false)
+    bool Dead = false,
+    float Below = 0f,
+    bool Lower = false)
 {
     /// <summary>Whether held it goes on and on, as a PC's arrows do.</summary>
     public bool Repeats => Code is Keycode.DpadLeft or Keycode.DpadRight or Keycode.DpadUp or Keycode.DpadDown;
@@ -280,6 +285,9 @@ public static class StandardKeys
 
     public static readonly StandardKey Gap = new("", StandardAction.Key, Look: StandardLook.Gap, Code: Keycode.Unknown);
 
+    /// <summary>A shaped key's lower part, by its id in the row below it in a design.</summary>
+    public const string BelowId = "below";
+
     /// <summary>
     /// The keys a design can add (Diseñar › + Tecla), by group as the list
     /// shows them, each by its id: a PC's that the standard keyboards may
@@ -317,10 +325,28 @@ public static class StandardKeys
             "up" => PcKey("↑", Keycode.DpadUp),
             "down" => PcKey("↓", Keycode.DpadDown),
             "right" => PcKey("→", Keycode.DpadRight),
+            "enter" => Enter(),
+            "enterIso" => ShapedEnter(IsoEnterBelow),
+            "enterBig" => ShapedEnter(BigEnterBelow),
+            "enterSquare" => ShapedEnter(WideWidth),
             _ when id.StartsWith('f') && int.TryParse(id[1..], out var number) && number is >= 1 and <= 12 => PcKey($"F{number}", Keycode.F1 + (number - 1)),
             _ => null,
         };
     }
+
+    /// <summary>
+    /// The shaped Enters' lower parts, under a top a key and a half wide, as
+    /// a PC's: ISO's narrower (1.25, Spain's), the old ANSI L's wider (2.25,
+    /// as a PC's Enter row); the square one as wide as its top.
+    /// </summary>
+    private const float IsoEnterBelow = 1.25f;
+    private const float BigEnterBelow = 2.25f;
+
+    /// <summary>An Enter two rows tall, its top a key and a half wide and its lower part as wide as asked, drawn as a function key, not a pill.</summary>
+    private static StandardKey ShapedEnter(float below) => Enter() with { Look = StandardLook.Function, Below = below };
+
+    /// <summary>The shapes a marked Enter goes through, clicked again while designing (by their ids for <see cref="Extra"/>): one row, ISO's L, the old ANSI L, square, one row again.</summary>
+    public static readonly string[] EnterShapes = ["enter", "enterIso", "enterBig", "enterSquare"];
 
     /// <summary>Whether a page has a key a design can add already: a PC's key by the code it sends, a modifier by what it does.</summary>
     public static bool HasExtra(IReadOnlyList<IReadOnlyList<StandardKey>> page, string id, StandardLanguage language) =>

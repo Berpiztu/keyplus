@@ -328,6 +328,7 @@ public sealed class StandardKeyboard : View
         laid = [];
         places = [];
         rowBands = [];
+        joints = [];
         wordSizes.Clear();
         var rows = Rows(page);
         var side = Dp(SideDp);
@@ -344,6 +345,7 @@ public sealed class StandardKeyboard : View
             ? [Dp(NumberRowDp), .. Enumerable.Repeat(LetterRow, rows.Count - 1)]
             : Enumerable.Repeat((Height - Dp(TopDp) - Dp(BottomDp) - ((rows.Count - 1) * rowGap)) / rows.Count, rows.Count).ToArray();
         var top = Dp(TopDp);
+        List<int> shapedAbove = [];
         for (var r = 0; r < rows.Count; r++)
         {
             var row = rows[r];
@@ -351,15 +353,35 @@ public sealed class StandardKeyboard : View
             var rowUnit = keys > across ? (Width - (2 * side) - ((keys - 1) * gap)) / keys : unit;
             var rowWidth = (keys * rowUnit) + ((keys - 1) * gap);
             var x = (Width - rowWidth) / 2;
+            // A row with a shaped key's lower part stands so the part is right-aligned under the key.
+            if (row.Select((key, i) => key.Lower ? i : -1).FirstOrDefault(i => i >= 0, -1) is var lowerAt and >= 0 && shapedAbove.Count > 0)
+            {
+                var lowerRight = x + row.Take(lowerAt + 1).Sum(key => key.Width * (rowUnit + gap)) - gap;
+                x += laid[shapedAbove[0]].Box.Right - lowerRight;
+            }
+
+            List<int> shaped = [];
+            var lowers = 0;
             for (var i = 0; i < row.Count; i++)
             {
                 var key = row[i];
                 var keyWidth = (key.Width * rowUnit) + ((key.Width - 1) * gap);
                 laid.Add((key, new RectF(x, top, x + keyWidth, top + heights[r])));
                 places.Add((r, i));
+                if (key.Below > 0)
+                {
+                    shaped.Add(laid.Count - 1);
+                }
+
+                if (key.Lower && lowers < shapedAbove.Count)
+                {
+                    joints.Add((shapedAbove[lowers++], laid.Count - 1));
+                }
+
                 x += keyWidth + gap;
             }
 
+            shapedAbove = shaped;
             rowBands.Add((top, top + heights[r]));
             top += heights[r] + rowGap;
         }
@@ -384,6 +406,14 @@ public sealed class StandardKeyboard : View
     protected override void OnDraw(Canvas canvas)
     {
         canvas.DrawColor(colors.Ground);
+        foreach (var (upper, lower) in joints)
+        {
+            if (!(designing && dragged is { } moving && (moving.Place == places[upper] || moving.Place == places[lower])))
+            {
+                DrawJoint(canvas, upper, lower);
+            }
+        }
+
         for (var i = 0; i < laid.Count; i++)
         {
             if (designing && dragged is { } held && held.Place == places[i])
@@ -398,6 +428,33 @@ public sealed class StandardKeyboard : View
         {
             DrawDesigning(canvas);
         }
+    }
+
+    /// <summary>A key's ground: marked blue while designing, a modifier on, a function key's tint or a letter's, darker while pressed.</summary>
+    private Color KeyGround(StandardKey key, bool marked)
+    {
+        var pressed = !designing && finger is { Swiping: false } now && now.Key == key;
+        return marked ? colors.Primary
+            : IsOn(key) ? colors.GridCircle
+            : key.Look != StandardLook.Letter ? (pressed ? colors.FunctionPressed : colors.Function)
+            : (pressed ? colors.Function : colors.Key);
+    }
+
+    /// <summary>A shaped key's two parts drawn as one: the room between them filled where both are across, into their corners, so the edge they share runs straight.</summary>
+    private void DrawJoint(Canvas canvas, int upper, int lower)
+    {
+        var top = laid[upper].Box;
+        var bottom = laid[lower].Box;
+        var left = Math.Max(top.Left, bottom.Left);
+        var right = Math.Min(top.Right, bottom.Right);
+        if (right <= left)
+        {
+            return;
+        }
+
+        var corner = Dp(CornerDp);
+        fill.Color = KeyGround(laid[upper].Key, designing && (selected == places[upper] || selected == places[lower]));
+        canvas.DrawRect(left, top.Bottom - corner, right, bottom.Top + corner, fill);
     }
 
     private void DrawKey(Canvas canvas, StandardKey key, RectF box, bool marked = false)
@@ -416,14 +473,15 @@ public sealed class StandardKeyboard : View
             return;
         }
 
-        var pressed = !designing && finger is { Swiping: false } now && now.Key == key;
         var function = key.Look != StandardLook.Letter;
-        fill.Color = marked ? colors.Primary
-            : IsOn(key) ? colors.GridCircle
-            : function ? (pressed ? colors.FunctionPressed : colors.Function)
-            : (pressed ? colors.Function : colors.Key);
+        fill.Color = KeyGround(key, marked);
         var corner = key.Look == StandardLook.Pill ? box.Height() / 2 : Dp(CornerDp);
         canvas.DrawRoundRect(box, corner, corner, fill);
+        if (key.Lower)
+        {
+            return;
+        }
+
         var glyph = marked ? colors.OnPrimary : function ? colors.FunctionGlyph : colors.Glyph;
         var h = LetterRow * glyphScale;
 
@@ -1079,6 +1137,9 @@ public sealed class StandardKeyboard : View
     /// <summary>Each row's top and bottom as laid out, an empty one's too.</summary>
     private List<(float Top, float Bottom)> rowBands = [];
 
+    /// <summary>Each shaped key's two parts as laid out, by their places in <see cref="laid"/>, drawn joined.</summary>
+    private List<(int Top, int Lower)> joints = [];
+
     private StandardDesign? design;
     private bool designing;
 
@@ -1150,7 +1211,7 @@ public sealed class StandardKeyboard : View
         }
         else
         {
-            design.Rows[at.Row].RemoveAt(at.Index);
+            design.Remove(at.Row, at.Index);
             selected = design.Rows[at.Row].Count == 0 ? (at.Row, -1) : (at.Row, Math.Min(at.Index, design.Rows[at.Row].Count - 1));
         }
 
@@ -1181,7 +1242,15 @@ public sealed class StandardKeyboard : View
     }
 
     /// <summary>The key added let go, as a key moved.</summary>
-    private void PlaceAdded(LooseKey loose, float x, float y) => LetGo(new DesignedKey("x:" + loose.Id, loose.Key.Width), null, x, y);
+    private void PlaceAdded(LooseKey loose, float x, float y)
+    {
+        if (!LetGo(new DesignedKey("x:" + loose.Id, loose.Key.Width), null, x, y))
+        {
+            // In the last row a shaped key has no row for its lower part: it stays loose where it was let go.
+            added = loose with { X = x, Y = y, Held = false };
+            Invalidate();
+        }
+    }
 
     /// <summary>+ Columna: a new column at the right, as + Fila adds a row at the top: a hole a key wide at the end of every row with keys, to be filled; the top one marked.</summary>
     public void AddColumn()
@@ -1209,13 +1278,15 @@ public sealed class StandardKeyboard : View
     /// <summary>
     /// A key let go, moved (from its place) or added: on a hole, in the
     /// hole's place; else into the row under it, before the first key whose
-    /// middle is right of it; marked.
+    /// middle is right of it; a shaped key starting there, its lower part in
+    /// the row below, ending under its right edge; marked. False where
+    /// refused: a shaped key in the last row.
     /// </summary>
-    private void LetGo(DesignedKey key, (int Row, int Index)? from, float x, float y)
+    private bool LetGo(DesignedKey key, (int Row, int Index)? from, float x, float y)
     {
         if (design is null)
         {
-            return;
+            return false;
         }
 
         if (design.Rows.Count == 0)
@@ -1226,27 +1297,24 @@ public sealed class StandardKeyboard : View
         var gap = laid.FindIndex(laidKey => laidKey.Key.Look == StandardLook.Gap && laidKey.Box.Contains(x, y));
         var fills = gap >= 0 && places[gap] != from;
         var row = fills ? places[gap].Row : Math.Max(0, RowAt(y));
-        var index = fills ? places[gap].Index : laid.Where((laidKey, i) => places[i].Row == row && places[i] != from && laidKey.Box.CenterX() < x).Count();
-        if (from is { } left)
+        // Counted with the key moved still in its place: the design puts it first and takes it out after.
+        var index = fills ? places[gap].Index : laid.Where((laidKey, i) => places[i].Row == row && laidKey.Box.CenterX() < x).Count();
+        var lowerIndex = 0;
+        if (StandardDesign.Shaped(key.Id) && StandardKeys.Extra(key.Id[2..], language) is { } shape)
         {
-            design.Rows[left.Row].RemoveAt(left.Index);
-            if (fills && left.Row == row && left.Index < index)
-            {
-                index--;
-            }
+            var right = x + (key.Width * keyUnit) + ((key.Width - 1) * Dp(KeyGapDp));
+            var lowerMiddle = right - (((shape.Below * keyUnit) + ((shape.Below - 1) * Dp(KeyGapDp))) / 2);
+            lowerIndex = laid.Where((laidKey, i) => places[i].Row == row + 1 && laidKey.Box.CenterX() < lowerMiddle).Count();
         }
 
-        if (fills)
+        if (design.Put(key, row, index, fills, lowerIndex, from) is not { } now)
         {
-            design.Rows[row][index] = key;
-        }
-        else
-        {
-            design.Rows[row].Insert(Math.Min(index, design.Rows[row].Count), key);
+            return false;
         }
 
-        selected = (row, Math.Min(index, design.Rows[row].Count - 1));
+        selected = now;
         Redesigned();
+        return true;
     }
 
     /// <summary>+ Fila: an empty row over the marked key's row, or at the top, as the owner asked; marked.</summary>
@@ -1374,7 +1442,12 @@ public sealed class StandardKeyboard : View
             return;
         }
 
-        LetGo(design.Rows[from.Row][from.Index], from, x, y);
+        // A shaped key's lower part moves the whole key.
+        var top = design.UpperOf(from.Row, from.Index) ?? from;
+        if (!LetGo(design.Rows[top.Row][top.Index], top, x, y))
+        {
+            Invalidate();
+        }
     }
 
     /// <summary>While designing: each empty row outlined, to be marked and filled; the key dragged, or the one added, under the finger.</summary>

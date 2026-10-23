@@ -57,6 +57,15 @@ Proposed: one key unit for every row, from the design's widest row; a
 shorter row centred; widening a key of the widest row makes the whole
 keyboard a little smaller, its proportions kept.
 
+## Later: more keyboards the keyboard comes with
+
+Asked by the owner on 2026-10-23, once the designer is done: keyboards
+made after the usual PC standards, built in beside Estándar and Estándar
+PC: the owner's own design as one of them, and a full one with the
+numeric pad at the right. The owner chose on 2026-10-23 the design in
+`designs/2026-10-23_174700_Windows-IAMAX_keyboards.json` (ISO Enter,
+Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
+
 ## Where things stand
 
 - 1 and 2 are written on `futo-swipe` (brought up to `main` first), built,

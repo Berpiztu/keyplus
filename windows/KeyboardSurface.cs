@@ -379,13 +379,15 @@ public sealed class KeyboardSurface : FrameworkElement
     /// The page's keys in place, as the Android keyboard lays them: the
     /// widest row of the keyboard as made across, a design or not, Gboard's
     /// gaps, the top row lower; a row designed wider than that squeezes its
-    /// own keys alone, so a key widened takes its room from its row.
+    /// own keys alone, so a key widened takes its room from its row; a shaped
+    /// key's top sized after its lower part (<see cref="KeyWidths"/>).
     /// </summary>
     private void Lay()
     {
         laid = [];
         places = [];
         rowBands = [];
+        joints = [];
         wordSizes.Clear();
         var rows = Rows(page);
         var width = ActualWidth;
@@ -405,27 +407,83 @@ public sealed class KeyboardSurface : FrameworkElement
             ? [NumberRowDp * RowScale, .. Enumerable.Repeat(LetterRow, Math.Max(0, rows.Count - 1))]
             : [.. Enumerable.Repeat((ActualHeight - TopDp - BottomDp - ((rows.Count - 1) * RowGapDp)) / rows.Count, rows.Count)];
         var top = TopDp;
+        List<int> shapedAbove = [];
         for (var r = 0; r < rows.Count; r++)
         {
-            var keys = rows[r].Sum(key => (double)key.Width);
-            var rowUnit = keys > across ? (width - (2 * SideDp) - ((keys - 1) * KeyGapDp)) / keys : unit;
-            var rowWidth = (keys * rowUnit) + ((keys - 1) * KeyGapDp);
+            var widths = KeyWidths(rows, r, across, unit, width);
+            var rowWidth = widths.Sum() + ((widths.Length - 1) * KeyGapDp);
             var x = (width - rowWidth) / 2;
+            // A row with a shaped key's lower part stands so the part is right-aligned under the key.
+            if (rows[r].Select((key, i) => key.Lower ? i : -1).FirstOrDefault(i => i >= 0, -1) is var lowerAt and >= 0 && shapedAbove.Count > 0)
+            {
+                var lowerRight = x + widths.Take(lowerAt + 1).Sum() + (lowerAt * KeyGapDp);
+                x += laid[shapedAbove[0]].Box.Right - lowerRight;
+            }
+
+            List<int> shaped = [];
+            var lowers = 0;
             for (var i = 0; i < rows[r].Count; i++)
             {
                 var key = rows[r][i];
-                var keyWidth = (key.Width * rowUnit) + ((key.Width - 1) * KeyGapDp);
+                var keyWidth = widths[i];
                 laid.Add((key, new Rect(x, top, Math.Max(1, keyWidth), Math.Max(1, heights[r]))));
                 places.Add((r, i));
+                if (key.Below > 0)
+                {
+                    shaped.Add(laid.Count - 1);
+                }
+
+                if (key.Lower && lowers < shapedAbove.Count)
+                {
+                    joints.Add((shapedAbove[lowers++], laid.Count - 1));
+                }
+
                 x += keyWidth + KeyGapDp;
             }
 
+            shapedAbove = shaped;
             rowBands.Add((top, top + heights[r]));
             top += heights[r] + RowGapDp;
         }
 
         SizeWords();
         InvalidateVisual();
+    }
+
+    /// <summary>
+    /// A row's keys' widths: each key's width in keys at the row's key size,
+    /// the keyboard as made's widest row across, a row longer than that
+    /// squeezing its own keys alone; a shaped key's top as its lower part
+    /// makes it, its width in keys at the size of the row below, where that
+    /// part is, so the two grow and shrink alike and the shape is kept, the
+    /// other keys of its row sharing what is left.
+    /// </summary>
+    private double[] KeyWidths(IReadOnlyList<IReadOnlyList<StandardKey>> rows, int r, double across, double unit, double width)
+    {
+        var row = rows[r];
+        Dictionary<int, double> following = [];
+        if (r + 1 < rows.Count && rows[r + 1].Where(key => key.Lower).ToList() is { Count: > 0 } lowers)
+        {
+            var belowUnit = RowUnit(rows[r + 1], across, unit, width);
+            var tops = row.Select((key, i) => key.Below > 0 ? i : -1).Where(i => i >= 0).ToList();
+            for (var k = 0; k < tops.Count && k < lowers.Count; k++)
+            {
+                following[tops[k]] = (row[tops[k]].Width * belowUnit) + ((lowers[k].Width - 1) * KeyGapDp);
+            }
+        }
+
+        var others = row.Where((_, i) => !following.ContainsKey(i)).ToList();
+        var keys = others.Sum(key => (double)key.Width);
+        var room = width - (2 * SideDp) - following.Values.Sum() - ((keys - others.Count + row.Count - 1) * KeyGapDp);
+        var rowUnit = keys > 0 && keys * unit > room ? room / keys : unit;
+        return [.. row.Select((key, i) => following.TryGetValue(i, out var made) ? made : (key.Width * rowUnit) + ((key.Width - 1) * KeyGapDp))];
+    }
+
+    /// <summary>A row's key size: the keyboard's, or smaller where the row is longer than the keyboard as made's widest.</summary>
+    private double RowUnit(IReadOnlyList<StandardKey> row, double across, double unit, double width)
+    {
+        var keys = row.Sum(key => (double)key.Width);
+        return keys > across ? (width - (2 * SideDp) - ((keys - 1) * KeyGapDp)) / keys : unit;
     }
 
     /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made.</summary>
@@ -467,14 +525,23 @@ public sealed class KeyboardSurface : FrameworkElement
     protected override void OnRender(DrawingContext context)
     {
         context.DrawRectangle(new SolidColorBrush(colors.Ground), null, new Rect(RenderSize));
-        for (var i = 0; i < laid.Count; i++)
+        foreach (var (upper, lower) in joints)
+        {
+            if (!(designing && dragged is { } moving && (moving.Place == places[upper] || moving.Place == places[lower])))
+            {
+                DrawJoint(context, upper, lower);
+            }
+        }
+
+        // Shaped keys' lower parts first, so the label their top draws across both stays on top.
+        foreach (var i in Enumerable.Range(0, laid.Count).OrderBy(i => laid[i].Key.Lower ? 0 : 1))
         {
             if (designing && dragged is { } held && held.Place == places[i])
             {
                 continue;
             }
 
-            DrawKey(context, laid[i].Key, laid[i].Box, designing && selected == places[i]);
+            DrawKey(context, laid[i].Key, laid[i].Box, Marked(i), LabelAt(i));
         }
 
         if (designing)
@@ -488,7 +555,52 @@ public sealed class KeyboardSurface : FrameworkElement
         }
     }
 
-    private void DrawKey(DrawingContext context, StandardKey key, Rect box, bool marked = false)
+    /// <summary>A key's ground: marked blue while designing, a modifier on, a function key's tint or a letter's, darker while pressed.</summary>
+    private Color KeyGround(StandardKey key, bool marked)
+    {
+        var down = !designing && pressed is { Swiping: false } now && now.Key == key;
+        return marked ? colors.Primary
+            : IsOn(key) ? colors.On
+            : key.Look != StandardLook.Letter ? (down ? colors.FunctionPressed : colors.Function)
+            : (down ? colors.Function : colors.Key);
+    }
+
+    /// <summary>A shaped key's two parts drawn as one: the room between them filled where both are across, into their corners, so the edge they share runs straight.</summary>
+    private void DrawJoint(DrawingContext context, int upper, int lower)
+    {
+        var top = laid[upper].Box;
+        var bottom = laid[lower].Box;
+        var left = Math.Max(top.Left, bottom.Left);
+        var right = Math.Min(top.Right, bottom.Right);
+        if (right <= left)
+        {
+            return;
+        }
+
+        var ground = KeyGround(laid[upper].Key, Marked(upper));
+        context.DrawRectangle(new SolidColorBrush(ground), null, new Rect(left, top.Bottom - CornerDp, right - left, bottom.Top - top.Bottom + (2 * CornerDp)));
+    }
+
+    /// <summary>Whether a laid key is marked while designing: itself, or the other part of its shaped key, the whole key marked as one.</summary>
+    private bool Marked(int i) =>
+        designing && (selected == places[i] || joints.Any(joint => (joint.Top == i || joint.Lower == i) && (selected == places[joint.Top] || selected == places[joint.Lower])));
+
+    /// <summary>Where a shaped key's label goes: across, the middle of where its two parts both are; down, halfway from its top to its bottom, inside the shape whichever it is. None for any other key, labelled in its box's middle.</summary>
+    private Point? LabelAt(int i)
+    {
+        var at = joints.FindIndex(joint => joint.Top == i);
+        if (at < 0)
+        {
+            return null;
+        }
+
+        var joint = joints[at];
+        var top = laid[joint.Top].Box;
+        var bottom = laid[joint.Lower].Box;
+        return new Point((Math.Max(top.Left, bottom.Left) + Math.Min(top.Right, bottom.Right)) / 2, (top.Top + bottom.Bottom) / 2);
+    }
+
+    private void DrawKey(DrawingContext context, StandardKey key, Rect box, bool marked = false, Point? labelAt = null)
     {
         if (key.Look == StandardLook.Gap)
         {
@@ -500,17 +612,17 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
-        var down = !designing && pressed is { Swiping: false } now && now.Key == key;
         var function = key.Look != StandardLook.Letter;
-        var ground = marked ? colors.Primary
-            : IsOn(key) ? colors.On
-            : function ? (down ? colors.FunctionPressed : colors.Function)
-            : (down ? colors.Function : colors.Key);
         var corner = key.Look == StandardLook.Pill ? box.Height / 2 : CornerDp;
-        context.DrawRoundedRectangle(new SolidColorBrush(ground), null, box, corner, corner);
+        context.DrawRoundedRectangle(new SolidColorBrush(KeyGround(key, marked)), null, box, corner, corner);
+        if (key.Lower)
+        {
+            return;
+        }
+
         var glyph = marked ? colors.OnPrimary : function ? colors.FunctionGlyph : colors.Glyph;
         var h = LetterRow * glyphScale;
-        var centre = new Point(box.X + (box.Width / 2), box.Y + (box.Height / 2));
+        var centre = labelAt ?? new Point(box.X + (box.Width / 2), box.Y + (box.Height / 2));
 
         if (key.Action == StandardAction.Shift)
         {
@@ -1090,6 +1202,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Each row's top and bottom as laid out, an empty one's too.</summary>
     private List<(double Top, double Bottom)> rowBands = [];
 
+    /// <summary>Each shaped key's two parts as laid out, by their places in <see cref="laid"/>, drawn joined.</summary>
+    private List<(int Top, int Lower)> joints = [];
+
     private StandardDesign? design;
     private bool designing;
 
@@ -1154,9 +1269,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The design came to have more or fewer rows, told before the keys are laid again: the window made as tall as they need.</summary>
     public event Action? RowsChanged;
 
-    /// <summary>−, +: the marked key a quarter of a key narrower or wider.</summary>
+    /// <summary>−, +: the marked key a quarter of a key narrower or wider, a shaped Enter's two parts alike.</summary>
     public void ResizeMarked(bool wider) => ChangeMarked((row, index) =>
-        design!.Rows[row][index] = design.Rows[row][index] with { Width = Math.Clamp(design.Rows[row][index].Width + (wider ? WidthStep : -WidthStep), LeastKeyWidth, MostKeyWidth) });
+        design!.Resize(row, index, wider ? WidthStep : -WidthStep, LeastKeyWidth, MostKeyWidth));
 
     /// <summary>Quitar: the marked key out; a marked empty row out.</summary>
     public void RemoveMarked()
@@ -1173,7 +1288,7 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else
         {
-            design.Rows[at.Row].RemoveAt(at.Index);
+            design.Remove(at.Row, at.Index);
             selected = design.Rows[at.Row].Count == 0 ? (at.Row, -1) : (at.Row, Math.Min(at.Index, design.Rows[at.Row].Count - 1));
         }
 
@@ -1206,6 +1321,34 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The key added let go, as a key moved.</summary>
     private void PlaceAdded(LooseKey loose, Point point) => LetGo(new DesignedKey("x:" + loose.Id, loose.Key.Width), null, point);
 
+    /// <summary>A marked Enter clicked again: its next shape, a shaped one's top going up right-aligned over the Enter's own part; false for any other key.</summary>
+    private bool ReshapeEnter((int Row, int Index) at)
+    {
+        if (design is null)
+        {
+            return false;
+        }
+
+        var made = StandardKeys.Page(pc ? StandardPage.Pc : StandardPage.Letters, language);
+        var own = design.LowerOf(at.Row, at.Index) ?? at;
+        if (places.IndexOf(own) is not (var laidAt and >= 0))
+        {
+            return false;
+        }
+
+        // The top goes in over the Enter's right edge: placed by its right half, whatever its width.
+        var topMiddle = laid[laidAt].Box.Right - (keyUnit / 2);
+        var upperIndex = laid.Where((laidKey, i) => places[i].Row == own.Row - 1 && Middle(laidKey.Box) < topMiddle).Count();
+        if (design.Reshape(at.Row, at.Index, made, language, upperIndex) is not { } now)
+        {
+            return false;
+        }
+
+        selected = now;
+        Redesigned();
+        return true;
+    }
+
     /// <summary>+ Columna: a new column at the right, as + Fila adds a row at the top: a hole a key wide at the end of every row with keys, to be filled; the top one marked.</summary>
     public void AddColumn()
     {
@@ -1232,13 +1375,15 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>
     /// A key let go, moved (from its place) or added: on a hole, in the
     /// hole's place; else into the row under it, before the first key whose
-    /// middle is right of it; marked.
+    /// middle is right of it; a shaped key starting there, its lower part in
+    /// the row below, ending under its right edge; marked. False where
+    /// refused: a shaped key in the last row.
     /// </summary>
-    private void LetGo(DesignedKey key, (int Row, int Index)? from, Point point)
+    private bool LetGo(DesignedKey key, (int Row, int Index)? from, Point point)
     {
         if (design is null)
         {
-            return;
+            return false;
         }
 
         if (design.Rows.Count == 0)
@@ -1249,27 +1394,24 @@ public sealed class KeyboardSurface : FrameworkElement
         var gap = laid.FindIndex(laidKey => laidKey.Key.Look == StandardLook.Gap && laidKey.Box.Contains(point));
         var fills = gap >= 0 && places[gap] != from;
         var row = fills ? places[gap].Row : Math.Max(0, RowAt(point.Y));
-        var index = fills ? places[gap].Index : laid.Where((laidKey, i) => places[i].Row == row && places[i] != from && Middle(laidKey.Box) < point.X).Count();
-        if (from is { } left)
+        // Counted with the key moved still in its place: the design puts it first and takes it out after.
+        var index = fills ? places[gap].Index : laid.Where((laidKey, i) => places[i].Row == row && Middle(laidKey.Box) < point.X).Count();
+        var lowerIndex = 0;
+        if (StandardDesign.Shaped(key.Id) && StandardKeys.Extra(key.Id[2..], language) is { } shape)
         {
-            design.Rows[left.Row].RemoveAt(left.Index);
-            if (fills && left.Row == row && left.Index < index)
-            {
-                index--;
-            }
+            var right = point.X + (key.Width * keyUnit) + ((key.Width - 1) * KeyGapDp);
+            var lowerMiddle = right - (((shape.Below * keyUnit) + ((shape.Below - 1) * KeyGapDp)) / 2);
+            lowerIndex = laid.Where((laidKey, i) => places[i].Row == row + 1 && Middle(laidKey.Box) < lowerMiddle).Count();
         }
 
-        if (fills)
+        if (design.Put(key, row, index, fills, lowerIndex, from) is not { } now)
         {
-            design.Rows[row][index] = key;
-        }
-        else
-        {
-            design.Rows[row].Insert(Math.Min(index, design.Rows[row].Count), key);
+            return false;
         }
 
-        selected = (row, Math.Min(index, design.Rows[row].Count - 1));
+        selected = now;
         Redesigned();
+        return true;
     }
 
     private static double Middle(Rect box) => box.X + (box.Width / 2);
@@ -1361,7 +1503,12 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else if (designDown is { } down)
         {
-            selected = (down.Row, down.Index);
+            // A marked Enter clicked again takes its next shape; anything else clicked is marked.
+            if (!(down.Index >= 0 && selected == (down.Row, down.Index) && ReshapeEnter((down.Row, down.Index))))
+            {
+                selected = (down.Row, down.Index);
+            }
+
             designDown = null;
             InvalidateVisual();
         }
@@ -1394,7 +1541,12 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
-        LetGo(design.Rows[from.Row][from.Index], from, point);
+        // A shaped key's lower part moves the whole key.
+        var top = design.UpperOf(from.Row, from.Index) ?? from;
+        if (!LetGo(design.Rows[top.Row][top.Index], top, point))
+        {
+            InvalidateVisual();
+        }
     }
 
     /// <summary>While designing: each empty row outlined, to be marked and filled; the key dragged, or the one added, under the pointer.</summary>

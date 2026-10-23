@@ -343,7 +343,10 @@ own. Over the keys, the keyboard in sight (a phone for Estándar, a
 computer for the others), a click Estándar PC or Estándar, Diseñar and ✕.
 Diseñar is Android's designer: a click marks a key in blue, − and + make
 it narrower or wider, a drag moves it, + Tecla adds a PC's key the
-keyboard lacks, loose over the keys until dragged to its place, + Fila an
+keyboard lacks, loose over the keys until dragged to its place; a marked
+Enter clicked again takes its next shape, one row, ISO's L, the old ANSI L
+or square, the shaped ones growing up into the row above, right-aligned over
+it, as one key; + Fila an
 empty row above, + Columna a column at the right (a hole at the end of
 every row, filled by a key let go on it), Quitar takes the marked one out; Hecho saves Estándar or
 Estándar PC as a new keyboard, a saved one in its place, and Cancelar
