@@ -172,5 +172,7 @@
   <string name="troubleshooting_vscode_already">Todos los accesos directos de VS Code ya lo tienen.</string>
   <string name="troubleshooting_vscode_none">No se encontró ningún acceso directo de VS Code en el menú Inicio, la barra de tareas ni el escritorio.</string>
   <string name="windows_delete_ask">¿Borrar %1$s? Si el teclado lo muestra, vuelve a Estándar PC.</string>
-  <string name="windows_keyboards_saved_summary">Cada uno hecho con Diseñar en el teclado: aquí se cambia su nombre o se borra</string>
+  <string name="windows_keyboards_saved_summary">Guardar como copia el teclado elegido con el nombre escrito; Borrar quita uno guardado</string>
+  <string name="windows_keyboard">Teclado</string>
+  <string name="windows_save_as">Guardar como</string>
 </resources>

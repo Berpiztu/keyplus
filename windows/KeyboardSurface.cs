@@ -238,6 +238,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Whether a drag over the letters is read as a word (Escritura deslizando el dedo); off, the letters are only tapped.</summary>
     public bool Glides { get; set; } = true;
 
+    /// <summary>Whether a key pressed types: off in the settings' preview, which only shows the keyboard and is designed there.</summary>
+    public bool Types { get; init; } = true;
+
     /// <summary>Whether a swipe draws its trail over the keys.</summary>
     public bool ShowsTrail { get; set; } = true;
 
@@ -356,7 +359,10 @@ public sealed class KeyboardSurface : FrameworkElement
     public double RowScale { get; private set; } = 1;
 
     /// <summary>The keys' height with the rows at a share of Gboard's, for the keyboard in use.</summary>
-    public double HeightAt(double scale) => TopDp + (NumberRowDp * scale) + ((BaseRows - 1) * ((LetterRowDp * scale) + RowGapDp)) + BottomDp;
+    public double HeightAt(double scale) => HeightOf(BaseRows, scale);
+
+    /// <summary>The keys' height for a number of rows at a share of Gboard's.</summary>
+    public static double HeightOf(int rows, double scale) => TopDp + (NumberRowDp * scale) + ((rows - 1) * ((LetterRowDp * scale) + RowGapDp)) + BottomDp;
 
     /// <summary>The rows of the keyboard's first page, the one its height is made for, as designed where it is; one at least.</summary>
     private int BaseRows => Math.Max(1, Rows(pc ? StandardPage.Pc : StandardPage.Letters).Count);
@@ -853,6 +859,11 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A key touched: a second finger down finishes the first's, as fast typing has it; held, what the key does held.</summary>
     private void Begin(Point point, int? touch)
     {
+        if (!Types)
+        {
+            return;
+        }
+
         if (pressed is not null)
         {
             Finish(pressed.Touch);

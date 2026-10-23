@@ -5,12 +5,14 @@ using System.Text.Json;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The keyboards of the list on Windows, as Android's (Keyboards.cs):
-/// Estándar and Estándar PC, which the keyboard comes with and which never
-/// change, and those saved with Diseñar, each with its design, kept in the
-/// app's folder (keyboards.json); the one shown is the preferences'
-/// (<see cref="KeyboardPreferences.KeyboardId"/>), so the settings and the
-/// keyboard, two processes, share it through the preferences' watch.
+/// The keyboards of the list on Windows, as Android's (Keyboards.cs), by
+/// language, a PC's keys differing between them: Estándar and Estándar PC,
+/// which the keyboard comes with in every language and which never change,
+/// and those saved with Diseñar, each with its design and the language it
+/// was designed in, kept in the app's folder (keyboards.json). Each language
+/// shows the one chosen for it (<see cref="KeyboardPreferences.KeyboardIdFor"/>),
+/// so the settings and the keyboard, two processes, share it through the
+/// preferences' watch.
 /// </summary>
 public static class Keyboards
 {
@@ -22,28 +24,33 @@ public static class Keyboards
     private static readonly string Kept = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", "keyboards.json");
 
-    /// <summary>Every keyboard: the two the keyboard comes with, then those saved, in the order they were.</summary>
-    public static IReadOnlyList<KeyboardEntry> All() =>
+    /// <summary>A language's keyboards: the two the keyboard comes with, then those saved in it, in the order they were.</summary>
+    public static IReadOnlyList<KeyboardEntry> All(string language) =>
     [
         new(StandardId, Texts.Get(Resource.String.keyboard_standard), StandardBase),
         new(StandardPcId, Texts.Get(Resource.String.keyboard_standard_pc), StandardPcBase),
-        .. Made(),
+        .. Made().Where(keyboard => keyboard.LanguageCode == language),
     ];
 
-    /// <summary>The keyboard the preferences show; one deleted or unknown, Estándar PC.</summary>
-    public static KeyboardEntry Selected(KeyboardPreferences preferences)
+    /// <summary>The keyboard a language shows, as the preferences have it; one deleted or unknown, Estándar PC.</summary>
+    public static KeyboardEntry Selected(KeyboardPreferences preferences, string language)
     {
-        var all = All();
-        return all.FirstOrDefault(keyboard => keyboard.Id == preferences.KeyboardId) ?? all.First(keyboard => keyboard.Id == StandardPcId);
+        var all = All(language);
+        var id = preferences.KeyboardIdFor(language);
+        return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == StandardPcId);
     }
 
-    /// <summary>A keyboard chosen: the keyboard shows it at once.</summary>
-    public static void Select(string id) => (KeyboardPreferences.Read() with { Keyboard = id, Pc = null }).Keep();
-
-    /// <summary>A keyboard saved, with its base and its design, under a name.</summary>
-    public static KeyboardEntry SaveAs(string name, string from, string? design)
+    /// <summary>A keyboard chosen for a language: the keyboard shows it at once while it types in it.</summary>
+    public static void Select(string language, string id)
     {
-        var made = new KeyboardEntry(Guid.NewGuid().ToString("N")[..8], name, from, design);
+        var preferences = KeyboardPreferences.Read();
+        (preferences with { Chosen = new Dictionary<string, string>(preferences.Chosen ?? []) { [language] = id } }).Keep();
+    }
+
+    /// <summary>A keyboard saved in a language, with its base and its design, under a name.</summary>
+    public static KeyboardEntry SaveAs(string name, string from, string? design, string language)
+    {
+        var made = new KeyboardEntry(Guid.NewGuid().ToString("N")[..8], name, from, design, language);
         Keep([.. Made(), made]);
         return made;
     }
@@ -52,18 +59,19 @@ public static class Keyboards
     public static string NewName(KeyboardEntry from) =>
         Texts.Get(Resource.String.saved_as, from.Name, DateTime.Now.ToString("dd-MM HH:mm", CultureInfo.InvariantCulture));
 
-    public static void Rename(string id, string name) =>
-        Keep([.. Made().Select(keyboard => keyboard.Id == id ? keyboard with { Name = name } : keyboard)]);
-
-    /// <summary>A saved keyboard deleted: shown, the keyboard shows Estándar PC again.</summary>
+    /// <summary>A saved keyboard deleted: a language that showed it shows Estándar PC again.</summary>
     public static void Delete(string id)
     {
         Keep([.. Made().Where(keyboard => keyboard.Id != id)]);
-        if (KeyboardPreferences.Read().KeyboardId == id)
+        var preferences = KeyboardPreferences.Read();
+        foreach (var language in StandardKeys.Languages.Where(language => preferences.KeyboardIdFor(language.Code) == id))
         {
-            Select(StandardPcId);
+            Select(language.Code, StandardPcId);
         }
     }
+
+    /// <summary>Each change of the keyboards saved (one designed or deleted elsewhere), told on the caller's thread until the watch is disposed.</summary>
+    public static IDisposable Watch(Action changed) => FileWatch.Changed(Kept, changed);
 
     /// <summary>A saved keyboard's design, kept with it.</summary>
     public static void SetDesign(string id, string? design) =>

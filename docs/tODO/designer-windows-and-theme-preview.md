@@ -68,9 +68,13 @@ Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
 
 ## Where things stand
 
-- 1 and 2 are written on `futo-swipe` (brought up to `main` first), built,
-  not yet tried by the owner; merged to `main` once the owner has tried
-  them. 3 and 4 come next.
+- On `futo-swipe`: 1 and 2 tried by the owner, with + Tecla, + Columna and
+  the Enter's shapes on both platforms; 3 done on Windows (Tema with its
+  preview, designed there one to one) with keyboards by language (each
+  language its own keyboards and chosen one), not yet on Android, where 4
+  brings them. Next, agreed on 2026-10-23: how Windows designs for a docked
+  keyboard and a floating one, as Android has both (Windows' touch keyboard
+  docks too, the apps' viewport made smaller by it).
 - Windows: `windows/KeyboardSurface.cs` draws and types the standard keys
   as `StandardKeyboard.cs` does; `windows/SettingsWindow.cs` has the pages
   (Idiomas, Preferencias, Tema, Escritura deslizando el dedo, Escribir por

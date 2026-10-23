@@ -9,9 +9,10 @@ namespace Berpiztu.KeyPlus;
 /// with Android's names and defaults: showing the keyboard when a text field
 /// takes the focus, what it does when the focus leaves (hides, becomes its ⌨
 /// icon or stays), the icon where it never shows by itself, moving out of
-/// the way of the text and of open menus; the keyboard (Estándar, Estándar
-/// PC or one saved, by its id: <see cref="Keyboards"/>) and its language, as
-/// Tema and Idiomas choose them and the keyboard's own buttons change them;
+/// the way of the text and of open menus; the language typed in and the
+/// keyboard chosen for each language (Estándar, Estándar PC or one saved in
+/// it, by its id: <see cref="Keyboards"/>), as Idiomas and Tema choose them
+/// and the keyboard's own buttons change them;
 /// swiping over the letters and its trail. Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
@@ -26,7 +27,8 @@ public sealed record KeyboardPreferences(
     string? Language = null,
     bool Glide = true,
     bool GlideTrail = true,
-    string? Keyboard = null)
+    string? Keyboard = null,
+    Dictionary<string, string>? Chosen = null)
 {
     public const string FocusLostHide = "hide";
     public const string FocusLostIcon = "icon";
@@ -38,9 +40,20 @@ public sealed record KeyboardPreferences(
 
     public static KeyboardPreferences Default { get; } = new();
 
-    /// <summary>The keyboard shown, by its id; kept before there were ids, Estándar PC unless Pc said Estándar.</summary>
+    /// <summary>
+    /// The keyboard a language shows, by its id: the one chosen for it; else,
+    /// in Spanish, the one chosen before there were languages (Keyboard); else
+    /// Estándar PC, unless the choice kept before there were ids (Pc) said
+    /// Estándar.
+    /// </summary>
+    public string KeyboardIdFor(string language) =>
+        Chosen?.GetValueOrDefault(language)
+        ?? (language == StandardKeys.Spanish.Code ? Keyboard : null)
+        ?? (Pc == false ? Keyboards.StandardId : Keyboards.StandardPcId);
+
+    /// <summary>The language typed in: the one chosen, Spanish at first.</summary>
     [JsonIgnore]
-    public string KeyboardId => Keyboard ?? (Pc == false ? Keyboards.StandardId : Keyboards.StandardPcId);
+    public StandardLanguage TypingLanguage => StandardKeys.Languages.FirstOrDefault(known => known.Code == Language) ?? StandardKeys.Spanish;
 
     public static KeyboardPreferences Read()
     {
@@ -62,35 +75,5 @@ public sealed record KeyboardPreferences(
     }
 
     /// <summary>Each change of the preferences, as they then are, told on the caller's thread until the watch is disposed.</summary>
-    public static IDisposable Watch(Action<KeyboardPreferences> changed)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(Kept)!);
-        var caller = SynchronizationContext.Current;
-        var watch = new FileSystemWatcher(Path.GetDirectoryName(Kept)!, Path.GetFileName(Kept)) { NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName };
-        void Seen(object sender, FileSystemEventArgs e)
-        {
-            try
-            {
-                var kept = Read();
-                if (caller is null)
-                {
-                    changed(kept);
-                }
-                else
-                {
-                    caller.Post(_ => changed(kept), null);
-                }
-            }
-            catch (IOException busy)
-            {
-                // Still being written: its next change tells it again.
-                Log.Write($"The keyboard's preferences were busy: {busy.Message}");
-            }
-        }
-
-        watch.Changed += Seen;
-        watch.Created += Seen;
-        watch.EnableRaisingEvents = true;
-        return watch;
-    }
+    public static IDisposable Watch(Action<KeyboardPreferences> changed) => FileWatch.Changed(Kept, () => changed(Read()));
 }

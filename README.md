@@ -365,7 +365,9 @@ ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
 the settings, an app of their own as on Android: Idiomas, Preferencias,
-Tema (the keyboards, those saved renamed or deleted there), Escritura
+Tema (by language, a PC's keys differing between them: the keyboard each
+language shows, copied under a new name with Guardar como or deleted, drawn
+as on screen and designed there one to one, the window to itself), Escritura
 deslizando el dedo, Escribir por voz, Solución de problemas and
 Información. The grid is not on Windows yet.
 

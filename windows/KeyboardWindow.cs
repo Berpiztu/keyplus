@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -30,22 +29,16 @@ namespace Berpiztu.KeyPlus;
 /// </summary>
 public sealed class KeyboardWindow : Window
 {
-    private const double CardCornerDp = 16;
+    /// <summary>The card's corners, the keyboard's and the settings' preview's.</summary>
+    public const double CardCornerDp = 16;
     private const double ShadowDp = 12;
-    private const double BarDp = 40;
+    /// <summary>The toolbar's height, and the designer's pills' in its place, here and in the settings' preview.</summary>
+    public const double BarDp = 40;
     private const double SignDp = 22;
     private const double HandleBandDp = 22;
     private const double HandleWidthDp = 40;
     private const double HandleHeightDp = 4;
     private const double MinWidthDp = 360;
-
-    /// <summary>The designer's buttons, Android's toolbar pills: 89 px tall on the Fold, 2 dp apart.</summary>
-    private const double PillDp = 89 / 2.625;
-    private const double PillGapDp = 2;
-
-    /// <summary>+ Tecla's list, as Android's: five keys across, 40 dp tall.</summary>
-    private const int ExtrasAcross = 5;
-    private const double ExtraKeyDp = 40;
 
     /// <summary>The room the keyboard keeps between itself and the caret or menu it moved away from, Android's.</summary>
     private const double CaretGapDp = 16;
@@ -64,15 +57,15 @@ public sealed class KeyboardWindow : Window
     private readonly SignButton mic;
     private readonly FocusWatch focus = new();
     private readonly IDisposable preferencesWatch;
+    private readonly IDisposable keyboardsWatch;
     private KeyboardPreferences preferences = KeyboardPreferences.Read();
 
     /// <summary>The keyboard of the list in sight, as saved: designed again, it opens as saved.</summary>
-    private KeyboardEntry keyboard = Keyboards.Selected(KeyboardPreferences.Read());
+    private KeyboardEntry keyboard = ShownIn(KeyboardPreferences.Read());
 
-    /// <summary>The toolbar, and in its place while designing the designer's buttons; + Tecla's list in the keys' place.</summary>
+    /// <summary>The toolbar, and in its place while designing the designer's pills.</summary>
     private readonly DockPanel bar = new() { Height = BarDp, Background = Brushes.Transparent };
-    private readonly Grid designBar = new() { Height = BarDp, Visibility = Visibility.Collapsed };
-    private readonly ScrollViewer extraKeys = new() { Visibility = Visibility.Collapsed, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = false };
+    private readonly KeyboardDesigner designer;
 
     /// <summary>Whether the open menu has moved the keyboard already: once a menu, so its keys can be reached.</summary>
     private bool movedForMenu;
@@ -140,9 +133,9 @@ public sealed class KeyboardWindow : Window
         keys.RowsChanged += () => FitKeys(keys.RowScale);
         switcher.Clicked += () =>
         {
-            Keyboards.Select(keyboard.Id == Keyboards.StandardId ? Keyboards.StandardPcId : Keyboards.StandardId);
+            Keyboards.Select(keys.KeyLanguage.Code, keyboard.Id == Keyboards.StandardId ? Keyboards.StandardPcId : Keyboards.StandardId);
             preferences = KeyboardPreferences.Read();
-            ChooseKeyboard(Keyboards.Selected(preferences));
+            ChooseKeyboard(Keyboards.Selected(preferences, keys.KeyLanguage.Code));
         };
         var design = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_grid_design };
         design.Clicked += StartDesign;
@@ -178,6 +171,14 @@ public sealed class KeyboardWindow : Window
         icon.Moved += Keep;
         tray = new TrayIcon(OpenByHand, SettingsWindow.Start, Quit);
         preferencesWatch = KeyboardPreferences.Watch(Prefer);
+        // A saved keyboard's design changed elsewhere (the settings' Tema): the one in sight shown as it now is.
+        keyboardsWatch = Keyboards.Watch(() =>
+        {
+            if (!keys.Designing)
+            {
+                ChooseKeyboard(Keyboards.Selected(preferences, keys.KeyLanguage.Code));
+            }
+        });
         notice = new TextBlock { Foreground = new SolidColorBrush(colors.Glyph), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, FontSize = 13 };
         noticeTimer.Tick += (_, _) =>
         {
@@ -235,10 +236,11 @@ public sealed class KeyboardWindow : Window
         var bottom = new DockPanel { Height = HandleBandDp };
         bottom.Children.Add(handle);
 
-        FillDesignBar();
+        designer = new KeyboardDesigner(colors, keys);
+        designer.Ended += DesignEnded;
         var top = new Grid();
         top.Children.Add(bar);
-        top.Children.Add(designBar);
+        top.Children.Add(designer.Bar);
         var card = new DockPanel();
         DockPanel.SetDock(top, Dock.Top);
         DockPanel.SetDock(bottom, Dock.Bottom);
@@ -247,7 +249,7 @@ public sealed class KeyboardWindow : Window
         var middleKeys = new Grid();
         middleKeys.Children.Add(keys);
         middleKeys.Children.Add(emoji);
-        middleKeys.Children.Add(extraKeys);
+        middleKeys.Children.Add(designer.ExtraKeys);
         card.Children.Add(middleKeys);
 
         Content = new Border
@@ -279,6 +281,7 @@ public sealed class KeyboardWindow : Window
             voice.Dispose();
             focus.Dispose();
             preferencesWatch.Dispose();
+            keyboardsWatch.Dispose();
             tray.Dispose();
             icon.Close();
         };
@@ -393,8 +396,12 @@ public sealed class KeyboardWindow : Window
         var languages = StandardKeys.Languages;
         keys.KeyLanguage = languages[(languages.ToList().IndexOf(keys.KeyLanguage) + 1) % languages.Count];
         (preferences = preferences with { Language = keys.KeyLanguage.Code }).Keep();
+        ChooseKeyboard(Keyboards.Selected(preferences, keys.KeyLanguage.Code));
         Keep();
     }
+
+    /// <summary>The keyboard the preferences show in the language they type in.</summary>
+    private static KeyboardEntry ShownIn(KeyboardPreferences preferences) => Keyboards.Selected(preferences, preferences.TypingLanguage.Code);
 
     /// <summary>A keyboard of the list shown, as designed, its rows as tall as they were.</summary>
     private void ChooseKeyboard(KeyboardEntry chosen)
@@ -417,15 +424,16 @@ public sealed class KeyboardWindow : Window
     private void Prefer(KeyboardPreferences kept)
     {
         preferences = kept;
-        if (!keys.Designing)
-        {
-            ChooseKeyboard(Keyboards.Selected(kept));
-        }
-
         if (kept.Language is { } code && code != keys.KeyLanguage.Code && StandardKeys.Languages.FirstOrDefault(language => language.Code == code) is { } chosen)
         {
             keys.KeyLanguage = chosen;
             Keep();
+        }
+
+        // The keyboard chosen for the language typed in, each language its own.
+        if (!keys.Designing)
+        {
+            ChooseKeyboard(Keyboards.Selected(kept, keys.KeyLanguage.Code));
         }
 
         keys.Glides = kept.Glide;
@@ -707,127 +715,22 @@ public sealed class KeyboardWindow : Window
 
         HideEmoji();
         ShowSuggestions([], null);
-        var made = StandardKeys.Page(keys.Pc ? StandardPage.Pc : StandardPage.Letters, keys.KeyLanguage);
-        keys.Design = StandardDesign.FromText(keyboard.Design) ?? StandardDesign.From(made);
-        keys.Designing = true;
         bar.Visibility = Visibility.Collapsed;
-        designBar.Visibility = Visibility.Visible;
-        Log.Write($"Keyboard: designing {keyboard.Name}");
+        designer.Start(keyboard);
     }
 
-    /// <summary>
-    /// Hecho: the design kept, a keyboard the keyboard comes with saved as a
-    /// new one, which the keyboard then shows (renamed in Tema); a saved one
-    /// keeps it in its place. Cancelar: as it was, its rows as tall.
-    /// </summary>
-    private void EndDesign(bool keep)
+    /// <summary>The design ended (<see cref="KeyboardDesigner"/>): the keyboard as it now is in sight, the toolbar back; Cancelar's design as it was, its rows as tall.</summary>
+    private void DesignEnded(KeyboardEntry shown, bool kept, double scale)
     {
-        var scale = keys.RowScale;
-        keys.Designing = false;
-        extraKeys.Visibility = Visibility.Collapsed;
-        keys.Visibility = Visibility.Visible;
-        designBar.Visibility = Visibility.Collapsed;
-        bar.Visibility = Visibility.Visible;
-        if (keep && keys.Design is { } designed)
+        keyboard = shown;
+        preferences = KeyboardPreferences.Read();
+        if (!kept)
         {
-            // The keyboard shown is then the one saved, as it now is: designed again, it opens as saved, and Hecho keeps it in its place.
-            if (keyboard.BuiltIn)
-            {
-                keyboard = Keyboards.SaveAs(Keyboards.NewName(keyboard), keyboard.Base, designed.Text);
-                Keyboards.Select(keyboard.Id);
-                preferences = KeyboardPreferences.Read();
-            }
-            else
-            {
-                Keyboards.SetDesign(keyboard.Id, designed.Text);
-                keyboard = keyboard with { Design = designed.Text };
-            }
-
-            Log.Write($"Keyboard: design kept as {keyboard.Name}");
-        }
-        else
-        {
-            keys.Design = StandardDesign.FromText(keyboard.Design);
             FitKeys(scale);
         }
 
+        bar.Visibility = Visibility.Visible;
         ShowSwitcher();
-    }
-
-    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, + Columna, Quitar, Cancelar, Hecho in blue; a sign's pill narrower than a word's.</summary>
-    private void FillDesignBar()
-    {
-        (string Label, Action Pressed, bool Done)[] buttons =
-        [
-            ("−", () => keys.ResizeMarked(wider: false), false),
-            ("+", () => keys.ResizeMarked(wider: true), false),
-            (Texts.Get(Resource.String.add_key), ToggleExtraKeys, false),
-            (Texts.Get(Resource.String.add_row), keys.AddRow, false),
-            (Texts.Get(Resource.String.add_column), keys.AddColumn, false),
-            (Texts.Get(Resource.String.remove), keys.RemoveMarked, false),
-            (Texts.Get(Resource.String.cancel), () => EndDesign(keep: false), false),
-            (Texts.Get(Resource.String.done), () => EndDesign(keep: true), true),
-        ];
-        foreach (var (label, pressed, done) in buttons)
-        {
-            var pill = new PillButton(colors, label, done, 16) { Height = PillDp, Margin = new Thickness(PillGapDp, 0, PillGapDp, 0), CornerRadius = new CornerRadius(PillDp / 2) };
-            pill.Clicked += pressed;
-            designBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(label.Length <= 1 ? 0.7 : 1, GridUnitType.Star) });
-            Grid.SetColumn(pill, designBar.Children.Count);
-            designBar.Children.Add(pill);
-        }
-    }
-
-    /// <summary>+ Tecla: the keys a design can add and the keyboard lacks, in the keys' place, by group, as Android's; one clicked comes loose over the keys, to be dragged to its place; again, the keys.</summary>
-    private void ToggleExtraKeys()
-    {
-        if (extraKeys.Visibility == Visibility.Visible)
-        {
-            extraKeys.Visibility = Visibility.Collapsed;
-            keys.Visibility = Visibility.Visible;
-            return;
-        }
-
-        var list = new StackPanel { Margin = new Thickness(12, 4, 12, 8) };
-        foreach (var (name, offered) in StandardKeys.Extras)
-        {
-            var ids = offered.Where(id => !keys.HasKey(id)).ToArray();
-            if (ids.Length == 0)
-            {
-                continue;
-            }
-
-            list.Children.Add(new TextBlock { Text = Texts.Get(name), Foreground = new SolidColorBrush(colors.Outline), FontSize = 13, Margin = new Thickness(4, 8, 0, 4) });
-            for (var first = 0; first < ids.Length; first += ExtrasAcross)
-            {
-                var row = new UniformGrid { Columns = ExtrasAcross };
-                for (var i = first; i < first + ExtrasAcross; i++)
-                {
-                    if (i >= ids.Length || StandardKeys.Extra(ids[i], keys.KeyLanguage) is not { } key)
-                    {
-                        row.Children.Add(new Border());
-                        continue;
-                    }
-
-                    var id = ids[i];
-                    var button = new PillButton(colors, key.Label, done: false, 15) { Height = ExtraKeyDp, Margin = new Thickness(2, 0, 2, 4), CornerRadius = new CornerRadius(8) };
-                    button.Clicked += () =>
-                    {
-                        ToggleExtraKeys();
-                        keys.AddKey(id);
-                    };
-                    row.Children.Add(button);
-                }
-
-                list.Children.Add(row);
-            }
-        }
-
-        extraKeys.Content = list;
-        extraKeys.Height = keys.ActualHeight;
-        extraKeys.Background = new SolidColorBrush(colors.Ground);
-        keys.Visibility = Visibility.Hidden;
-        extraKeys.Visibility = Visibility.Visible;
     }
 
     /// <summary>A line in the toolbar's middle, gone after a while unless it lasts (Escuchando…) until the next.</summary>
@@ -873,12 +776,13 @@ public sealed class KeyboardWindow : Window
     {
         var area = SystemParameters.WorkArea;
         var state = ReadState();
-        Width = Math.Max(MinWidth, state?.Width ?? area.Width * 0.6);
-        // The keyboard and language as the preferences have them; the language kept before they did, as the window kept it.
-        keys.Pc = keyboard.Base == Keyboards.StandardPcBase;
-        keys.Design = StandardDesign.FromText(keyboard.Design);
+        Width = Math.Max(MinWidth, state?.Width ?? area.Width * FirstWidthShare);
+        // The language and its keyboard as the preferences have them; the language kept before they did, as the window kept it.
         var language = preferences.Language ?? state?.Language;
         keys.KeyLanguage = StandardKeys.Languages.FirstOrDefault(known => known.Code == language) ?? StandardKeys.Spanish;
+        keyboard = Keyboards.Selected(preferences, keys.KeyLanguage.Code);
+        keys.Pc = keyboard.Base == Keyboards.StandardPcBase;
+        keys.Design = StandardDesign.FromText(keyboard.Design);
         keys.Glides = preferences.Glide;
         keys.ShowsTrail = preferences.GlideTrail;
         FitKeys(state?.RowScale ?? 1);
@@ -893,6 +797,15 @@ public sealed class KeyboardWindow : Window
             Loaded += (_, _) => Top = area.Bottom - ActualHeight;
         }
     }
+
+    /// <summary>The keyboard's width the first time, a share of the screen's.</summary>
+    private const double FirstWidthShare = 0.6;
+
+    /// <summary>The keys' width and their rows' share of Gboard's height as the keyboard was left (the first time, as it first opens), for the settings' preview to show it as it is.</summary>
+    public static (double Width, double RowScale) KeptKeys() =>
+        ReadState() is { } state
+            ? (state.Width - (2 * ShadowDp), state.RowScale)
+            : ((SystemParameters.WorkArea.Width * FirstWidthShare) - (2 * ShadowDp), 1);
 
     private static State? ReadState()
     {
@@ -929,52 +842,6 @@ public sealed class KeyboardWindow : Window
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string name);
-}
-
-/// <summary>
-/// A word on a pill, the designer's, as Android's toolbar pills: a function
-/// key's tint, darker while pressed, or the accent for Hecho; the word as
-/// large as asked, smaller where the pill has no room for it; a click, what
-/// it does.
-/// </summary>
-public sealed class PillButton : Border
-{
-    private readonly Brush ground;
-    private readonly Brush pressedGround;
-
-    public PillButton(Palette colors, string label, bool done, double size)
-    {
-        ground = new SolidColorBrush(done ? colors.Primary : colors.Function);
-        pressedGround = done ? ground : new SolidColorBrush(colors.FunctionPressed);
-        Background = ground;
-        Child = new Viewbox
-        {
-            StretchDirection = StretchDirection.DownOnly,
-            Margin = new Thickness(4, 0, 4, 0),
-            Child = new TextBlock { Text = label, FontSize = size, Foreground = new SolidColorBrush(done ? colors.OnPrimary : colors.FunctionGlyph) },
-        };
-    }
-
-    public event Action? Clicked;
-
-    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
-    {
-        CaptureMouse();
-        Background = pressedGround;
-        e.Handled = true;
-    }
-
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
-    {
-        var inside = new Rect(RenderSize).Contains(e.GetPosition(this));
-        ReleaseMouseCapture();
-        Background = ground;
-        e.Handled = true;
-        if (inside)
-        {
-            Clicked?.Invoke();
-        }
-    }
 }
 
 /// <summary>A toolbar's sign, the Android keyboard's drawable, in the keys' letters' colour; a click, what it does.</summary>

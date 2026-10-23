@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace Berpiztu.KeyPlus;
 
@@ -23,10 +25,17 @@ public sealed class SettingsWindow : Window
     private const double FieldGapDp = 16;
     private const double Step = 0.5;
 
+    /// <summary>Tema's choices' type and their hint's, smaller than the other pages', the room left to the keyboard drawn under them.</summary>
+    private const double CompactSize = 12;
+    private const double CompactHintSize = 11;
+
     /// <summary>The argument that starts the program as the settings.</summary>
     public const string Argument = "--settings";
 
     private readonly ContentControl page = new();
+
+    /// <summary>The pages' list, at the left, which Tema's designer takes the window from.</summary>
+    private readonly DockPanel side = new() { Width = ListWidthDp };
 
     public SettingsWindow()
     {
@@ -62,7 +71,6 @@ public sealed class SettingsWindow : Window
         // Under the pages, the keyboard opened: started, or shown where it runs hidden.
         var open = new Button { Content = Texts.Get(Resource.String.open_keyboard), Margin = new Thickness(MarginDp / 2), HorizontalAlignment = HorizontalAlignment.Stretch };
         open.Click += (_, _) => System.Diagnostics.Process.Start(Environment.ProcessPath!);
-        var side = new DockPanel { Width = ListWidthDp };
         DockPanel.SetDock(open, Dock.Bottom);
         side.Children.Add(open);
         side.Children.Add(list);
@@ -93,69 +101,195 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Tema, as Android's: the keyboards of the list, the one the card shows
-    /// marked, a click showing another, as the toolbar's switch changes it;
-    /// then those saved, each renamed as its name is written, or deleted once
-    /// asked.
+    /// Tema, as Android's, by language (a PC's keys differ between them), its
+    /// parts each of one size whatever they hold, so nothing on the page moves:
+    /// the language looked at (the one typed in at first, left as it is);
+    /// the keyboard shown in it, chosen from that language's list (as the
+    /// toolbar's switch changes it); a name with Guardar como, which copies the
+    /// keyboard chosen under it (to duplicate it, or design a copy), and
+    /// Borrar, for one saved; and the keyboard drawn as the card shows it,
+    /// zoomed whole to the page, its proportions kept, only to be seen, with
+    /// Diseñar in its bar's place, which designs it there one to one, as it
+    /// will be seen, the window to itself (made larger where it is smaller
+    /// than the keyboard), Hecho changing the keyboard on screen at once.
     /// </summary>
-    private static FrameworkElement ThemePage()
+    private FrameworkElement ThemePage()
     {
-        var form = Form(Resource.String.theme);
-        var keyboards = new StackPanel();
-        form.Children.Add(keyboards);
+        // Docked, the preview last, so designing it fills the window.
+        var form = new DockPanel { Margin = new Thickness(MarginDp) };
+        var title = Heading(Resource.String.theme);
+        DockPanel.SetDock(title, Dock.Top);
+        form.Children.Add(title);
+        var language = KeyboardPreferences.Read().TypingLanguage;
+        var languages = new ComboBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp, 0) };
+        var keyboards = new ComboBox();
+        var name = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
+        var saveAs = new Button { Content = Texts.Get(Resource.String.windows_save_as), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var delete = new Button { Content = Texts.Get(Resource.String.delete), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var naming = new DockPanel();
+        DockPanel.SetDock(delete, Dock.Right);
+        DockPanel.SetDock(saveAs, Dock.Right);
+        naming.Children.Add(delete);
+        naming.Children.Add(saveAs);
+        naming.Children.Add(name);
 
+        var colors = Palette.Read();
+        var preview = new KeyboardSurface(colors) { Types = false };
+        var designer = new KeyboardDesigner(colors, preview);
+        // Diseñar in the bar's place, a pill as the bar's: designing, the bar stands there and the preview keeps its size.
+        var design = KeyboardDesigner.Pill(colors, Texts.Get(Resource.String.design), done: false);
+        design.HorizontalAlignment = HorizontalAlignment.Left;
+        var bar = new Grid { Height = KeyboardWindow.BarDp };
+        bar.Children.Add(design);
+        bar.Children.Add(designer.Bar);
+        var keysPlace = new Grid();
+        keysPlace.Children.Add(preview);
+        keysPlace.Children.Add(designer.ExtraKeys);
+        var card = new StackPanel();
+        card.Children.Add(bar);
+        card.Children.Add(keysPlace);
+        // The card as it is on screen: a box of one size whatever the keyboard chosen, the card's width and Estándar PC's rows
+        // at its rows' height, zoomed whole to the page, so only the settings' size changes it, and one to one while designed.
+        // The keyboard chosen at its own size at its top, a shorter one leaving room under it, a taller one (a design's more
+        // rows) made smaller to fit.
+        var (keysWidth, rowScale) = KeyboardWindow.KeptKeys();
+        var rows = StandardKeys.Page(StandardPage.Pc, StandardKeys.Spanish).Count;
+        card.Width = keysWidth;
+        var box = new Border
+        {
+            Width = keysWidth,
+            Height = KeyboardWindow.BarDp + KeyboardSurface.HeightOf(rows, rowScale),
+            Background = new SolidColorBrush(colors.Ground),
+            CornerRadius = new CornerRadius(KeyboardWindow.CardCornerDp),
+            ClipToBounds = true,
+            Child = new Viewbox { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, VerticalAlignment = VerticalAlignment.Top, Child = card },
+        };
+
+        // The language, the keyboard and its name in two rows of small type, each label beside its control, the room left to the keyboard drawn under them.
+        TextBlock Caption(int text) => new() { Text = Texts.Get(text), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) };
+        var languageLabel = Caption(Resource.String.languages);
+        var keyboardLabel = Caption(Resource.String.windows_keyboard);
+        var choosing = new DockPanel { Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
+        foreach (var part in new FrameworkElement[] { languageLabel, languages, keyboardLabel })
+        {
+            DockPanel.SetDock(part, Dock.Left);
+            choosing.Children.Add(part);
+        }
+
+        choosing.Children.Add(keyboards);
+        var controls = new StackPanel();
+        TextElement.SetFontSize(controls, CompactSize);
+        controls.Children.Add(choosing);
+        controls.Children.Add(naming);
+        controls.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.windows_keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, FontSize = CompactHintSize, Margin = new Thickness(0, 2, 0, FieldGapDp / 2) });
+        DockPanel.SetDock(controls, Dock.Top);
+        form.Children.Add(controls);
+        var zoom = new Viewbox { Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Child = box };
+        form.Children.Add(zoom);
+
+        // Designing, the keyboard alone in the window and one to one, the window made larger where it is smaller than the
+        // keyboard; then the page as it was, the keyboard zoomed again.
+        void Designing(bool on)
+        {
+            side.Visibility = title.Visibility = controls.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+            zoom.Stretch = on ? Stretch.None : Stretch.Uniform;
+            if (on && form.ActualWidth < box.Width)
+            {
+                Width += box.Width - form.ActualWidth;
+            }
+        }
+
+        var shown = Keyboards.Selected(KeyboardPreferences.Read(), language.Code);
+        var filling = false;
+
+        // The keyboard chosen as the card shows it: its keys, its design and the language looked at, its rows as tall as the card's; its name to copy it under, Borrar for one saved.
+        void Show(KeyboardEntry keyboard)
+        {
+            shown = keyboard;
+            name.Text = keyboard.Name;
+            delete.IsEnabled = !keyboard.BuiltIn;
+            preview.KeyLanguage = language;
+            preview.Pc = keyboard.Base == Keyboards.StandardPcBase;
+            preview.Design = StandardDesign.FromText(keyboard.Design);
+            preview.Height = preview.HeightAt(rowScale);
+        }
+
+        // The language's keyboards in the list, the one it shows chosen.
         void Fill()
         {
-            keyboards.Children.Clear();
-            var all = Keyboards.All();
-            var shown = Keyboards.Selected(KeyboardPreferences.Read());
-            var choices = new StackPanel();
-            var options = new Dictionary<string, RadioButton>();
-            foreach (var keyboard in all)
+            filling = true;
+            keyboards.Items.Clear();
+            var chosen = Keyboards.Selected(KeyboardPreferences.Read(), language.Code);
+            foreach (var keyboard in Keyboards.All(language.Code))
             {
-                var option = new RadioButton { Content = keyboard.Name, IsChecked = keyboard.Id == shown.Id, GroupName = "keyboard" };
-                option.Checked += (_, _) => Keyboards.Select(keyboard.Id);
-                choices.Children.Add(option);
-                options[keyboard.Id] = option;
+                keyboards.Items.Add(new ComboBoxItem { Content = keyboard.Name, Tag = keyboard });
+                if (keyboard.Id == chosen.Id)
+                {
+                    keyboards.SelectedIndex = keyboards.Items.Count - 1;
+                }
             }
 
-            keyboards.Children.Add(Field(null, choices, null));
-            if (all.Where(keyboard => !keyboard.BuiltIn).ToList() is not { Count: > 0 } saved)
+            filling = false;
+            Show(chosen);
+        }
+
+        foreach (var known in StandardKeys.Languages)
+        {
+            languages.Items.Add(new ComboBoxItem { Content = known.Name, Tag = known });
+        }
+
+        languages.SelectedIndex = StandardKeys.Languages.ToList().IndexOf(language);
+        languages.SelectionChanged += (_, _) =>
+        {
+            if (languages.SelectedItem is ComboBoxItem { Tag: StandardLanguage known })
+            {
+                language = known;
+                Fill();
+            }
+        };
+
+        keyboards.SelectionChanged += (_, _) =>
+        {
+            if (!filling && keyboards.SelectedItem is ComboBoxItem { Tag: KeyboardEntry keyboard })
+            {
+                Keyboards.Select(language.Code, keyboard.Id);
+                Show(keyboard);
+            }
+        };
+        saveAs.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(name.Text))
             {
                 return;
             }
 
-            var rows = new StackPanel();
-            foreach (var keyboard in saved)
+            // A copy under the name written, chosen to be designed; the keyboard it was made from stays as it is.
+            var copy = Keyboards.SaveAs(name.Text.Trim(), shown.Base, shown.Design, language.Code);
+            Keyboards.Select(language.Code, copy.Id);
+            Fill();
+        };
+        delete.Click += (_, _) =>
+        {
+            var asked = MessageBox.Show(Texts.Get(Resource.String.windows_delete_ask, shown.Name), shown.Name, MessageBoxButton.OKCancel, MessageBoxImage.Question);
+            if (asked == MessageBoxResult.OK)
             {
-                var name = new TextBox { Text = keyboard.Name, VerticalContentAlignment = VerticalAlignment.Center };
-                name.TextChanged += (_, _) =>
-                {
-                    if (!string.IsNullOrWhiteSpace(name.Text))
-                    {
-                        Keyboards.Rename(keyboard.Id, name.Text.Trim());
-                        options[keyboard.Id].Content = name.Text.Trim();
-                    }
-                };
-                var delete = new Button { Content = Texts.Get(Resource.String.delete), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
-                delete.Click += (_, _) =>
-                {
-                    var asked = MessageBox.Show(Texts.Get(Resource.String.windows_delete_ask, keyboard.Name), keyboard.Name, MessageBoxButton.OKCancel, MessageBoxImage.Question);
-                    if (asked == MessageBoxResult.OK)
-                    {
-                        Keyboards.Delete(keyboard.Id);
-                        Fill();
-                    }
-                };
-                var row = new DockPanel { Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
-                DockPanel.SetDock(delete, Dock.Right);
-                row.Children.Add(delete);
-                row.Children.Add(name);
-                rows.Children.Add(row);
+                Keyboards.Delete(shown.Id);
+                Fill();
             }
-
-            keyboards.Children.Add(Field(Resource.String.keyboards_saved, rows, Resource.String.windows_keyboards_saved_summary));
-        }
+        };
+        preview.RowsChanged += () => preview.Height = preview.HeightAt(rowScale);
+        design.Clicked += () =>
+        {
+            design.Visibility = Visibility.Hidden;
+            Designing(true);
+            designer.Start(shown);
+        };
+        designer.Ended += (_, _, _) =>
+        {
+            design.Visibility = Visibility.Visible;
+            Designing(false);
+            Fill();
+        };
 
         Fill();
         return form;
@@ -347,9 +481,13 @@ public sealed class SettingsWindow : Window
     private static StackPanel Form(int name)
     {
         var form = new StackPanel { Margin = new Thickness(MarginDp) };
-        form.Children.Add(new TextBlock { Text = Texts.Get(name), FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, FieldGapDp) });
+        form.Children.Add(Heading(name));
         return form;
     }
+
+    /// <summary>A page's name, on its top.</summary>
+    private static TextBlock Heading(int name) =>
+        new() { Text = Texts.Get(name), FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, FieldGapDp) };
 
     private static Slider Stepped(double least, double most, double value) =>
         new() { Minimum = least, Maximum = most, Value = value, TickFrequency = Step, IsSnapToTickEnabled = true, SmallChange = Step, LargeChange = 1, VerticalAlignment = VerticalAlignment.Center };

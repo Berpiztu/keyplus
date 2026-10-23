@@ -178,5 +178,7 @@
   <string name="troubleshooting_vscode_already">Every VS Code shortcut has it already.</string>
   <string name="troubleshooting_vscode_none">No VS Code shortcut was found in the Start menu, the taskbar or on the desktop.</string>
   <string name="windows_delete_ask">Delete %1$s? If the keyboard shows it, it goes back to Standard PC.</string>
-  <string name="windows_keyboards_saved_summary">Each made with Design on the keyboard: its name changed here, or deleted</string>
+  <string name="windows_keyboards_saved_summary">Save as copies the keyboard chosen under the name written; Delete takes a saved one away</string>
+  <string name="windows_keyboard">Keyboard</string>
+  <string name="windows_save_as">Save as</string>
 </resources>
