@@ -119,6 +119,7 @@
   <string name="design_arrows">Flechas</string>
   <string name="add_key">+ Tecla</string>
   <string name="add_row">+ Fila</string>
+  <string name="add_column">+ Columna</string>
   <string name="remove">Quitar</string>
   <string name="saved_as">%1$s %2$s</string>
   <string name="voice_listening">Escuchando…</string>

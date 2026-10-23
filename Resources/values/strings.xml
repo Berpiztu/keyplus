@@ -125,6 +125,7 @@
   <string name="design_arrows">Arrows</string>
   <string name="add_key">+ Key</string>
   <string name="add_row">+ Row</string>
+  <string name="add_column">+ Column</string>
   <string name="remove">Remove</string>
   <string name="saved_as">%1$s %2$s</string>
   <string name="voice_listening">Listening…</string>

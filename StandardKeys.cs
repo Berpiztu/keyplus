@@ -39,6 +39,8 @@ public enum StandardLook
     Letter,
     Function,
     Pill,
+    /// <summary>A hole in a designed row (Diseñar › + Columna): nothing drawn, nothing typed; outlined while designing.</summary>
+    Gap,
 }
 
 /// <summary>
@@ -273,6 +275,11 @@ public static class StandardKeys
     /// <summary>A place a language has no key at, in a design: an empty key that does nothing.</summary>
     public static readonly StandardKey Blank = new("", StandardAction.Key, Look: StandardLook.Function, Code: Keycode.Unknown);
 
+    /// <summary>A hole a design leaves in a row, by its id there: room a key wide, empty.</summary>
+    public const string GapId = "gap";
+
+    public static readonly StandardKey Gap = new("", StandardAction.Key, Look: StandardLook.Gap, Code: Keycode.Unknown);
+
     /// <summary>
     /// The keys a design can add (Diseñar › + Tecla), by group as the list
     /// shows them, each by its id: a PC's that the standard keyboards may
@@ -314,6 +321,11 @@ public static class StandardKeys
             _ => null,
         };
     }
+
+    /// <summary>Whether a page has a key a design can add already: a PC's key by the code it sends, a modifier by what it does.</summary>
+    public static bool HasExtra(IReadOnlyList<IReadOnlyList<StandardKey>> page, string id, StandardLanguage language) =>
+        Extra(id, language) is { } extra && page.SelectMany(row => row).Any(key =>
+            extra.Action == StandardAction.Key ? key.Action == StandardAction.Key && key.Code == extra.Code : key.Action == extra.Action);
 
     private static IEnumerable<StandardKey> Letters(string letters, string hints) =>
         letters.Zip(hints, (letter, hint) => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString(), Hint: hint.ToString()));

@@ -1546,7 +1546,7 @@ public sealed class KeyPanel
         ShowBars();
     }
 
-    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, Quitar, Cancelar, Hecho in blue.</summary>
+    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, + Columna, Quitar, Cancelar, Hecho in blue.</summary>
     private void FillDesignBar()
     {
         var colors = standardColors!;
@@ -1556,6 +1556,7 @@ public sealed class KeyPanel
             ("+", () => standard!.ResizeMarked(wider: true), false),
             (context.GetString(Resource.String.add_key), () => Toggle(extraKeysView!, ShowExtraKeys), false),
             (context.GetString(Resource.String.add_row), () => standard!.AddRow(), false),
+            (context.GetString(Resource.String.add_column), () => standard!.AddColumn(), false),
             (context.GetString(Resource.String.remove), () => standard!.RemoveMarked(), false),
             (context.GetString(Resource.String.cancel), () => EndStandardDesign(keep: false), false),
             (context.GetString(Resource.String.done), () => EndStandardDesign(keep: true), true),
@@ -1582,14 +1583,20 @@ public sealed class KeyPanel
         }
     }
 
-    /// <summary>+ Tecla: the keys a design can add in the keys' place, by group, a tap adding one after the marked key.</summary>
+    /// <summary>+ Tecla: the keys a design can add and the keyboard lacks, in the keys' place, by group; one tapped comes loose over the keys, to be dragged to its place.</summary>
     private void ShowExtraKeys()
     {
         var colors = standardColors!;
         var list = new LinearLayout(context) { Orientation = Orientation.Vertical };
         list.SetPadding(Dp(12), Dp(4), Dp(12), Dp(8));
-        foreach (var (name, ids) in StandardKeys.Extras)
+        foreach (var (name, offered) in StandardKeys.Extras)
         {
+            var ids = offered.Where(id => !standard!.HasKey(id)).ToArray();
+            if (ids.Length == 0)
+            {
+                continue;
+            }
+
             var header = new TextView(context) { Text = context.GetString(name) };
             header.SetTextColor(colors.Outline);
             header.SetTextSize(ComplexUnitType.Sp, 13);

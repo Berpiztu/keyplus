@@ -111,7 +111,7 @@ a window that does.
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
-| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design, on Android and Windows: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
+| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design, on Android and Windows: its letters' rows as places of the keyboard it was made from, keys added and holes, with their widths |
 | [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys and the designer, [Keyboards.cs](windows/Keyboards.cs) the keyboards saved, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
@@ -135,9 +135,13 @@ a window that does.
   reading PC) switches between the two, and Flotante (a screen with keys,
   crossed while floating) docks or floats it.
 - **⊞ › Diseñar** designs a standard keyboard: a tap marks a key in blue,
-  − and + make it narrower or wider, a drag moves it; + Tecla adds Esc,
-  Tab, Supr, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞, Alt Gr, F1–F12,
-  ImpPnt or an arrow after it, + Fila adds a row, Quitar takes one out.
+  − and + make it narrower or wider, a drag moves it; + Tecla lists those
+  of Esc, Tab, Supr, Insert, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞,
+  Alt Gr, Bloq Mayús, F1–F12, ImpPnt and the arrows the keyboard lacks, and
+  the one tapped comes loose over the keys, to be dragged to its place;
+  + Fila adds a row at the top; + Columna adds a column at the right, a
+  hole a key wide at the end of every row, which a key let go on fills and
+  which, left empty, is room with nothing in it; Quitar takes one out.
   Hecho saves Estándar or Estándar PC as a new keyboard, this screen's
   docked or floating as it was designed.
 - **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
@@ -338,8 +342,10 @@ the focus from the one typed in: its keys go to that window as Windows'
 own. Over the keys, the keyboard in sight (a phone for Estándar, a
 computer for the others), a click Estándar PC or Estándar, Diseñar and ✕.
 Diseñar is Android's designer: a click marks a key in blue, − and + make
-it narrower or wider, a drag moves it, + Tecla adds a PC's key, + Fila an
-empty row above, Quitar takes the marked one out; Hecho saves Estándar or
+it narrower or wider, a drag moves it, + Tecla adds a PC's key the
+keyboard lacks, loose over the keys until dragged to its place, + Fila an
+empty row above, + Columna a column at the right (a hole at the end of
+every row, filled by a key let go on it), Quitar takes the marked one out; Hecho saves Estándar or
 Estándar PC as a new keyboard, a saved one in its place, and Cancelar
 leaves it as it was. The toolbar and the handle under the keys move it, and
 its edges and corners make it larger or smaller as any window's, the rows

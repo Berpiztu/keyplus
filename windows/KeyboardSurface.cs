@@ -399,6 +399,7 @@ public sealed class KeyboardSurface : FrameworkElement
         var made = StandardKeys.Page(page, language);
         var across = Math.Max(1, made.Max(row => row.Sum(key => (double)key.Width)));
         var unit = (width - (2 * SideDp) - ((across - 1) * KeyGapDp)) / across;
+        keyUnit = unit;
         glyphScale = Math.Min(1, unit / (LetterRow * GboardKeyAspect));
         double[] heights = page is StandardPage.Letters or StandardPage.Pc
             ? [NumberRowDp * RowScale, .. Enumerable.Repeat(LetterRow, Math.Max(0, rows.Count - 1))]
@@ -489,6 +490,16 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void DrawKey(DrawingContext context, StandardKey key, Rect box, bool marked = false)
     {
+        if (key.Look == StandardLook.Gap)
+        {
+            if (designing)
+            {
+                context.DrawRoundedRectangle(null, new Pen(new SolidColorBrush(marked ? colors.Primary : colors.FaintOutline), 2), box, CornerDp, CornerDp);
+            }
+
+            return;
+        }
+
         var down = !designing && pressed is { Swiping: false } now && now.Key == key;
         var function = key.Look != StandardLook.Letter;
         var ground = marked ? colors.Primary
@@ -1082,10 +1093,18 @@ public sealed class KeyboardSurface : FrameworkElement
     private StandardDesign? design;
     private bool designing;
 
+    /// <summary>A key one wide as laid out, without the gaps: the size a key added is drawn at before it is in a row.</summary>
+    private double keyUnit;
+
     /// <summary>While designing: the key marked (its place), or a row (its place -1); the key dragged and where the pointer is; where the pointer went down.</summary>
     private (int Row, int Index)? selected;
     private ((int Row, int Index) Place, Point At)? dragged;
     private (int Row, int Index, Point At)? designDown;
+
+    /// <summary>A key chosen in + Tecla, not in the design yet: drawn loose where it is, marked, until it is dragged and let go into a row; whether the pointer holds it.</summary>
+    private readonly record struct LooseKey(string Id, StandardKey Key, Point At, bool Held);
+
+    private LooseKey? added;
 
     /// <summary>How far a press goes before it is a drag: Android's touch slop, ViewConfiguration's 8 dp.</summary>
     private const double DragSlopDp = 8;
@@ -1102,6 +1121,7 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             design = value;
             selected = null;
+            added = null;
             InvalidateMeasure();
             Lay();
         }
@@ -1117,6 +1137,7 @@ public sealed class KeyboardSurface : FrameworkElement
             selected = null;
             dragged = null;
             designDown = null;
+            added = null;
             StopHolding();
             pressed = null;
             if (value)
@@ -1159,10 +1180,63 @@ public sealed class KeyboardSurface : FrameworkElement
         Redesigned();
     }
 
-    /// <summary>+ Tecla: a key from the list after the marked one, into a marked empty row, or at the end of the last row; marked.</summary>
+    /// <summary>+ Tecla: a key from the list loose in the keys' middle, marked, to be dragged to its place; in the design only once let go there.</summary>
     public void AddKey(string id)
     {
         if (design is null || StandardKeys.Extra(id, language) is not { } key)
+        {
+            return;
+        }
+
+        selected = null;
+        added = new LooseKey(id, key, new Point(ActualWidth / 2, ActualHeight / 2), Held: false);
+        InvalidateVisual();
+    }
+
+    /// <summary>Whether the keyboard as designed has a key of + Tecla's list already, which the list then leaves out.</summary>
+    public bool HasKey(string id) => StandardKeys.HasExtra(Rows(pc ? StandardPage.Pc : StandardPage.Letters), id, language);
+
+    /// <summary>A loose key's box: as wide as it is in keys, a letter row tall, centred where it is.</summary>
+    private Rect LooseBox(LooseKey loose)
+    {
+        var width = (loose.Key.Width * keyUnit) + ((loose.Key.Width - 1) * KeyGapDp);
+        return new Rect(loose.At.X - (width / 2), loose.At.Y - (LetterRow / 2), Math.Max(1, width), LetterRow);
+    }
+
+    /// <summary>The key added let go, as a key moved.</summary>
+    private void PlaceAdded(LooseKey loose, Point point) => LetGo(new DesignedKey("x:" + loose.Id, loose.Key.Width), null, point);
+
+    /// <summary>+ Columna: a new column at the right, as + Fila adds a row at the top: a hole a key wide at the end of every row with keys, to be filled; the top one marked.</summary>
+    public void AddColumn()
+    {
+        if (design is null)
+        {
+            return;
+        }
+
+        selected = null;
+        for (var r = 0; r < design.Rows.Count; r++)
+        {
+            if (design.Rows[r].Count == 0)
+            {
+                continue;
+            }
+
+            design.Rows[r].Add(new DesignedKey(StandardKeys.GapId, 1f));
+            selected ??= (r, design.Rows[r].Count - 1);
+        }
+
+        Redesigned();
+    }
+
+    /// <summary>
+    /// A key let go, moved (from its place) or added: on a hole, in the
+    /// hole's place; else into the row under it, before the first key whose
+    /// middle is right of it; marked.
+    /// </summary>
+    private void LetGo(DesignedKey key, (int Row, int Index)? from, Point point)
+    {
+        if (design is null)
         {
             return;
         }
@@ -1172,11 +1246,33 @@ public sealed class KeyboardSurface : FrameworkElement
             design.Rows.Add([]);
         }
 
-        var (row, index) = selected is { } at ? (at.Row, at.Index + 1) : (design.Rows.Count - 1, design.Rows[^1].Count);
-        design.Rows[row].Insert(index, new DesignedKey("x:" + id, key.Width));
-        selected = (row, index);
+        var gap = laid.FindIndex(laidKey => laidKey.Key.Look == StandardLook.Gap && laidKey.Box.Contains(point));
+        var fills = gap >= 0 && places[gap] != from;
+        var row = fills ? places[gap].Row : Math.Max(0, RowAt(point.Y));
+        var index = fills ? places[gap].Index : laid.Where((laidKey, i) => places[i].Row == row && places[i] != from && Middle(laidKey.Box) < point.X).Count();
+        if (from is { } left)
+        {
+            design.Rows[left.Row].RemoveAt(left.Index);
+            if (fills && left.Row == row && left.Index < index)
+            {
+                index--;
+            }
+        }
+
+        if (fills)
+        {
+            design.Rows[row][index] = key;
+        }
+        else
+        {
+            design.Rows[row].Insert(Math.Min(index, design.Rows[row].Count), key);
+        }
+
+        selected = (row, Math.Min(index, design.Rows[row].Count - 1));
         Redesigned();
     }
+
+    private static double Middle(Rect box) => box.X + (box.Width / 2);
 
     /// <summary>+ Fila: an empty row over the marked key's row, or at the top, as the owner asked; marked.</summary>
     public void AddRow()
@@ -1214,9 +1310,15 @@ public sealed class KeyboardSurface : FrameworkElement
         Lay();
     }
 
-    /// <summary>Pressed while designing: on a key, or on an empty row, to be marked or, a key, dragged.</summary>
+    /// <summary>Pressed while designing: on the key added, held at once; on a key, or on an empty row, to be marked or, a key, dragged.</summary>
     private void DesignDown(Point point)
     {
+        if (added is { } loose && LooseBox(loose).Contains(point))
+        {
+            added = loose with { Held = true };
+            return;
+        }
+
         var hit = laid.FindIndex(laidKey => laidKey.Box.Contains(point));
         var row = RowAt(point.Y);
         designDown = hit >= 0 ? (places[hit].Row, places[hit].Index, point) : row >= 0 && design?.Rows[row].Count == 0 ? (row, -1, point) : null;
@@ -1225,7 +1327,12 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A key pressed and moved past the slop is dragged, marked, under the pointer.</summary>
     private void DesignMove(Point point)
     {
-        if (dragged is { } moving)
+        if (added is { Held: true } carried)
+        {
+            added = carried with { At = point };
+            InvalidateVisual();
+        }
+        else if (dragged is { } moving)
         {
             dragged = (moving.Place, point);
             InvalidateVisual();
@@ -1241,7 +1348,12 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Let go while designing: a key dragged stands where it was let go, in that row before the first key whose middle is right of it; a click marks the key, or the empty row.</summary>
     private void DesignUp(Point point)
     {
-        if (dragged is { } held)
+        if (added is { Held: true } placed)
+        {
+            added = null;
+            PlaceAdded(placed, point);
+        }
+        else if (dragged is { } held)
         {
             MoveKey(held.Place, point);
             dragged = null;
@@ -1282,16 +1394,10 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
-        var key = design.Rows[from.Row][from.Index];
-        var row = RowAt(point.Y);
-        var before = laid.Where((laidKey, i) => places[i].Row == row && places[i] != from && laidKey.Box.X + (laidKey.Box.Width / 2) < point.X).Count();
-        design.Rows[from.Row].RemoveAt(from.Index);
-        design.Rows[row].Insert(Math.Min(before, design.Rows[row].Count), key);
-        selected = (row, Math.Min(before, design.Rows[row].Count - 1));
-        Redesigned();
+        LetGo(design.Rows[from.Row][from.Index], from, point);
     }
 
-    /// <summary>While designing: each empty row outlined, to be marked and filled; the key dragged under the pointer.</summary>
+    /// <summary>While designing: each empty row outlined, to be marked and filled; the key dragged, or the one added, under the pointer.</summary>
     private void DrawDesigning(DrawingContext context)
     {
         if (design is not null)
@@ -1313,6 +1419,11 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             var box = laid[i].Box;
             DrawKey(context, laid[i].Key, new Rect(held.At.X - (box.Width / 2), held.At.Y - (box.Height / 2), box.Width, box.Height), marked: true);
+        }
+
+        if (added is { } loose)
+        {
+            DrawKey(context, loose.Key, LooseBox(loose), marked: true);
         }
     }
 

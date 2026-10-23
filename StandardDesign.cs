@@ -9,8 +9,9 @@ public sealed record DesignedKey(string Id, float Width);
 /// A standard keyboard designed (⊞ › Diseñar): its letters' page as rows of
 /// keys, each the key at a place of the keyboard it was made from
 /// ("b:row:column", so it follows the language: Spanish's ñ is English's
-/// key there) or one added from the list (<see cref="StandardKeys.Extras"/>,
-/// "x:id"), with its width. Kept with the keyboard as JSON.
+/// key there), one added from the list (<see cref="StandardKeys.Extras"/>,
+/// "x:id") or a hole ("gap", + Columna), with its width. Kept with the
+/// keyboard as JSON.
 /// </summary>
 public sealed class StandardDesign
 {
@@ -51,6 +52,11 @@ public sealed class StandardDesign
 
     private static StandardKey Resolve(string id, IReadOnlyList<IReadOnlyList<StandardKey>> made, StandardLanguage language)
     {
+        if (id == StandardKeys.GapId)
+        {
+            return StandardKeys.Gap;
+        }
+
         if (id.StartsWith("x:", StringComparison.Ordinal) && StandardKeys.Extra(id[2..], language) is { } added)
         {
             return added;

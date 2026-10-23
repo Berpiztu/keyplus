@@ -754,7 +754,7 @@ public sealed class KeyboardWindow : Window
         ShowSwitcher();
     }
 
-    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, Quitar, Cancelar, Hecho in blue; a sign's pill narrower than a word's.</summary>
+    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, + Columna, Quitar, Cancelar, Hecho in blue; a sign's pill narrower than a word's.</summary>
     private void FillDesignBar()
     {
         (string Label, Action Pressed, bool Done)[] buttons =
@@ -763,6 +763,7 @@ public sealed class KeyboardWindow : Window
             ("+", () => keys.ResizeMarked(wider: true), false),
             (Texts.Get(Resource.String.add_key), ToggleExtraKeys, false),
             (Texts.Get(Resource.String.add_row), keys.AddRow, false),
+            (Texts.Get(Resource.String.add_column), keys.AddColumn, false),
             (Texts.Get(Resource.String.remove), keys.RemoveMarked, false),
             (Texts.Get(Resource.String.cancel), () => EndDesign(keep: false), false),
             (Texts.Get(Resource.String.done), () => EndDesign(keep: true), true),
@@ -777,7 +778,7 @@ public sealed class KeyboardWindow : Window
         }
     }
 
-    /// <summary>+ Tecla: the keys a design can add in the keys' place, by group, as Android's, a click adding one after the marked key; again, the keys.</summary>
+    /// <summary>+ Tecla: the keys a design can add and the keyboard lacks, in the keys' place, by group, as Android's; one clicked comes loose over the keys, to be dragged to its place; again, the keys.</summary>
     private void ToggleExtraKeys()
     {
         if (extraKeys.Visibility == Visibility.Visible)
@@ -788,8 +789,14 @@ public sealed class KeyboardWindow : Window
         }
 
         var list = new StackPanel { Margin = new Thickness(12, 4, 12, 8) };
-        foreach (var (name, ids) in StandardKeys.Extras)
+        foreach (var (name, offered) in StandardKeys.Extras)
         {
+            var ids = offered.Where(id => !keys.HasKey(id)).ToArray();
+            if (ids.Length == 0)
+            {
+                continue;
+            }
+
             list.Children.Add(new TextBlock { Text = Texts.Get(name), Foreground = new SolidColorBrush(colors.Outline), FontSize = 13, Margin = new Thickness(4, 8, 0, 4) });
             for (var first = 0; first < ids.Length; first += ExtrasAcross)
             {

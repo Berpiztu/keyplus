@@ -172,6 +172,7 @@ namespace Berpiztu.KeyPlus
             public const int keyboards_saved = 90;
             public const int windows_delete_ask = 91;
             public const int windows_keyboards_saved_summary = 92;
+            public const int add_column = 93;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>
