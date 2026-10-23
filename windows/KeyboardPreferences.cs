@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Berpiztu.KeyPlus;
 
@@ -8,10 +9,10 @@ namespace Berpiztu.KeyPlus;
 /// with Android's names and defaults: showing the keyboard when a text field
 /// takes the focus, what it does when the focus leaves (hides, becomes its ⌨
 /// icon or stays), the icon where it never shows by itself, moving out of
-/// the way of the text and of open menus; the keyboard (Estándar or
-/// Estándar PC) and its language, as Tema and Idiomas choose them and the
-/// keyboard's own buttons change them; swiping over the letters and its
-/// trail. Kept in
+/// the way of the text and of open menus; the keyboard (Estándar, Estándar
+/// PC or one saved, by its id: <see cref="Keyboards"/>) and its language, as
+/// Tema and Idiomas choose them and the keyboard's own buttons change them;
+/// swiping over the letters and its trail. Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
 /// </summary>
@@ -24,7 +25,8 @@ public sealed record KeyboardPreferences(
     bool? Pc = null,
     string? Language = null,
     bool Glide = true,
-    bool GlideTrail = true)
+    bool GlideTrail = true,
+    string? Keyboard = null)
 {
     public const string FocusLostHide = "hide";
     public const string FocusLostIcon = "icon";
@@ -36,8 +38,9 @@ public sealed record KeyboardPreferences(
 
     public static KeyboardPreferences Default { get; } = new();
 
-    /// <summary>The preferences with Estándar PC chosen, or Estándar.</summary>
-    public KeyboardPreferences With(bool pc) => this with { Pc = pc };
+    /// <summary>The keyboard shown, by its id; kept before there were ids, Estándar PC unless Pc said Estándar.</summary>
+    [JsonIgnore]
+    public string KeyboardId => Keyboard ?? (Pc == false ? Keyboards.StandardId : Keyboards.StandardPcId);
 
     public static KeyboardPreferences Read()
     {

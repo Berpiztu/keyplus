@@ -106,7 +106,7 @@ Default section order:
   - Keyboard only: `KeyPlusKeyboard.cs`, `KeyboardFrame.cs`, `ClipboardImages.cs`, `ScreenshotWatcher.cs`, `Resources/xml/keyplus_keyboard.xml`; the Keyboard build defines `KEYBOARD`
   - Everything else is shared; a new product-specific file joins the csproj's lists
 - Each product builds into `bin/<Product>/<Configuration>/` and `obj/<Product>/<Configuration>/`
-- `windows\**` is left out of the Android build; the Windows app compiles `StandardKeys.cs`, `SwipeWords.cs`, `EmojiList.cs`, `VoiceTyping.cs` and `WordSuggestions.cs` as they are, so an Android name added to them is added to `windows/AndroidNames.cs`
+- `windows\**` is left out of the Android build; the Windows app compiles `StandardKeys.cs`, `StandardDesign.cs`, `KeyboardEntry.cs`, `SwipeWords.cs`, `EmojiList.cs`, `VoiceTyping.cs` and `WordSuggestions.cs` as they are, so an Android name added to them is added to `windows/AndroidNames.cs`
 - Turning on without a computer: `AdbGrant.cs` (a short foreground service, both products) takes the Wireless debugging pairing code in a notification and runs the product's ADB commands through `AdbShell.java` (Java, `AndroidJavaSource` with `Bind="false"`, called from C# by JNI); the key it pairs with is made per run and never stored
 - Java libraries come as `AndroidMavenLibrary` items with `Bind="false"`: libadb-android and spake2-android from JitPack, Bouncy Castle and Conscrypt from Maven Central; each version is checked for known vulnerabilities (OSV) before it is set, Bouncy Castle is held above the vulnerable one libadb asks for, and `THIRD-PARTY-NOTICES.md` lists them with their licences and is updated with them
 - security-watch's inventory reads NuGet packages only, so it does not see the Java libraries

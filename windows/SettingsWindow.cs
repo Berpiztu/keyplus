@@ -92,19 +92,72 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
-    /// <summary>Tema: the keyboard the card shows, Estándar or Estándar PC, as the toolbar's switch changes it.</summary>
+    /// <summary>
+    /// Tema, as Android's: the keyboards of the list, the one the card shows
+    /// marked, a click showing another, as the toolbar's switch changes it;
+    /// then those saved, each renamed as its name is written, or deleted once
+    /// asked.
+    /// </summary>
     private static FrameworkElement ThemePage()
     {
-        var preferences = KeyboardPreferences.Read();
-        var pc = preferences.Pc ?? true;
         var form = Form(Resource.String.theme);
-        foreach (var (name, isPc) in new[] { (Resource.String.keyboard_standard, false), (Resource.String.keyboard_standard_pc, true) })
+        var keyboards = new StackPanel();
+        form.Children.Add(keyboards);
+
+        void Fill()
         {
-            var option = new RadioButton { Content = Texts.Get(name), IsChecked = pc == isPc, GroupName = "keyboard" };
-            option.Checked += (_, _) => KeyboardPreferences.Read().With(isPc).Keep();
-            form.Children.Add(option);
+            keyboards.Children.Clear();
+            var all = Keyboards.All();
+            var shown = Keyboards.Selected(KeyboardPreferences.Read());
+            var choices = new StackPanel();
+            var options = new Dictionary<string, RadioButton>();
+            foreach (var keyboard in all)
+            {
+                var option = new RadioButton { Content = keyboard.Name, IsChecked = keyboard.Id == shown.Id, GroupName = "keyboard" };
+                option.Checked += (_, _) => Keyboards.Select(keyboard.Id);
+                choices.Children.Add(option);
+                options[keyboard.Id] = option;
+            }
+
+            keyboards.Children.Add(Field(null, choices, null));
+            if (all.Where(keyboard => !keyboard.BuiltIn).ToList() is not { Count: > 0 } saved)
+            {
+                return;
+            }
+
+            var rows = new StackPanel();
+            foreach (var keyboard in saved)
+            {
+                var name = new TextBox { Text = keyboard.Name, VerticalContentAlignment = VerticalAlignment.Center };
+                name.TextChanged += (_, _) =>
+                {
+                    if (!string.IsNullOrWhiteSpace(name.Text))
+                    {
+                        Keyboards.Rename(keyboard.Id, name.Text.Trim());
+                        options[keyboard.Id].Content = name.Text.Trim();
+                    }
+                };
+                var delete = new Button { Content = Texts.Get(Resource.String.delete), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+                delete.Click += (_, _) =>
+                {
+                    var asked = MessageBox.Show(Texts.Get(Resource.String.windows_delete_ask, keyboard.Name), keyboard.Name, MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                    if (asked == MessageBoxResult.OK)
+                    {
+                        Keyboards.Delete(keyboard.Id);
+                        Fill();
+                    }
+                };
+                var row = new DockPanel { Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
+                DockPanel.SetDock(delete, Dock.Right);
+                row.Children.Add(delete);
+                row.Children.Add(name);
+                rows.Children.Add(row);
+            }
+
+            keyboards.Children.Add(Field(Resource.String.keyboards_saved, rows, Resource.String.windows_keyboards_saved_summary));
         }
 
+        Fill();
         return form;
     }
 

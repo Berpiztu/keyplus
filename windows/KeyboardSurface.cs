@@ -17,7 +17,9 @@ namespace Berpiztu.KeyPlus;
 /// or locked, Bloq Mayús, Ctrl, Alt, ⊞ and Alt Gr on until the next key, the
 /// dead keys' accents on the next letter; 🌐 the next language. A drag over
 /// the letters is a swipe, its trail drawn, read as a word (<see cref="Swiped"/>)
-/// and typed with a space before it and none after, as on Android.
+/// and typed with a space before it and none after, as on Android. A
+/// keyboard designed shows its letters' page as designed, and while it is
+/// being designed nothing is typed: a click marks a key, a drag moves it.
 /// </summary>
 public sealed class KeyboardSurface : FrameworkElement
 {
@@ -356,8 +358,8 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The keys' height with the rows at a share of Gboard's, for the keyboard in use.</summary>
     public double HeightAt(double scale) => TopDp + (NumberRowDp * scale) + ((BaseRows - 1) * ((LetterRowDp * scale) + RowGapDp)) + BottomDp;
 
-    /// <summary>The rows of the keyboard's first page, the one its height is made for.</summary>
-    private int BaseRows => StandardKeys.Page(pc ? StandardPage.Pc : StandardPage.Letters, language).Count;
+    /// <summary>The rows of the keyboard's first page, the one its height is made for, as designed where it is; one at least.</summary>
+    private int BaseRows => Math.Max(1, Rows(pc ? StandardPage.Pc : StandardPage.Letters).Count);
 
     private double LetterRow => LetterRowDp * RowScale;
 
@@ -373,12 +375,19 @@ public sealed class KeyboardSurface : FrameworkElement
         Lay();
     }
 
-    /// <summary>The page's keys in place, as the Android keyboard lays them: its widest row across, Gboard's gaps, the top row lower.</summary>
+    /// <summary>
+    /// The page's keys in place, as the Android keyboard lays them: the
+    /// widest row of the keyboard as made across, a design or not, Gboard's
+    /// gaps, the top row lower; a row designed wider than that squeezes its
+    /// own keys alone, so a key widened takes its room from its row.
+    /// </summary>
     private void Lay()
     {
         laid = [];
+        places = [];
+        rowBands = [];
         wordSizes.Clear();
-        var rows = StandardKeys.Page(page, language);
+        var rows = Rows(page);
         var width = ActualWidth;
         if (width <= 0)
         {
@@ -387,31 +396,42 @@ public sealed class KeyboardSurface : FrameworkElement
 
         var gaps = TopDp + BottomDp + ((BaseRows - 1) * RowGapDp);
         RowScale = ActualHeight > 0 ? Math.Max(MinRowScale, (ActualHeight - gaps) / (NumberRowDp + ((BaseRows - 1) * LetterRowDp))) : RowScale;
-        var across = Math.Max(1, rows.Max(row => row.Sum(key => (double)key.Width)));
+        var made = StandardKeys.Page(page, language);
+        var across = Math.Max(1, made.Max(row => row.Sum(key => (double)key.Width)));
         var unit = (width - (2 * SideDp) - ((across - 1) * KeyGapDp)) / across;
         glyphScale = Math.Min(1, unit / (LetterRow * GboardKeyAspect));
         double[] heights = page is StandardPage.Letters or StandardPage.Pc
-            ? [NumberRowDp * RowScale, .. Enumerable.Repeat(LetterRow, rows.Count - 1)]
+            ? [NumberRowDp * RowScale, .. Enumerable.Repeat(LetterRow, Math.Max(0, rows.Count - 1))]
             : [.. Enumerable.Repeat((ActualHeight - TopDp - BottomDp - ((rows.Count - 1) * RowGapDp)) / rows.Count, rows.Count)];
         var top = TopDp;
         for (var r = 0; r < rows.Count; r++)
         {
             var keys = rows[r].Sum(key => (double)key.Width);
-            var rowWidth = (keys * unit) + ((keys - 1) * KeyGapDp);
+            var rowUnit = keys > across ? (width - (2 * SideDp) - ((keys - 1) * KeyGapDp)) / keys : unit;
+            var rowWidth = (keys * rowUnit) + ((keys - 1) * KeyGapDp);
             var x = (width - rowWidth) / 2;
-            foreach (var key in rows[r])
+            for (var i = 0; i < rows[r].Count; i++)
             {
-                var keyWidth = (key.Width * unit) + ((key.Width - 1) * KeyGapDp);
+                var key = rows[r][i];
+                var keyWidth = (key.Width * rowUnit) + ((key.Width - 1) * KeyGapDp);
                 laid.Add((key, new Rect(x, top, Math.Max(1, keyWidth), Math.Max(1, heights[r]))));
+                places.Add((r, i));
                 x += keyWidth + KeyGapDp;
             }
 
+            rowBands.Add((top, top + heights[r]));
             top += heights[r] + RowGapDp;
         }
 
         SizeWords();
         InvalidateVisual();
     }
+
+    /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made.</summary>
+    private IReadOnlyList<IReadOnlyList<StandardKey>> Rows(StandardPage shown) =>
+        design is not null && shown is StandardPage.Letters or StandardPage.Pc
+            ? design.Page(StandardKeys.Page(shown, language), language)
+            : StandardKeys.Page(shown, language);
 
     /// <summary>The words (Esc, Ctrl, Bloq Mayús…) as large as three in four of them hold, the same size, the rest a step smaller.</summary>
     private void SizeWords()
@@ -446,9 +466,19 @@ public sealed class KeyboardSurface : FrameworkElement
     protected override void OnRender(DrawingContext context)
     {
         context.DrawRectangle(new SolidColorBrush(colors.Ground), null, new Rect(RenderSize));
-        foreach (var (key, box) in laid)
+        for (var i = 0; i < laid.Count; i++)
         {
-            DrawKey(context, key, box);
+            if (designing && dragged is { } held && held.Place == places[i])
+            {
+                continue;
+            }
+
+            DrawKey(context, laid[i].Key, laid[i].Box, designing && selected == places[i]);
+        }
+
+        if (designing)
+        {
+            DrawDesigning(context);
         }
 
         if (pressed is { Swiping: true } now && ShowsTrail)
@@ -457,16 +487,17 @@ public sealed class KeyboardSurface : FrameworkElement
         }
     }
 
-    private void DrawKey(DrawingContext context, StandardKey key, Rect box)
+    private void DrawKey(DrawingContext context, StandardKey key, Rect box, bool marked = false)
     {
-        var down = pressed is { Swiping: false } now && now.Key == key;
+        var down = !designing && pressed is { Swiping: false } now && now.Key == key;
         var function = key.Look != StandardLook.Letter;
-        var ground = IsOn(key) ? colors.On
+        var ground = marked ? colors.Primary
+            : IsOn(key) ? colors.On
             : function ? (down ? colors.FunctionPressed : colors.Function)
             : (down ? colors.Function : colors.Key);
         var corner = key.Look == StandardLook.Pill ? box.Height / 2 : CornerDp;
         context.DrawRoundedRectangle(new SolidColorBrush(ground), null, box, corner, corner);
-        var glyph = function ? colors.FunctionGlyph : colors.Glyph;
+        var glyph = marked ? colors.OnPrimary : function ? colors.FunctionGlyph : colors.Glyph;
         var h = LetterRow * glyphScale;
         var centre = new Point(box.X + (box.Width / 2), box.Y + (box.Height / 2));
 
@@ -573,7 +604,14 @@ public sealed class KeyboardSurface : FrameworkElement
         if (e.StylusDevice is null)
         {
             CaptureMouse();
-            Begin(e.GetPosition(this), null);
+            if (designing)
+            {
+                DesignDown(e.GetPosition(this));
+            }
+            else
+            {
+                Begin(e.GetPosition(this), null);
+            }
         }
 
         e.Handled = true;
@@ -584,7 +622,14 @@ public sealed class KeyboardSurface : FrameworkElement
         if (e.StylusDevice is null)
         {
             ReleaseMouseCapture();
-            Finish(null);
+            if (designing)
+            {
+                DesignUp(e.GetPosition(this));
+            }
+            else
+            {
+                Finish(null);
+            }
         }
 
         e.Handled = true;
@@ -593,7 +638,15 @@ public sealed class KeyboardSurface : FrameworkElement
     protected override void OnTouchDown(TouchEventArgs e)
     {
         CaptureTouch(e.TouchDevice);
-        Begin(e.GetTouchPoint(this).Position, e.TouchDevice.Id);
+        if (designing)
+        {
+            DesignDown(e.GetTouchPoint(this).Position);
+        }
+        else
+        {
+            Begin(e.GetTouchPoint(this).Position, e.TouchDevice.Id);
+        }
+
         e.Handled = true;
     }
 
@@ -601,13 +654,28 @@ public sealed class KeyboardSurface : FrameworkElement
     {
         if (e.StylusDevice is null && e.LeftButton == MouseButtonState.Pressed)
         {
-            Track(e.GetPosition(this), null);
+            if (designing)
+            {
+                DesignMove(e.GetPosition(this));
+            }
+            else
+            {
+                Track(e.GetPosition(this), null);
+            }
         }
     }
 
     protected override void OnTouchMove(TouchEventArgs e)
     {
-        Track(e.GetTouchPoint(this).Position, e.TouchDevice.Id);
+        if (designing)
+        {
+            DesignMove(e.GetTouchPoint(this).Position);
+        }
+        else
+        {
+            Track(e.GetTouchPoint(this).Position, e.TouchDevice.Id);
+        }
+
         e.Handled = true;
     }
 
@@ -647,7 +715,15 @@ public sealed class KeyboardSurface : FrameworkElement
     protected override void OnTouchUp(TouchEventArgs e)
     {
         ReleaseTouchCapture(e.TouchDevice);
-        Finish(e.TouchDevice.Id);
+        if (designing)
+        {
+            DesignUp(e.GetTouchPoint(this).Position);
+        }
+        else
+        {
+            Finish(e.TouchDevice.Id);
+        }
+
         e.Handled = true;
     }
 
@@ -995,6 +1071,249 @@ public sealed class KeyboardSurface : FrameworkElement
             _ => Shift.Off,
         };
         shiftTappedAt = now;
+    }
+
+    /// <summary>The keys' places as laid out, each its row and its place in the row, alongside <see cref="laid"/>.</summary>
+    private List<(int Row, int Index)> places = [];
+
+    /// <summary>Each row's top and bottom as laid out, an empty one's too.</summary>
+    private List<(double Top, double Bottom)> rowBands = [];
+
+    private StandardDesign? design;
+    private bool designing;
+
+    /// <summary>While designing: the key marked (its place), or a row (its place -1); the key dragged and where the pointer is; where the pointer went down.</summary>
+    private (int Row, int Index)? selected;
+    private ((int Row, int Index) Place, Point At)? dragged;
+    private (int Row, int Index, Point At)? designDown;
+
+    /// <summary>How far a press goes before it is a drag: Android's touch slop, ViewConfiguration's 8 dp.</summary>
+    private const double DragSlopDp = 8;
+
+    private const float WidthStep = 0.25f;
+    private const float LeastKeyWidth = 0.5f;
+    private const float MostKeyWidth = 10f;
+
+    /// <summary>The letters' page as designed (Diseñar); none, as made.</summary>
+    public StandardDesign? Design
+    {
+        get => design;
+        set
+        {
+            design = value;
+            selected = null;
+            InvalidateMeasure();
+            Lay();
+        }
+    }
+
+    /// <summary>Whether the keys are being designed: a click marks a key, a drag moves it; nothing is typed.</summary>
+    public bool Designing
+    {
+        get => designing;
+        set
+        {
+            designing = value;
+            selected = null;
+            dragged = null;
+            designDown = null;
+            StopHolding();
+            pressed = null;
+            if (value)
+            {
+                EndSwipe(letter: false);
+                ForgetTyping();
+                ShowPage(pc ? StandardPage.Pc : StandardPage.Letters);
+            }
+
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>The design came to have more or fewer rows, told before the keys are laid again: the window made as tall as they need.</summary>
+    public event Action? RowsChanged;
+
+    /// <summary>−, +: the marked key a quarter of a key narrower or wider.</summary>
+    public void ResizeMarked(bool wider) => ChangeMarked((row, index) =>
+        design!.Rows[row][index] = design.Rows[row][index] with { Width = Math.Clamp(design.Rows[row][index].Width + (wider ? WidthStep : -WidthStep), LeastKeyWidth, MostKeyWidth) });
+
+    /// <summary>Quitar: the marked key out; a marked empty row out.</summary>
+    public void RemoveMarked()
+    {
+        if (design is null || selected is not { } at)
+        {
+            return;
+        }
+
+        if (at.Index < 0)
+        {
+            design.Rows.RemoveAt(at.Row);
+            selected = null;
+        }
+        else
+        {
+            design.Rows[at.Row].RemoveAt(at.Index);
+            selected = design.Rows[at.Row].Count == 0 ? (at.Row, -1) : (at.Row, Math.Min(at.Index, design.Rows[at.Row].Count - 1));
+        }
+
+        Redesigned();
+    }
+
+    /// <summary>+ Tecla: a key from the list after the marked one, into a marked empty row, or at the end of the last row; marked.</summary>
+    public void AddKey(string id)
+    {
+        if (design is null || StandardKeys.Extra(id, language) is not { } key)
+        {
+            return;
+        }
+
+        if (design.Rows.Count == 0)
+        {
+            design.Rows.Add([]);
+        }
+
+        var (row, index) = selected is { } at ? (at.Row, at.Index + 1) : (design.Rows.Count - 1, design.Rows[^1].Count);
+        design.Rows[row].Insert(index, new DesignedKey("x:" + id, key.Width));
+        selected = (row, index);
+        Redesigned();
+    }
+
+    /// <summary>+ Fila: an empty row over the marked key's row, or at the top, as the owner asked; marked.</summary>
+    public void AddRow()
+    {
+        if (design is null)
+        {
+            return;
+        }
+
+        var row = selected is { } at ? at.Row : 0;
+        design.Rows.Insert(row, []);
+        selected = (row, -1);
+        Redesigned();
+    }
+
+    private void ChangeMarked(Action<int, int> change)
+    {
+        if (design is null || selected is not { Index: >= 0 } at)
+        {
+            return;
+        }
+
+        change(at.Row, at.Index);
+        Redesigned();
+    }
+
+    private void Redesigned()
+    {
+        if (Rows(page).Count != rowBands.Count)
+        {
+            RowsChanged?.Invoke();
+        }
+
+        InvalidateMeasure();
+        Lay();
+    }
+
+    /// <summary>Pressed while designing: on a key, or on an empty row, to be marked or, a key, dragged.</summary>
+    private void DesignDown(Point point)
+    {
+        var hit = laid.FindIndex(laidKey => laidKey.Box.Contains(point));
+        var row = RowAt(point.Y);
+        designDown = hit >= 0 ? (places[hit].Row, places[hit].Index, point) : row >= 0 && design?.Rows[row].Count == 0 ? (row, -1, point) : null;
+    }
+
+    /// <summary>A key pressed and moved past the slop is dragged, marked, under the pointer.</summary>
+    private void DesignMove(Point point)
+    {
+        if (dragged is { } moving)
+        {
+            dragged = (moving.Place, point);
+            InvalidateVisual();
+        }
+        else if (designDown is { Index: >= 0 } down && Math.Max(Math.Abs(point.X - down.At.X), Math.Abs(point.Y - down.At.Y)) > DragSlopDp)
+        {
+            selected = (down.Row, down.Index);
+            dragged = ((down.Row, down.Index), point);
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>Let go while designing: a key dragged stands where it was let go, in that row before the first key whose middle is right of it; a click marks the key, or the empty row.</summary>
+    private void DesignUp(Point point)
+    {
+        if (dragged is { } held)
+        {
+            MoveKey(held.Place, point);
+            dragged = null;
+            designDown = null;
+        }
+        else if (designDown is { } down)
+        {
+            selected = (down.Row, down.Index);
+            designDown = null;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>The row whose band, gaps shared, holds a height; the nearest above or below the keys; -1 with none.</summary>
+    private int RowAt(double y)
+    {
+        if (rowBands.Count == 0)
+        {
+            return -1;
+        }
+
+        var half = RowGapDp / 2;
+        for (var r = 0; r < rowBands.Count; r++)
+        {
+            if (y >= rowBands[r].Top - half && y < rowBands[r].Bottom + half)
+            {
+                return r;
+            }
+        }
+
+        return y < rowBands[0].Top ? 0 : rowBands.Count - 1;
+    }
+
+    private void MoveKey((int Row, int Index) from, Point point)
+    {
+        if (design is null)
+        {
+            return;
+        }
+
+        var key = design.Rows[from.Row][from.Index];
+        var row = RowAt(point.Y);
+        var before = laid.Where((laidKey, i) => places[i].Row == row && places[i] != from && laidKey.Box.X + (laidKey.Box.Width / 2) < point.X).Count();
+        design.Rows[from.Row].RemoveAt(from.Index);
+        design.Rows[row].Insert(Math.Min(before, design.Rows[row].Count), key);
+        selected = (row, Math.Min(before, design.Rows[row].Count - 1));
+        Redesigned();
+    }
+
+    /// <summary>While designing: each empty row outlined, to be marked and filled; the key dragged under the pointer.</summary>
+    private void DrawDesigning(DrawingContext context)
+    {
+        if (design is not null)
+        {
+            for (var r = 0; r < rowBands.Count && r < design.Rows.Count; r++)
+            {
+                if (design.Rows[r].Count > 0)
+                {
+                    continue;
+                }
+
+                var outline = new Pen(new SolidColorBrush(selected == (r, -1) ? colors.Primary : colors.FaintOutline), 2);
+                var band = new Rect(SideDp, rowBands[r].Top, Math.Max(1, ActualWidth - (2 * SideDp)), Math.Max(1, rowBands[r].Bottom - rowBands[r].Top));
+                context.DrawRoundedRectangle(null, outline, band, CornerDp, CornerDp);
+            }
+        }
+
+        if (dragged is { } held && places.IndexOf(held.Place) is var i and >= 0)
+        {
+            var box = laid[i].Box;
+            DrawKey(context, laid[i].Key, new Rect(held.At.X - (box.Width / 2), held.At.Y - (box.Height / 2), box.Width, box.Height), marked: true);
+        }
     }
 
     private static Keycode? CodeOf(string? text) => text is { Length: 1 } one

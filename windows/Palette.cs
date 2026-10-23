@@ -10,7 +10,8 @@ namespace Berpiztu.KeyPlus;
 /// parts on Windows' tones: a key the background, its letters the
 /// foreground, the ground the background with a little of the foreground in
 /// it, a function key the accent's lightest tone (darkest in a dark theme)
-/// and its sign a dark one, a modifier on the next tone, ✓'s blue the accent.
+/// and its sign a dark one, a modifier on the next tone, ✓'s blue the accent,
+/// and what is written on it white or black, whichever reads.
 /// </summary>
 public sealed class Palette
 {
@@ -33,6 +34,7 @@ public sealed class Palette
         FunctionGlyph = Of(Dark ? UIColorType.AccentLight3 : UIColorType.AccentDark2);
         On = Of(Dark ? UIColorType.AccentDark1 : UIColorType.AccentLight2);
         Primary = Of(UIColorType.Accent);
+        OnPrimary = Readable(Primary);
         Outline = Mix(background, foreground, 0.45);
         Handle = Mix(background, foreground, 0.35);
     }
@@ -56,12 +58,26 @@ public sealed class Palette
 
     public Color Primary { get; }
 
+    /// <summary>What is written on <see cref="Primary"/>: Hecho's word, a key marked while designing.</summary>
+    public Color OnPrimary { get; }
+
     public Color Outline { get; }
+
+    /// <summary>An empty row's outline while designing, Android's: the outline half seen.</summary>
+    public Color FaintOutline => Color.FromArgb(128, Outline.R, Outline.G, Outline.B);
 
     /// <summary>The floating card's handle.</summary>
     public Color Handle { get; }
 
     public static Palette Read() => new(new UISettings());
+
+    /// <summary>White or black on a colour, whichever stands out from it more (WCAG's contrast ratio).</summary>
+    private static Color Readable(Color ground)
+    {
+        static double Linear(byte channel) => channel / 255.0 is var c && c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        var luminance = (0.2126 * Linear(ground.R)) + (0.7152 * Linear(ground.G)) + (0.0722 * Linear(ground.B));
+        return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05 ? Colors.White : Colors.Black;
+    }
 
     /// <summary>One colour with a share of another in it.</summary>
     private static Color Mix(Color under, Color over, double share) => Color.FromRgb(

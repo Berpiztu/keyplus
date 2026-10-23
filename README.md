@@ -107,11 +107,12 @@ a window that does.
 | [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema): Estándar, Estándar PC and those saved; each screen's docked and floating one |
+| [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
-| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
-| [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
+| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design, on Android and Windows: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
+| [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys and the designer, [Keyboards.cs](windows/Keyboards.cs) the keyboards saved, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
@@ -331,11 +332,16 @@ too small for it.
 ### Windows
 
 Berpiztu AI Keyboard for Windows (`windows/`, WPF, .NET 10) is the
-standard keyboards, Estándar and Estándar PC, with the Android one's
-layouts and signs, in a card that floats over every window and never takes
+standard keyboards, Estándar and Estándar PC, and those designed, with
+the Android one's layouts and signs, in a card that floats over every window and never takes
 the focus from the one typed in: its keys go to that window as Windows'
-own. Over the keys, the keyboard in sight (a phone or a computer), a click
-the other, and ✕; the toolbar and the handle under the keys move it, and
+own. Over the keys, the keyboard in sight (a phone for Estándar, a
+computer for the others), a click Estándar PC or Estándar, Diseñar and ✕.
+Diseñar is Android's designer: a click marks a key in blue, − and + make
+it narrower or wider, a drag moves it, + Tecla adds a PC's key, + Fila an
+empty row above, Quitar takes the marked one out; Hecho saves Estándar or
+Estándar PC as a new keyboard, a saved one in its place, and Cancelar
+leaves it as it was. The toolbar and the handle under the keys move it, and
 its edges and corners make it larger or smaller as any window's, the rows
 growing with it; its place, size, keyboard and language are kept. A drag
 over the letters is read by FUTO Swipe, built for Windows
@@ -347,8 +353,9 @@ ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
 the settings, an app of their own as on Android: Idiomas, Preferencias,
-Tema, Escritura deslizando el dedo, Escribir por voz and Información. The
-grid and the designer are not on Windows yet.
+Tema (the keyboards, those saved renamed or deleted there), Escritura
+deslizando el dedo, Escribir por voz, Solución de problemas and
+Información. The grid is not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj

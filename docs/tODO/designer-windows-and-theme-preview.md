@@ -46,12 +46,22 @@ keyboard as a preview and to design it there too.
 
 Start with 1 and 2 (what does not work on Windows today), then 3 and 4.
 
+## Later: one key size for the whole keyboard
+
+Asked by the owner on 2026-10-23, to do after this plan, on both
+platforms. Today a row designed wider than the keyboard as made squeezes
+its own keys alone (`Lay` in `StandardKeyboard.cs` and
+`windows/KeyboardSurface.cs`), so two keys of the same designed width in
+different rows (↑ and ↓) come out different and cannot be made equal.
+Proposed: one key unit for every row, from the design's widest row; a
+shorter row centred; widening a key of the widest row makes the whole
+keyboard a little smaller, its proportions kept.
+
 ## Where things stand
 
-- `main` has everything (release 1.0.44 published with both APKs and the
-  Windows MSI, then commit 63f98bc). `futo-swipe` is behind `main`: bring
-  it up to `main` first (`git switch futo-swipe; git merge --ff-only main`)
-  and work there, merging to `main` once the owner has tried it.
+- 1 and 2 are written on `futo-swipe` (brought up to `main` first), built,
+  not yet tried by the owner; merged to `main` once the owner has tried
+  them. 3 and 4 come next.
 - Windows: `windows/KeyboardSurface.cs` draws and types the standard keys
   as `StandardKeyboard.cs` does; `windows/SettingsWindow.cs` has the pages
   (Idiomas, Preferencias, Tema, Escritura deslizando el dedo, Escribir por

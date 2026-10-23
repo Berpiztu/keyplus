@@ -176,4 +176,6 @@
   <string name="troubleshooting_vscode_done">Put in %1$s shortcuts: close VS Code and open it again from one of them.</string>
   <string name="troubleshooting_vscode_already">Every VS Code shortcut has it already.</string>
   <string name="troubleshooting_vscode_none">No VS Code shortcut was found in the Start menu, the taskbar or on the desktop.</string>
+  <string name="windows_delete_ask">Delete %1$s? If the keyboard shows it, it goes back to Standard PC.</string>
+  <string name="windows_keyboards_saved_summary">Each made with Design on the keyboard: its name changed here, or deleted</string>
 </resources>
