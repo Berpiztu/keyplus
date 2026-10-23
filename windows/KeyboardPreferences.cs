@@ -13,7 +13,8 @@ namespace Berpiztu.KeyPlus;
 /// keyboard chosen for each language (Estándar, Estándar PC or one saved in
 /// it, by its id: <see cref="Keyboards"/>), as Idiomas and Tema choose them
 /// and the keyboard's own buttons change them;
-/// swiping over the letters and its trail. Kept in
+/// swiping over the letters and its trail; whether the keyboard is docked at
+/// the screen's bottom rather than floating, as it starts. Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
 /// </summary>
@@ -28,7 +29,8 @@ public sealed record KeyboardPreferences(
     bool Glide = true,
     bool GlideTrail = true,
     string? Keyboard = null,
-    Dictionary<string, string>? Chosen = null)
+    Dictionary<string, string>? Chosen = null,
+    bool Docked = false)
 {
     public const string FocusLostHide = "hide";
     public const string FocusLostIcon = "icon";

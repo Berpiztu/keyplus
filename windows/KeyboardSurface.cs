@@ -361,6 +361,10 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The keys' height with the rows at a share of Gboard's, for the keyboard in use.</summary>
     public double HeightAt(double scale) => HeightOf(BaseRows, scale);
 
+    /// <summary>The rows' share of Gboard's height that makes the keys as tall as asked, the gaps Gboard's; half Gboard's at least.</summary>
+    public double ScaleFor(double height) =>
+        Math.Max(MinRowScale, (height - TopDp - BottomDp - ((BaseRows - 1) * RowGapDp)) / (NumberRowDp + ((BaseRows - 1) * LetterRowDp)));
+
     /// <summary>The keys' height for a number of rows at a share of Gboard's.</summary>
     public static double HeightOf(int rows, double scale) => TopDp + (NumberRowDp * scale) + ((rows - 1) * ((LetterRowDp * scale) + RowGapDp)) + BottomDp;
 
@@ -402,8 +406,7 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
-        var gaps = TopDp + BottomDp + ((BaseRows - 1) * RowGapDp);
-        RowScale = ActualHeight > 0 ? Math.Max(MinRowScale, (ActualHeight - gaps) / (NumberRowDp + ((BaseRows - 1) * LetterRowDp))) : RowScale;
+        RowScale = ActualHeight > 0 ? ScaleFor(ActualHeight) : RowScale;
         var made = StandardKeys.Page(page, language);
         var across = Math.Max(1, made.Max(row => row.Sum(key => (double)key.Width)));
         var unit = (width - (2 * SideDp) - ((across - 1) * KeyGapDp)) / across;

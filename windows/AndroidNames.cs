@@ -79,6 +79,9 @@ namespace Berpiztu.KeyPlus
             public const int ic_tool_settings = 22;
             public const int ic_keyplus = 23;
             public const int ic_grid_design = 24;
+            public const int ic_grid_floating = 25;
+            public const int ic_grid_floating_off = 26;
+            public const int ic_tool_resize = 27;
         }
 
         public static class String
@@ -174,6 +177,7 @@ namespace Berpiztu.KeyPlus
             public const int add_column = 93;
             public const int windows_save_as = 94;
             public const int windows_keyboard = 95;
+            public const int reset_size = 96;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

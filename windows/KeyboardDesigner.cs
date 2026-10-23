@@ -14,7 +14,7 @@ namespace Berpiztu.KeyPlus;
 /// the keys' place), which its host puts where they go. Started with a
 /// keyboard of the list, from its design or the keyboard as made; Hecho saves
 /// a built-in one as a new keyboard of the language designed in, chosen for it
-/// at once, and a saved one in its place; Cancelar leaves it as it was; either way <see cref="Ended"/>.
+/// at once, and a saved one in its place, docked as its docked design; Cancelar leaves it as it was; either way <see cref="Ended"/>.
 /// </summary>
 public sealed class KeyboardDesigner
 {
@@ -43,6 +43,9 @@ public sealed class KeyboardDesigner
     /// <summary>+ Tecla's list, over the keys, as tall, while chosen.</summary>
     public ScrollViewer ExtraKeys { get; } = new() { Visibility = Visibility.Collapsed, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = false };
 
+    /// <summary>Whether the keyboard is designed as it shows docked: its docked design made and kept, its floating one left as it is.</summary>
+    public bool Docked { get; set; }
+
     /// <summary>The design ended: the keyboard as it now is (the one saved, or as it was), whether Hecho kept it, and the rows' share of Gboard's as they were, for a host to keep their height.</summary>
     public event Action<KeyboardEntry, bool, double>? Ended;
 
@@ -51,7 +54,7 @@ public sealed class KeyboardDesigner
     {
         keyboard = shown;
         var made = StandardKeys.Page(keys.Pc ? StandardPage.Pc : StandardPage.Letters, keys.KeyLanguage);
-        keys.Design = StandardDesign.FromText(shown.Design) ?? StandardDesign.From(made);
+        keys.Design = StandardDesign.FromText(shown.DesignFor(Docked)) ?? StandardDesign.From(made);
         keys.Designing = true;
         Bar.Visibility = Visibility.Visible;
         Log.Write($"Designing {shown.Name}");
@@ -77,22 +80,25 @@ public sealed class KeyboardDesigner
         if (keep && keys.Design is { } designed)
         {
             // The keyboard shown is then the one saved, as it now is: designed again, it opens as saved, and Hecho keeps it in its place.
+            // Docked, the design is the keyboard's docked one: a new keyboard made from a built-in one floats as that one does.
             if (shown.BuiltIn)
             {
-                shown = Keyboards.SaveAs(Keyboards.NewName(shown), shown.Base, designed.Text, keys.KeyLanguage.Code);
+                shown = Docked
+                    ? Keyboards.SaveAs(Keyboards.NewName(shown), shown.Base, null, keys.KeyLanguage.Code, designed.Text)
+                    : Keyboards.SaveAs(Keyboards.NewName(shown), shown.Base, designed.Text, keys.KeyLanguage.Code);
                 Keyboards.Select(keys.KeyLanguage.Code, shown.Id);
             }
             else
             {
-                Keyboards.SetDesign(shown.Id, designed.Text);
-                shown = shown with { Design = designed.Text };
+                Keyboards.SetDesign(shown.Id, designed.Text, Docked);
+                shown = Docked ? shown with { DockedDesign = designed.Text } : shown with { Design = designed.Text };
             }
 
             Log.Write($"Design kept as {shown.Name}");
         }
         else
         {
-            keys.Design = StandardDesign.FromText(shown.Design);
+            keys.Design = StandardDesign.FromText(shown.DesignFor(Docked));
         }
 
         keyboard = null;

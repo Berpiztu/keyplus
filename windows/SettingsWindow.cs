@@ -135,7 +135,9 @@ public sealed class SettingsWindow : Window
 
         var colors = Palette.Read();
         var preview = new KeyboardSurface(colors) { Types = false };
-        var designer = new KeyboardDesigner(colors, preview);
+        // The keyboard as it shows now, docked or floating, designed so.
+        var docked = KeyboardPreferences.Read().Docked;
+        var designer = new KeyboardDesigner(colors, preview) { Docked = docked };
         // Diseñar in the bar's place, a pill as the bar's: designing, the bar stands there and the preview keeps its size.
         var design = KeyboardDesigner.Pill(colors, Texts.Get(Resource.String.design), done: false);
         design.HorizontalAlignment = HorizontalAlignment.Left;
@@ -210,7 +212,7 @@ public sealed class SettingsWindow : Window
             delete.IsEnabled = !keyboard.BuiltIn;
             preview.KeyLanguage = language;
             preview.Pc = keyboard.Base == Keyboards.StandardPcBase;
-            preview.Design = StandardDesign.FromText(keyboard.Design);
+            preview.Design = StandardDesign.FromText(keyboard.DesignFor(docked));
             preview.Height = preview.HeightAt(rowScale);
         }
 
@@ -264,7 +266,7 @@ public sealed class SettingsWindow : Window
             }
 
             // A copy under the name written, chosen to be designed; the keyboard it was made from stays as it is.
-            var copy = Keyboards.SaveAs(name.Text.Trim(), shown.Base, shown.Design, language.Code);
+            var copy = Keyboards.SaveAs(name.Text.Trim(), shown.Base, shown.Design, language.Code, shown.DockedDesign);
             Keyboards.Select(language.Code, copy.Id);
             Fill();
         };

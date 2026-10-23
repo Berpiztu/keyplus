@@ -47,10 +47,10 @@ public static class Keyboards
         (preferences with { Chosen = new Dictionary<string, string>(preferences.Chosen ?? []) { [language] = id } }).Keep();
     }
 
-    /// <summary>A keyboard saved in a language, with its base and its design, under a name.</summary>
-    public static KeyboardEntry SaveAs(string name, string from, string? design, string language)
+    /// <summary>A keyboard saved in a language, with its base, its design and its docked one, under a name.</summary>
+    public static KeyboardEntry SaveAs(string name, string from, string? design, string language, string? dockedDesign = null)
     {
-        var made = new KeyboardEntry(Guid.NewGuid().ToString("N")[..8], name, from, design, language);
+        var made = new KeyboardEntry(Guid.NewGuid().ToString("N")[..8], name, from, design, language, dockedDesign);
         Keep([.. Made(), made]);
         return made;
     }
@@ -73,9 +73,9 @@ public static class Keyboards
     /// <summary>Each change of the keyboards saved (one designed or deleted elsewhere), told on the caller's thread until the watch is disposed.</summary>
     public static IDisposable Watch(Action changed) => FileWatch.Changed(Kept, changed);
 
-    /// <summary>A saved keyboard's design, kept with it.</summary>
-    public static void SetDesign(string id, string? design) =>
-        Keep([.. Made().Select(keyboard => keyboard.Id == id ? keyboard with { Design = design } : keyboard)]);
+    /// <summary>A saved keyboard's design, kept with it: floating, its design; docked, its docked one.</summary>
+    public static void SetDesign(string id, string? design, bool docked) =>
+        Keep([.. Made().Select(keyboard => keyboard.Id != id ? keyboard : docked ? keyboard with { DockedDesign = design } : keyboard with { Design = design })]);
 
     private static List<KeyboardEntry> Made()
     {

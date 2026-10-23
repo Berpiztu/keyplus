@@ -53,9 +53,10 @@ platforms. Today a row designed wider than the keyboard as made squeezes
 its own keys alone (`Lay` in `StandardKeyboard.cs` and
 `windows/KeyboardSurface.cs`), so two keys of the same designed width in
 different rows (↑ and ↓) come out different and cannot be made equal.
-Proposed: one key unit for every row, from the design's widest row; a
-shorter row centred; widening a key of the widest row makes the whole
-keyboard a little smaller, its proportions kept.
+One key unit for every row was tried on Windows and undone: it changed
+the owner's whole keyboard (rows of different lengths, margins). What
+stayed: a shaped Enter's top is sized after its lower part
+(`KeyWidths`). Equal keys across rows (↑ and ↓) is still open.
 
 ## Later: more keyboards the keyboard comes with
 
@@ -68,13 +69,33 @@ Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
 
 ## Where things stand
 
-- On `futo-swipe`: 1 and 2 tried by the owner, with + Tecla, + Columna and
-  the Enter's shapes on both platforms; 3 done on Windows (Tema with its
-  preview, designed there one to one) with keyboards by language (each
-  language its own keyboards and chosen one), not yet on Android, where 4
-  brings them. Next, agreed on 2026-10-23: how Windows designs for a docked
-  keyboard and a floating one, as Android has both (Windows' touch keyboard
-  docks too, the apps' viewport made smaller by it).
+- On `futo-swipe`, pushed to f31540c: 1 and 2 tried by the owner, with
+  + Tecla, + Columna and the Enter's shapes on both platforms; 3 done on
+  Windows (Tema with its preview, designed there one to one) with keyboards
+  by language (each language its own keyboards and chosen one), not yet on
+  Android, where 4 brings them.
+- Docked and floating, agreed on 2026-10-23: one keyboard per language;
+  Windows starts floating, Android docked; Acoplar (Windows) or Flotante
+  (Android) shows the same keyboard in the other mode; designing there and
+  Hecho keeps that mode's own design on the same keyboard
+  (`KeyboardEntry.DockedDesign`/`FloatingDesign`, `DesignFor`), Cancelar
+  keeps nothing; a built-in one designed saves a new keyboard.
+- Windows docking, written, not committed, being tried by the owner:
+  `windows/DockedBar.cs` (an app bar, SHAppBarMessage, the bottom Windows
+  gave kept, for asked again it counts its own room as taken);
+  `KeyboardWindow.SetDocked`/`PlaceDocked` (the window held on its bar in
+  WM_WINDOWPOSCHANGING, Windows otherwise pushing it inside the work area);
+  docked keys never stretched: their own width centred, the bar's ground
+  around (`dockedWidth`, `dockedOffset`, `dockedLift` in `window.json`);
+  Redimensionar as Android's `KeyboardFrame.cs` (edges for height and
+  width, ✥ to move, Restablecer, Hecho), floating and docked.
+- To fix next, the owner's findings on 2026-10-23: Redimensionar needs
+  Cancelar too (Restablecer is the keyboard as made, Cancelar undoes this
+  resizing); the height and the lift must follow the drag as it goes, not
+  jump when let go; moving it side to side lifts it when it reaches a
+  corner (the drag's small vertical part is taken as lift), and once the
+  docked bar became enormous: the lift and the height's arithmetic to be
+  checked and bounded.
 - Windows: `windows/KeyboardSurface.cs` draws and types the standard keys
   as `StandardKeyboard.cs` does; `windows/SettingsWindow.cs` has the pages
   (Idiomas, Preferencias, Tema, Escritura deslizando el dedo, Escribir por

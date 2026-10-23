@@ -7,11 +7,16 @@ namespace Berpiztu.KeyPlus;
 /// design, which goes with it; none, as its base is; and, on Windows, the
 /// language it was designed in (a PC's keys differ between them), each
 /// language listing its own: none, made before there were languages, is
-/// Spanish's. Shared with the Windows app, whose <see cref="Keyboards"/>
-/// keeps its own list.
+/// Spanish's; and a design of its own for the mode it does not start in,
+/// made by designing it there (on Windows, which starts floating, docked; on
+/// Android, which starts docked, floating), else its design in both. Shared
+/// with the Windows app, whose <see cref="Keyboards"/> keeps its own list.
 /// </summary>
-public sealed record KeyboardEntry(string Id, string Name, string Base, string? Design = null, string? Language = null)
+public sealed record KeyboardEntry(string Id, string Name, string Base, string? Design = null, string? Language = null, string? DockedDesign = null, string? FloatingDesign = null)
 {
+    /// <summary>The design it shows docked or floating: that mode's own, else its design.</summary>
+    public string? DesignFor(bool docked) => (docked ? DockedDesign : FloatingDesign) ?? Design;
+
     /// <summary>The language a saved keyboard belongs to: its own, or Spanish for one made before there were languages.</summary>
     public string LanguageCode => Language ?? StandardKeys.Spanish.Code;
 

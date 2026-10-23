@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -40,6 +41,45 @@ public sealed class KeyboardWindow : Window
     private const double HandleHeightDp = 4;
     private const double MinWidthDp = 360;
 
+    /// <summary>Windows' message as a window's place is about to change.</summary>
+    private const int WindowPosChanging = 0x0046;
+
+    /// <summary>Redimensionar's frame, Android's: the keys dimmed under it, its edges' bars (how thick, and the line in their middle), its buttons' height.</summary>
+    private static readonly Color FrameDim = Color.FromArgb(0xC0, 0x12, 0x12, 0x12);
+    private const double EdgeDp = 16;
+    private const double EdgeLineDp = 6;
+    private const double EdgeLineLengthDp = 56;
+    private const double FrameButtonDp = 36;
+
+    /// <summary>The docked bar Windows gave, in pixels, where the window is held.</summary>
+    private Int32Rect? dockedPlace;
+
+    /// <summary>
+    /// Docked, the keys' own width, never stretched to the screen's, how far from the bar's middle they stand and how high
+    /// above its bottom, as wide as they floated, in its middle and on its bottom at first, then as Redimensionar leaves them;
+    /// Redimensionar's button and frame; a drag's height and lift until it is let go.
+    /// </summary>
+    private double dockedWidth;
+    private double dockedOffset;
+    private double dockedLift;
+    private readonly SignButton resize;
+    private readonly Grid resizeFrame = new() { Visibility = Visibility.Collapsed };
+    private double resizedHeight;
+    private double lifted;
+
+    /// <summary>Windows' WINDOWPOS, a window's place as it is about to change.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowPosition
+    {
+        public IntPtr Window;
+        public IntPtr InsertAfter;
+        public int X;
+        public int Y;
+        public int Width;
+        public int Height;
+        public uint Flags;
+    }
+
     /// <summary>The room the keyboard keeps between itself and the caret or menu it moved away from, Android's.</summary>
     private const double CaretGapDp = 16;
 
@@ -63,6 +103,24 @@ public sealed class KeyboardWindow : Window
     /// <summary>The keyboard of the list in sight, as saved: designed again, it opens as saved.</summary>
     private KeyboardEntry keyboard = ShownIn(KeyboardPreferences.Read());
 
+    /// <summary>
+    /// Docked at the bottom of the screen as an app bar (Acoplar), or floating as the card, as it starts; the bar once the
+    /// window has a handle; the card's frame, shadow and handle, and Windows' resizing at its edges, which docked it does without.
+    /// </summary>
+    private bool docked;
+    private DockedBar? dockedBar;
+    private readonly SignButton dock;
+    private readonly Border frame;
+    private readonly DockPanel handleBand = new() { Height = HandleBandDp };
+    private readonly DropShadowEffect shadow = new() { BlurRadius = ShadowDp * 1.5, ShadowDepth = 2, Opacity = 0.3 };
+    private readonly System.Windows.Shell.WindowChrome chrome = new()
+    {
+        ResizeBorderThickness = new Thickness(ShadowDp),
+        CaptionHeight = 0,
+        GlassFrameThickness = new Thickness(0),
+        UseAeroCaptionButtons = false,
+    };
+
     /// <summary>The toolbar, and in its place while designing the designer's pills.</summary>
     private readonly DockPanel bar = new() { Height = BarDp, Background = Brushes.Transparent };
     private readonly KeyboardDesigner designer;
@@ -80,7 +138,7 @@ public sealed class KeyboardWindow : Window
     private bool moving;
 
     /// <summary>What the window keeps between runs.</summary>
-    private sealed record State(double Left, double Top, double Width, string Language, double? IconLeft = null, double? IconTop = null, double RowScale = 1);
+    private sealed record State(double Left, double Top, double Width, string Language, double? IconLeft = null, double? IconTop = null, double RowScale = 1, double? DockedWidth = null, double DockedOffset = 0, double DockedLift = 0);
 
     /// <summary>The keyboard window's title, by which another start of the program finds it.</summary>
     public const string WindowTitle = "Berpiztu AI Keyboard";
@@ -105,13 +163,7 @@ public sealed class KeyboardWindow : Window
         MinWidth = MinWidthDp + (2 * ShadowDp);
 
         // Windows' own resizing at the card's edges and corners: the shadow's band around it.
-        System.Windows.Shell.WindowChrome.SetWindowChrome(this, new System.Windows.Shell.WindowChrome
-        {
-            ResizeBorderThickness = new Thickness(ShadowDp),
-            CaptionHeight = 0,
-            GlassFrameThickness = new Thickness(0),
-            UseAeroCaptionButtons = false,
-        });
+        System.Windows.Shell.WindowChrome.SetWindowChrome(this, chrome);
         Topmost = true;
         ShowActivated = false;
         ShowInTaskbar = true;
@@ -139,6 +191,11 @@ public sealed class KeyboardWindow : Window
         };
         var design = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_grid_design };
         design.Clicked += StartDesign;
+        dock = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_grid_floating_off };
+        dock.Clicked += () => SetDocked(!docked);
+        resize = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_resize };
+        resize.Clicked += ToggleResize;
+        FillResizeFrame();
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
         close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
         mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
@@ -204,12 +261,16 @@ public sealed class KeyboardWindow : Window
         DockPanel.SetDock(mic, Dock.Right);
         DockPanel.SetDock(settings, Dock.Right);
         DockPanel.SetDock(design, Dock.Right);
+        DockPanel.SetDock(dock, Dock.Right);
+        DockPanel.SetDock(resize, Dock.Right);
         bar.Children.Add(switcher);
         bar.Children.Add(smiley);
         bar.Children.Add(close);
         bar.Children.Add(mic);
         bar.Children.Add(settings);
         bar.Children.Add(design);
+        bar.Children.Add(dock);
+        bar.Children.Add(resize);
         var middle = new Grid();
         middle.Children.Add(notice);
         middle.Children.Add(suggestions);
@@ -233,8 +294,7 @@ public sealed class KeyboardWindow : Window
         };
         Moves(handle);
 
-        var bottom = new DockPanel { Height = HandleBandDp };
-        bottom.Children.Add(handle);
+        handleBand.Children.Add(handle);
 
         designer = new KeyboardDesigner(colors, keys);
         designer.Ended += DesignEnded;
@@ -243,23 +303,23 @@ public sealed class KeyboardWindow : Window
         top.Children.Add(designer.Bar);
         var card = new DockPanel();
         DockPanel.SetDock(top, Dock.Top);
-        DockPanel.SetDock(bottom, Dock.Bottom);
+        DockPanel.SetDock(handleBand, Dock.Bottom);
         card.Children.Add(top);
-        card.Children.Add(bottom);
+        card.Children.Add(handleBand);
         var middleKeys = new Grid();
         middleKeys.Children.Add(keys);
         middleKeys.Children.Add(emoji);
         middleKeys.Children.Add(designer.ExtraKeys);
         card.Children.Add(middleKeys);
 
-        Content = new Border
+        Content = frame = new Border
         {
             Margin = new Thickness(ShadowDp),
             CornerRadius = new CornerRadius(CardCornerDp),
             Background = new SolidColorBrush(colors.Ground),
-            Child = card,
+            Child = new Grid { Children = { card, resizeFrame } },
             ClipToBounds = false,
-            Effect = new DropShadowEffect { BlurRadius = ShadowDp * 1.5, ShadowDepth = 2, Opacity = 0.3 },
+            Effect = shadow,
         };
 
         Restore();
@@ -282,11 +342,24 @@ public sealed class KeyboardWindow : Window
             focus.Dispose();
             preferencesWatch.Dispose();
             keyboardsWatch.Dispose();
+            dockedBar?.Undock();
             tray.Dispose();
             icon.Close();
         };
         LocationChanged += (_, _) => KeepSoon();
         SizeChanged += (_, _) => KeepSoon();
+        // Docked, the room is kept only while the keyboard is in sight.
+        IsVisibleChanged += (_, _) =>
+        {
+            if (docked && IsVisible)
+            {
+                PlaceDocked();
+            }
+            else if (docked)
+            {
+                dockedBar?.Undock();
+            }
+        };
     }
 
     /// <summary>A click on the window never takes the focus from the window typed in: no activation, and a taskbar button all the same; another start of the program shows it.</summary>
@@ -294,12 +367,26 @@ public sealed class KeyboardWindow : Window
     {
         base.OnSourceInitialized(e);
         NeverActivated.Apply(this, taskbar: true);
+        dockedBar = new DockedBar(new WindowInteropHelper(this).Handle);
+        if (preferences.Docked)
+        {
+            SetDocked(true);
+        }
+
         HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook((IntPtr window, int message, IntPtr w, IntPtr l, ref bool handled) =>
         {
             if ((uint)message == ShowMessage)
             {
                 OpenByHand();
                 handled = true;
+            }
+            else if (message == WindowPosChanging && docked && dockedPlace is { } place)
+            {
+                // Docked, the window stays on its bar: Windows keeps a window inside the work area, which leaves the bar out, and
+                // would push it up by its own height.
+                var position = Marshal.PtrToStructure<WindowPosition>(l);
+                (position.X, position.Y, position.Width, position.Height) = (place.X, place.Y, place.Width, place.Height);
+                Marshal.StructureToPtr(position, l, fDeleteOld: false);
             }
 
             return IntPtr.Zero;
@@ -406,7 +493,7 @@ public sealed class KeyboardWindow : Window
     /// <summary>A keyboard of the list shown, as designed, its rows as tall as they were.</summary>
     private void ChooseKeyboard(KeyboardEntry chosen)
     {
-        if (chosen == keyboard && keys.Design?.Text == chosen.Design)
+        if (chosen == keyboard && keys.Design?.Text == chosen.DesignFor(docked))
         {
             return;
         }
@@ -414,7 +501,7 @@ public sealed class KeyboardWindow : Window
         var scale = keys.RowScale;
         keyboard = chosen;
         keys.Pc = chosen.Base == Keyboards.StandardPcBase;
-        keys.Design = StandardDesign.FromText(chosen.Design);
+        keys.Design = StandardDesign.FromText(chosen.DesignFor(docked));
         FitKeys(scale);
         ShowSwitcher();
         Keep();
@@ -662,7 +749,7 @@ public sealed class KeyboardWindow : Window
     /// </summary>
     private void Avoid(Rect? avoided, bool menu)
     {
-        if (avoided is not { } shown || !(menu ? preferences.AvoidMenus : preferences.AvoidCaret) || moving || !IsLoaded || (menu && movedForMenu))
+        if (docked || avoided is not { } shown || !(menu ? preferences.AvoidMenus : preferences.AvoidCaret) || moving || !IsLoaded || (menu && movedForMenu))
         {
             return;
         }
@@ -749,7 +836,7 @@ public sealed class KeyboardWindow : Window
     {
         part.MouseLeftButtonDown += (_, e) =>
         {
-            if (e.ButtonState != MouseButtonState.Pressed)
+            if (docked || e.ButtonState != MouseButtonState.Pressed)
             {
                 return;
             }
@@ -761,14 +848,272 @@ public sealed class KeyboardWindow : Window
         };
     }
 
-    /// <summary>The bar, the handle and the shadow's band around the keys, at the window's height for rows at a share of Gboard's.</summary>
-    private double ChromeHeight => (2 * ShadowDp) + BarDp + HandleBandDp;
+    /// <summary>The bar, the handle and the shadow's band around the keys, at the window's height for rows at a share of Gboard's; docked, the bar alone.</summary>
+    private double ChromeHeight => docked ? BarDp + dockedLift : (2 * ShadowDp) + BarDp + HandleBandDp;
 
-    /// <summary>The window as tall as the keyboard in use needs for rows at a share of Gboard's: its rows keep their height when the keyboard changes.</summary>
+    /// <summary>The window as tall as the keyboard in use needs for rows at a share of Gboard's: its rows keep their height when the keyboard changes; docked, the bar made as tall.</summary>
     private void FitKeys(double scale)
     {
         MinHeight = ChromeHeight + keys.HeightAt(KeyboardSurface.MinRowScale);
         Height = ChromeHeight + keys.HeightAt(Math.Max(KeyboardSurface.MinRowScale, scale));
+        if (docked)
+        {
+            PlaceDocked();
+        }
+    }
+
+    /// <summary>
+    /// Acoplar: docked at the bottom of the screen it is on, as wide, as Windows' touch keyboard docks (<see cref="DockedBar"/>),
+    /// its card's shadow, corners and handle gone, never moved, the other windows made to give it room; or floating again where
+    /// it was left. The same keyboard either way, shown as its docked design has it where it has one (designed while docked),
+    /// its rows as tall.
+    /// </summary>
+    private void SetDocked(bool on)
+    {
+        if (on == docked)
+        {
+            return;
+        }
+
+        var scale = keys.RowScale;
+        if (on)
+        {
+            Keep();
+            // The width set, not the one laid out: docked as it starts, the window is not laid out yet.
+            var kept = ReadState();
+            (dockedWidth, dockedOffset, dockedLift) = (kept?.DockedWidth ?? (Width - (2 * ShadowDp)), kept?.DockedOffset ?? 0, kept?.DockedLift ?? 0);
+        }
+
+        docked = on;
+        if (preferences.Docked != on)
+        {
+            (preferences = KeyboardPreferences.Read() with { Docked = on }).Keep();
+        }
+
+        frame.Margin = on ? new Thickness(0, 0, 0, dockedLift) : new Thickness(ShadowDp);
+        frame.RenderTransform = on ? new TranslateTransform(dockedOffset, 0) : Transform.Identity;
+        frame.CornerRadius = new CornerRadius(on ? 0 : CardCornerDp);
+        frame.Effect = on ? null : shadow;
+        frame.Width = on ? dockedWidth : double.NaN;
+        frame.HorizontalAlignment = on ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+        Background = on ? frame.Background : Brushes.Transparent;
+        handleBand.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        chrome.ResizeBorderThickness = new Thickness(on ? 0 : ShadowDp);
+        resize.Lit = false;
+        resizeFrame.Visibility = Visibility.Collapsed;
+
+        dock.Sign = on ? Resource.Drawable.ic_grid_floating : Resource.Drawable.ic_grid_floating_off;
+        designer.Docked = on;
+        keys.Design = StandardDesign.FromText(keyboard.DesignFor(on));
+        if (!on)
+        {
+            dockedPlace = null;
+            dockedBar?.Undock();
+            if (ReadState() is { } floating)
+            {
+                (Left, Top, Width) = (floating.Left, floating.Top, floating.Width);
+            }
+        }
+
+        FitKeys(scale);
+        Log.Write(on ? "Keyboard: docked" : "Keyboard: floating");
+    }
+
+    /// <summary>Redimensionar, as Android's: its frame over the keyboard, or the keyboard as it was left.</summary>
+    private void ToggleResize()
+    {
+        resize.Lit = !resize.Lit;
+        resizeFrame.Visibility = resize.Lit ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>What a drag on the frame holds: the whole keyboard, to move it, or one of its edges, to size it.</summary>
+    private enum Part
+    {
+        Whole,
+        Top,
+        Bottom,
+        Left,
+        Right,
+    }
+
+    /// <summary>
+    /// Redimensionar's frame over the keyboard, Android's (KeyboardFrame.cs): the keys dimmed and out of reach under it, a bar
+    /// at each edge that can be dragged, the top and bottom ones for the height (the keys' size), the side ones for the width;
+    /// ✥ in the middle, dragged, moves the keyboard; under it Restablecer, the keyboard at its usual size and place again, and
+    /// Hecho, the frame gone.
+    /// </summary>
+    private void FillResizeFrame()
+    {
+        resizeFrame.Background = new SolidColorBrush(FrameDim);
+        resizeFrame.Children.Add(new Border { BorderBrush = new SolidColorBrush(colors.Primary), BorderThickness = new Thickness(2), IsHitTestVisible = false });
+        resizeFrame.Children.Add(Edge(Part.Top, HorizontalAlignment.Stretch, VerticalAlignment.Top));
+        resizeFrame.Children.Add(Edge(Part.Bottom, HorizontalAlignment.Stretch, VerticalAlignment.Bottom));
+        resizeFrame.Children.Add(Edge(Part.Left, HorizontalAlignment.Left, VerticalAlignment.Stretch));
+        resizeFrame.Children.Add(Edge(Part.Right, HorizontalAlignment.Right, VerticalAlignment.Stretch));
+
+        var move = Held(Part.Whole, new TextBlock { Text = "✥", FontSize = 28, Foreground = Brushes.White, Margin = new Thickness(12, 0, 12, 0) }, Cursors.SizeAll);
+        move.HorizontalAlignment = HorizontalAlignment.Center;
+        var reset = new PillButton(colors, "↺ " + Texts.Get(Resource.String.reset_size), done: false, 14) { Height = FrameButtonDp, Margin = new Thickness(4) };
+        reset.Clicked += ResetSize;
+        var done = new PillButton(colors, "✓ " + Texts.Get(Resource.String.done), done: true, 14) { Height = FrameButtonDp, Margin = new Thickness(4) };
+        done.Clicked += ToggleResize;
+        var buttons = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        buttons.Children.Add(move);
+        buttons.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { reset, done } });
+        resizeFrame.Children.Add(buttons);
+    }
+
+    /// <summary>An edge's bar: the whole edge to take hold of, a short line in its middle to show it is there.</summary>
+    private Grid Edge(Part part, HorizontalAlignment across, VerticalAlignment down)
+    {
+        var horizontal = part is Part.Top or Part.Bottom;
+        var line = new Border
+        {
+            Background = new SolidColorBrush(colors.Primary),
+            CornerRadius = new CornerRadius(EdgeLineDp / 2),
+            Width = horizontal ? EdgeLineLengthDp : EdgeLineDp,
+            Height = horizontal ? EdgeLineDp : EdgeLineLengthDp,
+        };
+        var edge = Held(part, line, horizontal ? Cursors.SizeNS : Cursors.SizeWE);
+        (edge.HorizontalAlignment, edge.VerticalAlignment) = (across, down);
+        (edge.Width, edge.Height) = horizontal ? (double.NaN, EdgeDp) : (EdgeDp, double.NaN);
+        return edge;
+    }
+
+    /// <summary>A part the keyboard or an edge is dragged by: what it shows in its middle, under a grip as large as the part, the drag told as it goes and once let go.</summary>
+    private Grid Held(Part part, FrameworkElement shown, Cursor cursor)
+    {
+        var look = new ControlTemplate(typeof(Thumb)) { VisualTree = new FrameworkElementFactory(typeof(Border)) };
+        look.VisualTree.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+        var grip = new Thumb { Template = look, Cursor = cursor };
+        grip.DragStarted += (_, _) => (resizedHeight, lifted) = (keys.ActualHeight, dockedLift);
+        grip.DragDelta += (_, e) => Adjust(part, e.HorizontalChange, e.VerticalChange);
+        grip.DragCompleted += (_, _) => Adjusted(part);
+        (shown.HorizontalAlignment, shown.VerticalAlignment, shown.IsHitTestVisible) = (HorizontalAlignment.Center, VerticalAlignment.Center, false);
+        return new Grid { Children = { shown, grip } };
+    }
+
+    /// <summary>
+    /// A drag on the frame, as it goes: the width and the place at once (docked, the keys' width and their place on the bar,
+    /// the other edge staying where it is); the height (the keys' size) and, docked, how high above the bottom it stands, kept
+    /// to be made once it is let go, for the bar Windows gives is asked for again.
+    /// </summary>
+    private void Adjust(Part part, double dx, double dy)
+    {
+        switch (part)
+        {
+            case Part.Top:
+                resizedHeight -= dy;
+                break;
+            case Part.Bottom:
+                resizedHeight += dy;
+                break;
+            case Part.Left when docked:
+                SizeDocked(dockedWidth - dx, -1);
+                break;
+            case Part.Right when docked:
+                SizeDocked(dockedWidth + dx, 1);
+                break;
+            case Part.Whole when docked:
+                MoveDocked(dockedOffset + dx);
+                lifted = Math.Max(0, lifted - dy);
+                break;
+            case Part.Left:
+                var narrower = Math.Max(MinWidth, Width - dx);
+                Left += Width - narrower;
+                Width = narrower;
+                break;
+            case Part.Right:
+                Width = Math.Max(MinWidth, Width + dx);
+                break;
+            case Part.Whole:
+                (Left, Top) = (Left + dx, Top + dy);
+                break;
+        }
+    }
+
+    /// <summary>A drag on the frame let go: a new height made, the floating keyboard's bottom staying where it was; docked, its lift; the bar asked for again.</summary>
+    private void Adjusted(Part part)
+    {
+        if (part is Part.Top or Part.Bottom)
+        {
+            var bottom = Top + Height;
+            FitKeys(keys.ScaleFor(resizedHeight));
+            if (!docked && part == Part.Top)
+            {
+                Top = bottom - Height;
+            }
+        }
+        else if (part == Part.Whole && docked && lifted != dockedLift)
+        {
+            dockedLift = lifted;
+            frame.Margin = new Thickness(0, 0, 0, dockedLift);
+            FitKeys(keys.RowScale);
+        }
+
+        Keep();
+    }
+
+    /// <summary>The docked keys as wide as asked, at least the floating keyboard's least and at most the bar, the edge not dragged (side) staying where it was.</summary>
+    private void SizeDocked(double width, int side)
+    {
+        var wider = Math.Clamp(width, MinWidthDp, Math.Max(MinWidthDp, ActualWidth)) - dockedWidth;
+        dockedWidth += wider;
+        frame.Width = dockedWidth;
+        MoveDocked(dockedOffset + (side * wider / 2));
+    }
+
+    /// <summary>The docked keys moved along the bar, from its middle, never past its ends.</summary>
+    private void MoveDocked(double offset)
+    {
+        var room = Math.Max(0, (ActualWidth - dockedWidth) / 2);
+        dockedOffset = Math.Clamp(offset, -room, room);
+        frame.RenderTransform = new TranslateTransform(dockedOffset, 0);
+        KeepSoon();
+    }
+
+    /// <summary>
+    /// Restablecer, Android's: the keys at their usual size; floating, three fifths of the screen wide at its bottom's middle;
+    /// docked, as wide as they float, in the bar's middle and on its bottom again.
+    /// </summary>
+    private void ResetSize()
+    {
+        var area = SystemParameters.WorkArea;
+        if (docked)
+        {
+            (dockedWidth, dockedOffset, dockedLift) = ((area.Width * FirstWidthShare) - (2 * ShadowDp), 0, 0);
+            frame.Width = dockedWidth;
+            frame.RenderTransform = Transform.Identity;
+            frame.Margin = new Thickness(0);
+            FitKeys(1);
+        }
+        else
+        {
+            Width = area.Width * FirstWidthShare;
+            Left = area.Left + ((area.Width - Width) / 2);
+            FitKeys(1);
+            Top = area.Bottom - Height;
+        }
+
+        Keep();
+    }
+
+    /// <summary>The window on the bar Windows gives it at the bottom of the screen it is on: as wide, as tall as its keys need.</summary>
+    private void PlaceDocked()
+    {
+        if (dockedBar is null || !IsVisible || PresentationSource.FromVisual(this)?.CompositionTarget is not { } target)
+        {
+            return;
+        }
+
+        var screen = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;
+        var place = dockedBar.Dock(screen, (int)Math.Ceiling(target.TransformToDevice.Transform(new Vector(0, Height)).Y));
+        dockedPlace = place;
+        Log.Write($"Keyboard: docked bar at {place} on the screen {screen}, its work area {System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea}");
+        var corner = target.TransformFromDevice.Transform(new Point(place.X, place.Y));
+        var size = target.TransformFromDevice.Transform(new Vector(place.Width, place.Height));
+        (Left, Top, Width, Height) = (corner.X, corner.Y, size.X, size.Y);
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => Log.Write($"Keyboard: docked window at {Left:0},{Top:0} {Width:0}x{Height:0}"));
     }
 
     /// <summary>Where it was left, as wide, with the keyboard and language it had; the first time, three fifths of the screen wide at its bottom's middle.</summary>
@@ -782,7 +1127,7 @@ public sealed class KeyboardWindow : Window
         keys.KeyLanguage = StandardKeys.Languages.FirstOrDefault(known => known.Code == language) ?? StandardKeys.Spanish;
         keyboard = Keyboards.Selected(preferences, keys.KeyLanguage.Code);
         keys.Pc = keyboard.Base == Keyboards.StandardPcBase;
-        keys.Design = StandardDesign.FromText(keyboard.Design);
+        keys.Design = StandardDesign.FromText(keyboard.DesignFor(docked));
         keys.Glides = preferences.Glide;
         keys.ShowsTrail = preferences.GlideTrail;
         FitKeys(state?.RowScale ?? 1);
@@ -801,11 +1146,14 @@ public sealed class KeyboardWindow : Window
     /// <summary>The keyboard's width the first time, a share of the screen's.</summary>
     private const double FirstWidthShare = 0.6;
 
-    /// <summary>The keys' width and their rows' share of Gboard's height as the keyboard was left (the first time, as it first opens), for the settings' preview to show it as it is.</summary>
-    public static (double Width, double RowScale) KeptKeys() =>
-        ReadState() is { } state
-            ? (state.Width - (2 * ShadowDp), state.RowScale)
-            : ((SystemParameters.WorkArea.Width * FirstWidthShare) - (2 * ShadowDp), 1);
+    /// <summary>The keys' width and their rows' share of Gboard's height as the keyboard was left (the first time, as it first opens; docked, its docked width), for the settings' preview to show it as it is.</summary>
+    public static (double Width, double RowScale) KeptKeys()
+    {
+        var state = ReadState();
+        var floating = state is not null ? state.Width - (2 * ShadowDp) : (SystemParameters.WorkArea.Width * FirstWidthShare) - (2 * ShadowDp);
+        var width = KeyboardPreferences.Read().Docked ? state?.DockedWidth ?? floating : floating;
+        return (width, state?.RowScale ?? 1);
+    }
 
     private static State? ReadState()
     {
@@ -833,11 +1181,15 @@ public sealed class KeyboardWindow : Window
         keepTimer.Start();
     }
 
+    /// <summary>The window's state kept; docked, its floating place and width as they were, to float there again.</summary>
     private void Keep()
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Kept)!);
-        var iconKept = icon.IsVisible ? (icon.Left, icon.Top) : (ReadState() is { IconLeft: { } left, IconTop: { } top } ? (left, top) : ((double, double)?)null);
-        File.WriteAllText(Kept, JsonSerializer.Serialize(new State(Left, Top, Width, keys.KeyLanguage.Code, iconKept?.Item1, iconKept?.Item2, keys.RowScale)));
+        var kept = ReadState();
+        var iconKept = icon.IsVisible ? (icon.Left, icon.Top) : (kept is { IconLeft: { } left, IconTop: { } top } ? (left, top) : ((double, double)?)null);
+        var (placeLeft, placeTop, placeWidth) = docked && kept is not null ? (kept.Left, kept.Top, kept.Width) : (Left, Top, Width);
+        var (keptDockedWidth, keptOffset, keptLift) = docked ? (dockedWidth, dockedOffset, dockedLift) : (kept?.DockedWidth, kept?.DockedOffset ?? 0, kept?.DockedLift ?? 0);
+        File.WriteAllText(Kept, JsonSerializer.Serialize(new State(placeLeft, placeTop, placeWidth, keys.KeyLanguage.Code, iconKept?.Item1, iconKept?.Item2, keys.RowScale, keptDockedWidth, keptOffset, keptLift)));
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
