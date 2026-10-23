@@ -138,7 +138,10 @@ a window that does.
   − and + make it narrower or wider, a drag moves it; + Tecla lists those
   of Esc, Tab, Supr, Insert, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞,
   Alt Gr, Bloq Mayús, F1–F12, ImpPnt and the arrows the keyboard lacks, and
-  the one tapped comes loose over the keys, to be dragged to its place;
+  the one tapped comes loose over the keys, to be dragged to its place; a
+  marked Enter tapped again takes its next shape, one row, ISO's L, the old
+  ANSI L or square, the shaped ones growing up into the row above as one
+  key, − and + making both parts wider or narrower alike;
   + Fila adds a row at the top; + Columna adds a column at the right, a
   hole a key wide at the end of every row, which a key let go on fills and
   which, left empty, is room with nothing in it; Quitar takes one out.
