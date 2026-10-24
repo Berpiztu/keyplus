@@ -4,24 +4,6 @@ using System.Text.Json.Serialization;
 
 namespace Berpiztu.KeyPlus;
 
-/// <summary>An application's colours, with Personalizado's Por app on: its window's (De la app), as an application starts, or its own; General, Tema's Personalizado, is how those kept before read.</summary>
-public enum AppLook
-{
-    General,
-    Own,
-    Custom,
-}
-
-/// <summary>
-/// An application's choice and, for Personalizado, its keyboard and accent colours (#RRGGBB; one not chosen, Tema's
-/// Personalizado's); and its window's colour as the keyboard last saw it there, for De la app in Tema's preview.
-/// </summary>
-public sealed record AppColor(
-    [property: JsonConverter(typeof(JsonStringEnumConverter<AppLook>))] AppLook Look = AppLook.Own,
-    string? KeyColor = null,
-    string? AccentColor = null,
-    string? WindowColor = null);
-
 /// <summary>
 /// The applications typed in, by their program's name (Code, chrome), each
 /// with its colours, in the app's folder (apps.json): the keyboard adds one

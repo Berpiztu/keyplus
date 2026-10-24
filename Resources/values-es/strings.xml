@@ -80,6 +80,9 @@
   <string name="look_accent">Acento</string>
   <string name="per_app">Por app</string>
   <string name="app_own">De la app</string>
+  <string name="hue">Tono</string>
+  <string name="saturation">Saturación</string>
+  <string name="brightness">Brillo</string>
   <string name="show_keyboard">Mostrar el teclado al escribir</string>
   <string name="show_keyboard_summary">Desactivado, no aparece nunca: para cuando usas otro teclado, y uno no pisa al otro</string>
   <string name="keyboard_icon">Mostrar un icono en su lugar</string>

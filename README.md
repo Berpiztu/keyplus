@@ -132,7 +132,7 @@ a window that does.
   bottom one (a letter's capital going without saying), and with Shift or
   Alt Gr on only what the keys type then (Alt Gr's, the others blank), ´ and ` as dead
   keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key, the arrows
-  repeating; Estándar PC in Spanish as the owner designed it (Insert, ISO's
+  repeating; Estándar PC in Spanish and English as the owner designed it (Insert, ISO's
   Enter, Inicio, Fin, RePág and AvPág). The keyboards go by language, a
   PC's keys differing between them: each screen (phone, tablet upright or
   on its side, DeX) shows one in each language, docked and floating alike,

@@ -110,6 +110,21 @@ public static class KeyPlusPreferences
 
     public static KeyboardLook Look(Context context) => KeyboardLooks.Parse(Global(context).GetString(LookKey, null));
 
+    /// <summary>
+    /// Personalizado's keyboard and accent colours (#RRGGBB; one not chosen,
+    /// the device's own), the two as they were before the last one was
+    /// chosen (Deshacer, as "key|accent"), and whether each application has
+    /// colours of its own (Por app, <see cref="AppThemes"/>).
+    /// </summary>
+    public const string KeyColorKey = "keyColor";
+    public const string AccentColorKey = "accentColor";
+    public const string ColorsBeforeKey = "colorsBefore";
+    public const string PerAppKey = "perApp";
+
+    /// <summary>Whether a preference changed is one of the keyboard's colours (Tema's Colores).</summary>
+    public static bool IsColors(string? key) =>
+        key is LookKey or KeyColorKey or AccentColorKey or PerAppKey || AppThemes.IsList(key);
+
     public static ISharedPreferences Global(Context context) =>
         context.GetSharedPreferences(PhoneName, FileCreationMode.Private)!;
 

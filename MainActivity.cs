@@ -339,7 +339,7 @@ public sealed class MainActivity : Activity
 
     /// <summary>Tema, the Windows app's (<see cref="ThemeView"/>), for the screen the settings are on.</summary>
     private SettingsPage ThemePage() =>
-        new(GetString(Resource.String.theme), [], new ThemeView(this, settings!, KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay)));
+        new(GetString(Resource.String.theme), [], new ThemeView(this, settings!, KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay), () => settings!.Refresh(ThemePage())));
 
     /// <summary>
     /// Escribir por voz, the Windows keyboard's settings with Android's own:

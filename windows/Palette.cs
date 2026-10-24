@@ -50,7 +50,7 @@ public sealed class Palette
 
         // The accent's tones, lighter (+) or darker (−): Windows' own, or the colour chosen's.
         Color Tone(int step) => AccentColor is { } accent
-            ? Mix(accent, step > 0 ? Colors.White : Colors.Black, Math.Abs(step) / 4.0)
+            ? ToColor(ToRgb(accent).Tone(step))
             : Of(step switch
             {
                 3 => UIColorType.AccentLight3,
@@ -87,20 +87,10 @@ public sealed class Palette
         chosen.Look == Look && (Look != KeyboardLook.Custom || (Parse(chosen.KeyColor) == KeyColor && Parse(chosen.AccentColor) == AccentColor));
 
     /// <summary>A colour kept as #RRGGBB; none, or one unreadable, none.</summary>
-    public static Color? Parse(string? kept)
-    {
-        try
-        {
-            return kept is null ? null : (Color)ColorConverter.ConvertFromString(kept);
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
-    }
+    public static Color? Parse(string? kept) => Rgb.Parse(kept) is { } color ? ToColor(color) : null;
 
     /// <summary>A colour as it is kept, #RRGGBB.</summary>
-    public static string Text(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+    public static string Text(Color color) => ToRgb(color).Text;
 
     public bool Dark { get; }
 
@@ -135,17 +125,13 @@ public sealed class Palette
     /// <summary>The colours as Tema's choice has them.</summary>
     public static Palette Read(KeyboardPreferences chosen) => new(new UISettings(), chosen);
 
-    /// <summary>White or black on a colour, whichever stands out from it more (WCAG's contrast ratio).</summary>
-    private static Color Readable(Color ground)
-    {
-        static double Linear(byte channel) => channel / 255.0 is var c && c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
-        var luminance = (0.2126 * Linear(ground.R)) + (0.7152 * Linear(ground.G)) + (0.0722 * Linear(ground.B));
-        return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05 ? Colors.White : Colors.Black;
-    }
+    /// <summary>White or black on a colour, whichever stands out from it more (<see cref="Rgb.Readable"/>, shared with Android).</summary>
+    private static Color Readable(Color ground) => ToColor(ToRgb(ground).Readable);
 
-    /// <summary>One colour with a share of another in it.</summary>
-    private static Color Mix(Color under, Color over, double share) => Color.FromRgb(
-        (byte)Math.Round(under.R + ((over.R - under.R) * share)),
-        (byte)Math.Round(under.G + ((over.G - under.G) * share)),
-        (byte)Math.Round(under.B + ((over.B - under.B) * share)));
+    /// <summary>One colour with a share of another in it (<see cref="Rgb.Mix"/>).</summary>
+    private static Color Mix(Color under, Color over, double share) => ToColor(ToRgb(under).Mix(ToRgb(over), share));
+
+    private static Rgb ToRgb(Color color) => new(color.R, color.G, color.B);
+
+    private static Color ToColor(Rgb color) => Color.FromRgb(color.R, color.G, color.B);
 }

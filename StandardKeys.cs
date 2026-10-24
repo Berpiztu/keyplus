@@ -157,8 +157,20 @@ public static class StandardKeys
         return rows;
     }
 
-    /// <summary>Estándar PC's design in a language, the one the keyboard comes with: Spanish's the owner's; none, the keys as made.</summary>
-    public static string? PcDesign(string language) => language == Spanish.Code ? SpanishPcDesign : null;
+    /// <summary>Estándar PC's design in a language, the one the keyboard comes with, the owner's; none, the keys as made.</summary>
+    public static string? PcDesign(string language) => language == Spanish.Code ? SpanishPcDesign : language == English.Code ? EnglishPcDesign : null;
+
+    /// <summary>
+    /// Estándar PC in English as the owner designed it (2026-10-23, its copy in docs/tODO/designs/), as Spanish's: Insert
+    /// before Delete, ISO's Enter, and Home, End, PgUp and PgDn around the arrows.
+    /// </summary>
+    private static readonly string EnglishPcDesign = Designed(
+        "b:0:0 b:0:1 b:0:2 b:0:3 b:0:4 b:0:5 b:0:6 b:0:7 b:0:8 b:0:9 b:0:10 b:0:11 b:0:12 b:0:13 x:ins b:0:14",
+        "b:1:0 b:1:1 b:1:2 b:1:3 b:1:4 b:1:5 b:1:6 b:1:7 b:1:8 b:1:9 b:1:10 b:1:11 b:1:12 b:1:13=2",
+        "b:2:0=1.5 b:2:1 b:2:2 b:2:3 b:2:4 b:2:5 b:2:6 b:2:7 b:2:8 b:2:9 b:2:10 b:2:11 b:2:12 b:2:13=1.75 x:enterIso=2",
+        "b:3:0=1.75 b:3:1 b:3:2 b:3:3 b:3:4 b:3:5 b:3:6 b:3:7 b:3:8 b:3:9 b:3:10 b:3:11=1.5 below=1.75",
+        "b:4:0=2 b:4:1 b:4:2 b:4:3 b:4:4 b:4:5 b:4:6 b:4:7 b:4:8 b:4:9 b:4:10 b:4:12=1.25 x:home b:4:11 x:end x:pgup",
+        "b:5:0=1.25 b:5:1=1.75 b:5:2=1.25 b:5:3 b:5:4=6 b:5:5=1.25 b:5:6 b:5:7 b:5:8 x:pgdn");
 
     /// <summary>
     /// Estándar PC in Spanish as the owner designed it (2026-10-23,

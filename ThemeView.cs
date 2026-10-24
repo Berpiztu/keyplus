@@ -56,7 +56,8 @@ public sealed class ThemeView : LinearLayout
     private KeyboardEntry shown;
     private bool filling;
 
-    public ThemeView(Context context, SettingsScreen settings, KeyPlusPreferences.Screen kind)
+    /// <param name="remade">Tema made again, its colours changed (Colores).</param>
+    public ThemeView(Context context, SettingsScreen settings, KeyPlusPreferences.Screen kind, Action remade)
         : base(context)
     {
         this.settings = settings;
@@ -67,7 +68,8 @@ public sealed class ThemeView : LinearLayout
         language = KeyPlusPreferences.Language(context);
         shown = Keyboards.Selected(context, screen, kind, language.Code);
         Orientation = Orientation.Vertical;
-        colors = StandardColors.Read(context);
+        // The preview in the colours of the application looked at, with Personalizado's Por app on; else Tema's.
+        colors = StandardColors.Read(context, ColorsRow.AppLookedAt(context));
 
         // The language, the keyboard and its name in two rows of small type, each label beside its control, the room left to the keyboard drawn under them.
         languages = new Spinner(context);
@@ -96,6 +98,7 @@ public sealed class ThemeView : LinearLayout
         hint.SetTextSize(ComplexUnitType.Sp, HintSp);
         controls = new LinearLayout(context) { Orientation = Orientation.Vertical };
         controls.AddView(choosing);
+        controls.AddView(new ColorsRow(context, remade), new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         controls.AddView(naming);
         controls.AddView(hint, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(FieldGapDp) });
         AddView(controls);

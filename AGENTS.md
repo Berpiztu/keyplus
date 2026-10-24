@@ -103,7 +103,7 @@ Default section order:
 
 - The product split lives in `Berpiztu.KeyPlus.csproj`:
   - Popup only: `KeyPlusService.cs`, `SelectionInputMethod.cs`, `KeyWindowActivity.cs`, `Resources/xml/keyplus_accessibility.xml`
-  - Keyboard only: `KeyPlusKeyboard.cs`, `KeyboardFrame.cs`, `ClipboardImages.cs`, `ScreenshotWatcher.cs`, `SwipeTyping.cs`, `SettingsScreen.cs`, `ThemeView.cs`, `MenuWatchService.cs`, `Resources/xml/keyplus_keyboard.xml`; the Keyboard build defines `KEYBOARD`
+  - Keyboard only: `KeyPlusKeyboard.cs`, `KeyboardFrame.cs`, `ClipboardImages.cs`, `ScreenshotWatcher.cs`, `SwipeTyping.cs`, `SettingsScreen.cs`, `ThemeView.cs`, `ColorsRow.cs`, `MenuWatchService.cs`, `Resources/xml/keyplus_keyboard.xml`; the Keyboard build defines `KEYBOARD`
   - Everything else is shared; a new product-specific file joins the csproj's lists
 - Each product builds into `bin/<Product>/<Configuration>/` and `obj/<Product>/<Configuration>/`
 - `windows\**` is left out of the Android build; the Windows app compiles `StandardKeys.cs`, `StandardDesign.cs`, `KeyboardEntry.cs`, `KeyboardLook.cs`, `SwipeWords.cs`, `EmojiList.cs`, `VoiceTyping.cs` and `WordSuggestions.cs` as they are, so an Android name added to them is added to `windows/AndroidNames.cs`

@@ -86,6 +86,9 @@
   <string name="look_accent">Accent</string>
   <string name="per_app">Per app</string>
   <string name="app_own">App\'s</string>
+  <string name="hue">Hue</string>
+  <string name="saturation">Saturation</string>
+  <string name="brightness">Brightness</string>
   <string name="show_keyboard">Show the keyboard when typing</string>
   <string name="show_keyboard_summary">Off, it never shows: for when another keyboard is in use, so one does not cover the other</string>
   <string name="keyboard_icon">Show an icon instead</string>

@@ -184,6 +184,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
+        InAppColors(info?.PackageName);
         panel?.FitLabels();
         if (panel is not null && !OnHeadset)
         {
@@ -426,6 +427,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override View? OnCreateInputView()
     {
         panel?.StopRepeat();
+        shownColors = StandardColors.Chosen(this, StandardColors.App);
         var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
         Watch(preferences);
@@ -1208,10 +1210,32 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var reset = screens && (key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key));
         var popupChanged = screens && key == PanelPlacement.FloatingPreference && placed is not null
             && new PanelPlacement(preferences).Floating != placed.Floating;
-        var keyboardChanged = ((key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother()) || key == KeyPlusPreferences.LookKey;
+        var keyboardChanged = ((key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother())
+            || (KeyPlusPreferences.IsColors(key) && StandardColors.Chosen(this, StandardColors.App) != shownColors);
         if (reset || popupChanged || keyboardChanged)
         {
             panel?.Root.Post(() => SetInputView(OnCreateInputView()));
+        }
+    }
+
+    /// <summary>The colours the keyboard in sight was made in (<see cref="StandardColors.Chosen"/>).</summary>
+    private (bool Dark, Rgb? Key, Rgb? Accent) shownColors;
+
+    /// <summary>
+    /// A field of an application to type in: the application noted (Tema's Por app lists it, with its theme's background),
+    /// and the keyboard made again at once where its colours there are not those in sight.
+    /// </summary>
+    private void InAppColors(string? package)
+    {
+        StandardColors.App = package is not null && package != PackageName ? package : null;
+        if (StandardColors.App is { } app)
+        {
+            AppThemes.Seen(this, app);
+        }
+
+        if (panel is not null && !OnHeadset && StandardColors.Chosen(this, StandardColors.App) != shownColors)
+        {
+            SetInputView(OnCreateInputView());
         }
     }
 

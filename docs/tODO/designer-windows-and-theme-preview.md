@@ -64,9 +64,13 @@ Asked by the owner on 2026-10-23. On Windows, tried by the owner: Sistema,
 Claro, Oscuro and Personalizado (the keyboard's colour and the accent's,
 Windows' colour picker, ↶ one step back), and Personalizado's Por app (each
 application its window's colour, De la app, or its own two, `apps.json`).
-On Android, written, not tried: Sistema follows the device's dark theme,
-Claro and Oscuro the palette's light or dark tones (`StandardColors`);
-Tema's Colores row, Personalizado and Por app are still to come there.
+On Android, written and built, not tried: the same row (`ColorsRow.cs`, a
+picker of hue, saturation and brightness, Android having none), Sistema
+following the device's dark theme, Claro and Oscuro the palette's tones,
+Personalizado's colours with the Windows app's arithmetic (`Rgb`, shared),
+and Por app by the field's package, De la app taking the background the
+application's theme declares (`AppThemes.cs`): an Android keyboard cannot
+see another application's window.
 
 ## Later: more keyboards the keyboard comes with
 
@@ -83,7 +87,7 @@ Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
   (`ThemeView.cs` in Ajustes › Tema; keyboards by language, each screen
   its own one in each language, docked and floating alike, `Keyboards.cs`;
   the designer shared by the keyboard and Tema, `StandardDesigner.cs`), and
-  Estándar PC in Spanish as the owner's design on both
+  Estándar PC in Spanish (and, later, English) as the owner's design on both
   (`StandardKeys.PcDesign`); the phone starts on Estándar, a tablet on its
   side and DeX on Estándar PC, as before.
 

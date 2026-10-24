@@ -27,71 +27,145 @@ namespace Berpiztu.KeyPlus;
 /// </summary>
 public sealed class StandardColors(Context context, bool dark)
 {
-    /// <summary>The keyboard's colours as Tema's choice has them, the device's dark theme for Sistema.</summary>
-    public static StandardColors Read(Context context) => new(context, KeyboardLooks.IsDark(
-        KeyPlusPreferences.Look(context),
-        (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes));
+    /// <summary>The application typed in, as the keyboard last heard it (Por app); none in the keyboard's own app.</summary>
+    public static string? App { get; set; }
+
+    /// <summary>The keyboard's colours as Tema has them for the application typed in, the device's dark theme for Sistema.</summary>
+    public static StandardColors Read(Context context) => Read(context, App);
+
+    public static StandardColors Read(Context context, string? app)
+    {
+        var (dark, key, accent) = Chosen(context, app);
+        var colors = new StandardColors(context, dark);
+        colors.Personalize(key, accent);
+        return colors;
+    }
+
+    /// <summary>What the colours are made from for an application: whether dark, and Personalizado's keyboard and accent colours.</summary>
+    public static (bool Dark, Rgb? Key, Rgb? Accent) Chosen(Context context, string? app)
+    {
+        var global = KeyPlusPreferences.Global(context);
+        var look = KeyPlusPreferences.Look(context);
+        Rgb? key = null, accent = null;
+        if (look == KeyboardLook.Custom)
+        {
+            (key, accent) = (Rgb.Parse(global.GetString(KeyPlusPreferences.KeyColorKey, null)), Rgb.Parse(global.GetString(KeyPlusPreferences.AccentColorKey, null)));
+
+            // Por app: the application's theme's background with the device's accent, or its own colours, a keyboard colour
+            // it has not chosen Tema's, an accent the device's.
+            if (global.GetBoolean(KeyPlusPreferences.PerAppKey, false) && app is not null)
+            {
+                var color = AppThemes.For(context, app);
+                if (color.Look == AppLook.Own && Rgb.Parse(color.WindowColor) is { } window)
+                {
+                    (key, accent) = (window, null);
+                }
+                else if (color.Look == AppLook.Custom)
+                {
+                    (key, accent) = (Rgb.Parse(color.KeyColor) ?? key, Rgb.Parse(color.AccentColor));
+                }
+            }
+        }
+
+        var systemDark = (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
+        return (key is { } chosen ? chosen.Readable == Rgb.White : KeyboardLooks.IsDark(look, systemDark), key, accent);
+    }
+
+    /// <summary>
+    /// Personalizado over the device's colours: its keyboard colour in the ground's place, its letters white or black,
+    /// whichever reads, the keys, lines and greys made from the two as the Windows app makes its own; its accent in the
+    /// accent's, its tones a quarter of the way to white or black a step (<see cref="Rgb.Tone"/>).
+    /// </summary>
+    private void Personalize(Rgb? key, Rgb? accent)
+    {
+        if (key is { } ground)
+        {
+            var letters = ground.Readable;
+            Glyph = Of(letters);
+            Key = Of(dark ? ground.Mix(letters, 0.16) : ground);
+            Ground = Of(ground.Mix(letters, dark ? 0.06 : 0.08));
+            Low = Ground;
+            Dim = Of(ground.Mix(letters, 0.12));
+            ResetGround = Dim;
+            High = Of(ground.Mix(letters, 0.2));
+            Divider = Of(ground.Mix(letters, 0.25));
+            Handle = Of(ground.Mix(letters, 0.35));
+            Outline = Of(ground.Mix(letters, 0.45));
+        }
+
+        if (accent is { } chosen)
+        {
+            Function = Of(chosen.Tone(dark ? -3 : 3));
+            FunctionPressed = Of(chosen.Tone(dark ? -2 : 2));
+            FunctionGlyph = Of(chosen.Tone(dark ? 3 : -2));
+            GridCircle = Of(chosen.Tone(dark ? -1 : 2));
+            Primary = Of(chosen);
+            OnPrimary = Of(chosen.Readable);
+            Trail = Primary;
+            Accent = Primary;
+        }
+    }
 
     public bool Dark => dark;
 
-    public Color Ground { get; } = Of(context, dark,
+    public Color Ground { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLight : Android.Resource.Color.SystemNeutral1100,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerDark : Android.Resource.Color.SystemNeutral1900);
 
-    public Color Key { get; } = Of(context, dark,
+    public Color Key { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowestLight : Android.Resource.Color.SystemNeutral110,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighestDark : Android.Resource.Color.SystemNeutral1800);
 
-    public Color Glyph { get; } = Of(context, dark,
+    public Color Glyph { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnSurfaceLight : Android.Resource.Color.SystemNeutral1900,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnSurfaceDark : Android.Resource.Color.SystemNeutral1100);
 
-    public Color Function { get; } = Of(context, dark, Android.Resource.Color.SystemAccent2100, Android.Resource.Color.SystemAccent2700);
+    public Color Function { get; private set; } = Of(context, dark, Android.Resource.Color.SystemAccent2100, Android.Resource.Color.SystemAccent2700);
 
     /// <summary>A function key while pressed: the next tone of its own, towards its sign.</summary>
-    public Color FunctionPressed { get; } = Of(context, dark, Android.Resource.Color.SystemAccent2200, Android.Resource.Color.SystemAccent2600);
+    public Color FunctionPressed { get; private set; } = Of(context, dark, Android.Resource.Color.SystemAccent2200, Android.Resource.Color.SystemAccent2600);
 
-    public Color FunctionGlyph { get; } = Of(context, dark, Android.Resource.Color.SystemAccent2700, Android.Resource.Color.SystemAccent2100);
+    public Color FunctionGlyph { get; private set; } = Of(context, dark, Android.Resource.Color.SystemAccent2700, Android.Resource.Color.SystemAccent2100);
 
-    public Color Trail { get; } = Of(context, dark, Android.Resource.Color.SystemAccent1600, Android.Resource.Color.SystemAccent1200);
+    public Color Trail { get; private set; } = Of(context, dark, Android.Resource.Color.SystemAccent1600, Android.Resource.Color.SystemAccent1200);
 
-    public Color GridCircle { get; } = Of(context, dark, Android.Resource.Color.SystemAccent1200, Android.Resource.Color.SystemAccent1700);
+    public Color GridCircle { get; private set; } = Of(context, dark, Android.Resource.Color.SystemAccent1200, Android.Resource.Color.SystemAccent1700);
 
-    public Color Divider { get; } = Of(context, dark, Android.Resource.Color.SystemNeutral2200, Android.Resource.Color.SystemNeutral2700);
+    public Color Divider { get; private set; } = Of(context, dark, Android.Resource.Color.SystemNeutral2200, Android.Resource.Color.SystemNeutral2700);
 
     /// <summary>The floating keyboard's outline while resized, its corners and, at 80 %, its edge.</summary>
-    public Color Accent { get; } = Of(context, dark, Android.Resource.Color.SystemAccent1600, Android.Resource.Color.SystemAccent1200);
+    public Color Accent { get; private set; } = Of(context, dark, Android.Resource.Color.SystemAccent1600, Android.Resource.Color.SystemAccent1200);
 
     /// <summary>The floating keyboard's Reset while resized: Gboard's 223 grey, the palette's nearest tone.</summary>
-    public Color ResetGround { get; } = Of(context, dark, Android.Resource.Color.SystemNeutral1100, Android.Resource.Color.SystemNeutral1800);
+    public Color ResetGround { get; private set; } = Of(context, dark, Android.Resource.Color.SystemNeutral1100, Android.Resource.Color.SystemNeutral1800);
 
     /// <summary>The floating keyboard's handle: Gboard's 168 grey, the palette's nearest tone.</summary>
-    public Color Handle { get; } = Of(context, dark, Android.Resource.Color.SystemNeutral1300, Android.Resource.Color.SystemNeutral1600);
+    public Color Handle { get; private set; } = Of(context, dark, Android.Resource.Color.SystemNeutral1300, Android.Resource.Color.SystemNeutral1600);
 
     /// <summary>The grid customised (✏): ✓'s circle and the outlines, Gboard's blue, the palette's primary (#387AFF on the Fold); ✓ on it.</summary>
-    public Color Primary { get; } = Of(context, dark,
+    public Color Primary { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemPrimaryLight : Android.Resource.Color.SystemAccent1600,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemPrimaryDark : Android.Resource.Color.SystemAccent1200);
 
-    public Color OnPrimary { get; } = Of(context, dark,
+    public Color OnPrimary { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnPrimaryLight : Android.Resource.Color.SystemAccent10,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnPrimaryDark : Android.Resource.Color.SystemAccent1800);
 
     /// <summary>The emoji's ground, system_surface_container_low_light (#F1F1F3 on the Fold), and their grey pills, system_surface_container_high_light (#CCCCCE).</summary>
-    public Color Low { get; } = Of(context, dark,
+    public Color Low { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowLight : Android.Resource.Color.SystemNeutral150,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowDark : Android.Resource.Color.SystemNeutral1900);
 
-    public Color High { get; } = Of(context, dark,
+    public Color High { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighLight : Android.Resource.Color.SystemNeutral1200,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighDark : Android.Resource.Color.SystemNeutral1700);
 
     /// <summary>The grid customised: the ground inside its outlines, system_surface_dim_light (#DAD9E0 on the Fold).</summary>
-    public Color Dim { get; } = Of(context, dark,
+    public Color Dim { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceDimLight : Android.Resource.Color.SystemNeutral2100,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceDimDark : Android.Resource.Color.SystemNeutral2900);
 
-    public Color Outline { get; } = Of(context, dark,
+    public Color Outline { get; private set; } = Of(context, dark,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineLight : Android.Resource.Color.SystemNeutral1500,
         OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineDark : Android.Resource.Color.SystemNeutral1400);
 
@@ -99,6 +173,8 @@ public sealed class StandardColors(Context context, bool dark)
     public Color FaintOutline => Color.Argb(128, Outline.R, Outline.G, Outline.B);
 
     private static Color Of(Context context, bool dark, int light, int darkColor) => new(context.GetColor(dark ? darkColor : light));
+
+    private static Color Of(Rgb color) => new(color.R, color.G, color.B);
 }
 
 /// <summary>
