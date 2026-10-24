@@ -100,6 +100,11 @@ public static class KeyPlusPreferences
     public const string FocusLostStay = "stay";
     public static readonly string[] FocusLostChoices = [FocusLostHide, FocusLostIcon, FocusLostStay];
 
+    /// <summary>The standard keyboard's language, kept for every screen: 🌐 changes it, and with it the keyboard each screen shows in it.</summary>
+    public const string LanguageKey = "standardLanguage";
+
+    public static StandardLanguage Language(Context context) => StandardKeys.LanguageOf(Global(context).GetString(LanguageKey, null));
+
     public static ISharedPreferences Global(Context context) =>
         context.GetSharedPreferences(PhoneName, FileCreationMode.Private)!;
 

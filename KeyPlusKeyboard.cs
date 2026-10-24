@@ -784,9 +784,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
         placed.Floating = windowed;
         placed.Save();
 
-        // The screen shows another keyboard floating than docked: the keyboard made again with it.
-        var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
-        if (!OnHeadset && Keyboards.Selected(this, KeyPlusPreferences.ForScreen(this, screen), screen, windowed).Id != panel.KeyboardId)
+        // The same keyboard in the other mode; designed in it, with that mode's own design: the keyboard made again with it.
+        panel.ShowsFloating = windowed;
+        if (panel.Keyboard is { } shown && shown.DesignFor(docked: windowed) != shown.DesignFor(docked: !windowed))
         {
             panel.Root.Post(() => SetInputView(OnCreateInputView()));
             return;
@@ -1191,23 +1191,33 @@ public sealed class KeyPlusKeyboard : InputMethodService
         watched?.UnregisterOnSharedPreferenceChangeListener(watch);
         watched = preferences;
         preferences.RegisterOnSharedPreferenceChangeListener(watch);
+        // The language and the keyboards saved are kept for every screen; the phone's preferences are those, registered once all the same.
+        KeyPlusPreferences.Global(this).RegisterOnSharedPreferenceChangeListener(watch);
     }
 
     /// <summary>
-    /// The app's Pop-up turned on or off, its Reset or designs imported: the keyboard made
-    /// again from what is kept now, at once. Its own changes, already in
-    /// sight, are left alone.
+    /// The app's Pop-up turned on or off, its Reset or designs imported, a
+    /// keyboard chosen for the screen, or the language or the keyboards
+    /// saved changed so that the screen shows another keyboard, or the same
+    /// one otherwise designed (Tema): the keyboard made again from what is
+    /// kept now, at once. Its own changes, already in sight, are left alone.
     /// </summary>
     private void OnPreferenceChanged(ISharedPreferences preferences, string? key)
     {
-        var reset = key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key);
-        var popupChanged = key == PanelPlacement.FloatingPreference && placed is not null
+        var screens = watched is not null && preferences.Equals(watched);
+        var reset = screens && (key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key));
+        var popupChanged = screens && key == PanelPlacement.FloatingPreference && placed is not null
             && new PanelPlacement(preferences).Floating != placed.Floating;
-        if (reset || popupChanged)
+        var keyboardChanged = (key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother();
+        if (reset || popupChanged || keyboardChanged)
         {
             panel?.Root.Post(() => SetInputView(OnCreateInputView()));
         }
     }
+
+    /// <summary>Whether the screen shows another keyboard in the keyboard's language than the one in sight, or the same one otherwise designed.</summary>
+    private bool ShowsAnother() => !OnHeadset && panel?.Keyboard is { } shown && watched is not null
+        && Keyboards.Selected(this, watched, KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay), KeyPlusPreferences.Language(this).Code) != shown;
 
     /// <summary>Tells the keyboard of its screen's preferences changing (kept as a field: Android holds its listeners weakly).</summary>
     private sealed class PreferencesWatch(KeyPlusKeyboard keyboard) : Java.Lang.Object, ISharedPreferencesOnSharedPreferenceChangeListener

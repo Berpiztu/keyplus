@@ -55,7 +55,7 @@ public sealed record KeyboardPreferences(
 
     /// <summary>The language typed in: the one chosen, Spanish at first.</summary>
     [JsonIgnore]
-    public StandardLanguage TypingLanguage => StandardKeys.Languages.FirstOrDefault(known => known.Code == Language) ?? StandardKeys.Spanish;
+    public StandardLanguage TypingLanguage => StandardKeys.LanguageOf(Language);
 
     public static KeyboardPreferences Read()
     {

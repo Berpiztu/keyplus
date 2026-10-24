@@ -24,11 +24,11 @@ public static class Keyboards
     private static readonly string Kept = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", "keyboards.json");
 
-    /// <summary>A language's keyboards: the two the keyboard comes with, then those saved in it, in the order they were.</summary>
+    /// <summary>A language's keyboards: the two the keyboard comes with, Estándar PC with that language's design, then those saved in it, in the order they were.</summary>
     public static IReadOnlyList<KeyboardEntry> All(string language) =>
     [
         new(StandardId, Texts.Get(Resource.String.keyboard_standard), StandardBase),
-        new(StandardPcId, Texts.Get(Resource.String.keyboard_standard_pc), StandardPcBase),
+        new(StandardPcId, Texts.Get(Resource.String.keyboard_standard_pc), StandardPcBase, StandardKeys.PcDesign(language)),
         .. Made().Where(keyboard => keyboard.LanguageCode == language),
     ];
 

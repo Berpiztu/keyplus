@@ -274,6 +274,9 @@ public sealed class StandardKeyboard : View
     /// <summary>Whether a swipe draws its trail (Escritura deslizando el dedo › Recorrido del deslizamiento).</summary>
     public bool ShowsTrail { get; set; } = true;
 
+    /// <summary>Whether a touch types: off, the keys are only to be seen (Tema's preview), designed all the same.</summary>
+    public bool Types { get; set; } = true;
+
     /// <summary>The keys' size, 1 for Gboard's own.</summary>
     public float Scale
     {
@@ -303,12 +306,26 @@ public sealed class StandardKeyboard : View
     /// </summary>
     private float glyphScale = 1f;
 
+    /// <summary>
+    /// The keys' width at Gboard's size for so many keys across, in dp: each
+    /// key as wide as Gboard's is for its row's height (93 px on a 124 px
+    /// row), Gboard's gaps and sides; ten across are Gboard's own 1080 px.
+    /// The width a keyboard has of its own, whatever room it stands in.
+    /// </summary>
+    public static float WidthDp(float across) => (2 * SideDp) + (across * LetterRowDp * GboardKeyAspect) + ((across - 1) * KeyGapDp);
+
+    /// <summary>A page's keys across, as made: its widest row's widths, in keys.</summary>
+    public static float Across(StandardPage page, StandardLanguage language) =>
+        Math.Max(1, StandardKeys.Page(page, language).Max(row => row.Sum(key => key.Width)));
+
+    /// <summary>The keys' height for a number of rows at Gboard's size, in dp: the keys at a size are as many times as tall.</summary>
+    public static float HeightDp(int rows) => TopDp + NumberRowDp + ((rows - 1) * (LetterRowDp + RowGapDp)) + BottomDp;
+
     protected override void OnMeasure(int widthMeasureSpec, int heightMeasureSpec)
     {
         var width = MeasureSpec.GetSize(widthMeasureSpec);
         var rows = Math.Max(1, Rows(pc ? StandardPage.Pc : StandardPage.Letters).Count);
-        var height = Dp(TopDp) + Dp(NumberRowDp) + ((rows - 1) * (LetterRow + Dp(RowGapDp))) + Dp(BottomDp);
-        SetMeasuredDimension(width, (int)Math.Ceiling(height));
+        SetMeasuredDimension(width, (int)Math.Ceiling(Dp(HeightDp(rows))));
     }
 
     protected override void OnSizeChanged(int w, int h, int oldw, int oldh)
@@ -336,8 +353,7 @@ public sealed class StandardKeyboard : View
         var gap = Dp(KeyGapDp);
         // As wide as the keyboard as made is, a design or not: a row made wider than that squeezes its own keys
         // alone, so a key widened takes its room from its row, the others keep theirs.
-        var made = StandardKeys.Page(page, language);
-        var across = Math.Max(1, made.Max(row => row.Sum(key => key.Width)));
+        var across = Across(page, language);
         var unit = (Width - (2 * side) - ((across - 1) * gap)) / across;
         keyUnit = unit;
         glyphScale = Math.Min(1f, unit / (LetterRow * GboardKeyAspect));
@@ -711,6 +727,11 @@ public sealed class StandardKeyboard : View
         if (designing)
         {
             DesignTouch(motion);
+            return true;
+        }
+
+        if (!Types)
+        {
             return true;
         }
 

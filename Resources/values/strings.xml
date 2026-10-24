@@ -88,9 +88,7 @@
   <string name="choose_keyboard">Choose the keyboard</string>
   <string name="wireless_debugging">Turn it on with Wireless debugging</string>
   <string name="wireless_debugging_summary">Pair again when Android has forgotten it</string>
-  <string name="rename">Rename</string>
   <string name="delete">Delete</string>
-  <string name="keyboard_name">Name</string>
   <string name="ok">OK</string>
   <string name="cancel">Cancel</string>
   <string name="my_design">My design – %1$s</string>
@@ -100,9 +98,6 @@
   <string name="screen_dex">DeX</string>
   <string name="keyboard_standard">Standard</string>
   <string name="keyboard_standard_pc">Standard PC</string>
-  <string name="docked">Docked</string>
-  <string name="keyboards_saved">Saved</string>
-  <string name="keyboards_saved_summary">Tap one to rename or delete it</string>
   <string name="delete_ask">Delete %1$s? The screens that showed it go back to their own.</string>
   <string name="customize_hint">Hold and drag to customize</string>
   <string name="done">Done</string>
@@ -178,7 +173,7 @@
   <string name="troubleshooting_vscode_already">Every VS Code shortcut has it already.</string>
   <string name="troubleshooting_vscode_none">No VS Code shortcut was found in the Start menu, the taskbar or on the desktop.</string>
   <string name="windows_delete_ask">Delete %1$s? If the keyboard shows it, it goes back to Standard PC.</string>
-  <string name="windows_keyboards_saved_summary">Save as copies the keyboard chosen under the name written; Delete takes a saved one away</string>
-  <string name="windows_keyboard">Keyboard</string>
-  <string name="windows_save_as">Save as</string>
+  <string name="keyboards_saved_summary">Save as copies the keyboard chosen under the name written; Delete takes a saved one away</string>
+  <string name="keyboard">Keyboard</string>
+  <string name="save_as">Save as</string>
 </resources>

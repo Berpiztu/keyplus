@@ -1206,7 +1206,7 @@ public sealed class KeyboardWindow : Window
         Width = Math.Max(MinWidth, state?.Width ?? area.Width * FirstWidthShare);
         // The language and its keyboard as the preferences have them; the language kept before they did, as the window kept it.
         var language = preferences.Language ?? state?.Language;
-        keys.KeyLanguage = StandardKeys.Languages.FirstOrDefault(known => known.Code == language) ?? StandardKeys.Spanish;
+        keys.KeyLanguage = StandardKeys.LanguageOf(language);
         keyboard = Keyboards.Selected(preferences, keys.KeyLanguage.Code);
         keys.Pc = keyboard.Base == Keyboards.StandardPcBase;
         keys.Design = StandardDesign.FromText(keyboard.DesignFor(docked));

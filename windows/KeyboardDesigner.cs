@@ -80,11 +80,11 @@ public sealed class KeyboardDesigner
         if (keep && keys.Design is { } designed)
         {
             // The keyboard shown is then the one saved, as it now is: designed again, it opens as saved, and Hecho keeps it in its place.
-            // Docked, the design is the keyboard's docked one: a new keyboard made from a built-in one floats as that one does.
+            // Docked, the design is the keyboard's docked one: a new keyboard made from a built-in one floats as that one does, its design kept.
             if (shown.BuiltIn)
             {
                 shown = Docked
-                    ? Keyboards.SaveAs(Keyboards.NewName(shown), shown.Base, null, keys.KeyLanguage.Code, designed.Text)
+                    ? Keyboards.SaveAs(Keyboards.NewName(shown), shown.Base, shown.Design, keys.KeyLanguage.Code, designed.Text)
                     : Keyboards.SaveAs(Keyboards.NewName(shown), shown.Base, designed.Text, keys.KeyLanguage.Code);
                 Keyboards.Select(keys.KeyLanguage.Code, shown.Id);
             }

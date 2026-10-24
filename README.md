@@ -107,7 +107,9 @@ a window that does.
 | [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Escribir por voz's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
 | [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
-| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema): Estándar, Estándar PC and those saved; each screen's docked and floating one |
+| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema), by language: Estándar, Estándar PC and those saved; each screen's one in each language |
+| [ThemeView.cs](ThemeView.cs) | Ajustes › Tema: the language and the keyboard, Guardar como and Borrar, and the keyboard drawn as the screen shows it, designed there |
+| [StandardDesigner.cs](StandardDesigner.cs) | Diseñar's pills, + Tecla's list and Hecho's saving, the keyboard's and Tema's alike |
 | [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
@@ -128,13 +130,18 @@ a window that does.
   PC**, a PC's (Spanish ISO, or US in English): F1–F12, Alt Gr's symbol in
   each key's corner and on the keys while Alt Gr is on, ´ and ` as dead
   keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key, the arrows
-  repeating. Each screen (phone, tablet upright or on its side, DeX) shows
-  one docked and one floating, chosen in **Ajustes › Tema**; at first
-  Estándar on a phone, Estándar PC on a tablet on its side and on DeX. The
-  PC designs made before are saved keyboards there, renamed or deleted
-  under Guardados. On the keyboard, one button (a phone or a computer
-  reading PC) switches between the two, and Flotante (a screen with keys,
-  crossed while floating) docks or floats it.
+  repeating; Estándar PC in Spanish as the owner designed it (Insert, ISO's
+  Enter, Inicio, Fin, RePág and AvPág). The keyboards go by language, a
+  PC's keys differing between them: each screen (phone, tablet upright or
+  on its side, DeX) shows one in each language, docked and floating alike,
+  chosen in **Ajustes › Tema**, 🌐 changing it with the language; at first
+  Estándar on a phone, Estándar PC on a tablet on its side and on DeX.
+  Tema shows the keyboard chosen as the screen does, in a box of one size,
+  copies it under a new name with Guardar como, deletes a saved one with
+  Borrar, and designs it there with Diseñar, the screen to itself. The PC
+  designs made before are saved keyboards in Spanish. On the keyboard, one
+  button (a phone or a computer reading PC) switches between the two, and
+  Flotante (a screen with keys, crossed while floating) docks or floats it.
 - **⊞ › Diseñar** designs a standard keyboard: a tap marks a key in blue,
   − and + make it narrower or wider, a drag moves it; + Tecla lists those
   of Esc, Tab, Supr, Insert, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞,
@@ -146,8 +153,9 @@ a window that does.
   + Fila adds a row at the top; + Columna adds a column at the right, a
   hole a key wide at the end of every row, which a key let go on fills and
   which, left empty, is room with nothing in it; Quitar takes one out.
-  Hecho saves Estándar or Estándar PC as a new keyboard, this screen's
-  docked or floating as it was designed.
+  Hecho saves Estándar or Estándar PC as a new keyboard of the language,
+  this screen's in it; designed floating, the design is the keyboard's
+  floating one, docked it stays as it was.
 - **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
   is dragged between them, its name in sight; the toolbar's buttons show
   their names as the mouse rests on them.

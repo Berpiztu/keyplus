@@ -59,8 +59,6 @@ public sealed class KeyPanel
     private const string WholeKeyboardPreference = "wholeKeyboard";
     private const string CompactPreference = "compact";
 
-    /// <summary>The standard keyboard's language, one for every screen, as Gboard's: kept by its code.</summary>
-    private const string LanguagePreference = "standardLanguage";
     private const string LabelScalePreference = "labelScale";
 
     /// <summary>How much A− and A+ change the labels' size at a press, and how far.</summary>
@@ -114,7 +112,7 @@ public sealed class KeyPanel
     internal static readonly Color KeyColor = Color.Argb(0xFF, 0x42, 0x42, 0x42);
     internal static readonly Color HeldColor = Color.Argb(0xFF, 0x4F, 0xC3, 0xF7);
     internal static readonly Color HeldTextColor = Color.Argb(0xFF, 0x10, 0x10, 0x10);
-    private static readonly Color RippleColor = Color.Argb(0x55, 0xFF, 0xFF, 0xFF);
+    internal static readonly Color RippleColor = Color.Argb(0x55, 0xFF, 0xFF, 0xFF);
     private static readonly Color DimTextColor = Color.Argb(0xFF, 0x9E, 0x9E, 0x9E);
 
     /// <summary>The copied things' cards, the menu held on one and the editor: a ground a little lighter than the window's.</summary>
@@ -173,14 +171,14 @@ public sealed class KeyPanel
     /// <summary>The whole keyboard (ABC): as made, or as the screen's design has it, made again when it changes.</summary>
     private LinearLayout wholeKeyboard;
 
-    /// <summary>The keyboard of the list this screen shows, docked or floating (Ajustes › Tema); none in the popup.</summary>
+    /// <summary>The keyboard of the list this screen shows in the keyboard's language (Ajustes › Tema); none in the popup.</summary>
     private KeyboardEntry? keyboard;
 
-    /// <summary>Whether the keyboard floats: the keyboard chosen from here is the screen's floating one.</summary>
-    private readonly bool floating;
+    /// <summary>Whether the keyboard floats: its floating design shown, and designed.</summary>
+    public bool ShowsFloating { get; set; }
 
-    /// <summary>The keyboard of the list shown; none in the popup.</summary>
-    public string? KeyboardId => keyboard?.Id;
+    /// <summary>The keyboard of the list shown, as it is now; none in the popup.</summary>
+    public KeyboardEntry? Keyboard => keyboard;
 
     /// <summary>The whole keyboard's design: a keyboard saved keeps its own; the popup's, the screen's.</summary>
     private KeyboardDesign? ReadDesign() =>
@@ -191,7 +189,7 @@ public sealed class KeyPanel
     {
         if (keyboard is { } made)
         {
-            Keyboards.SetDesign(context, made.Id, kept?.Text);
+            Keyboards.SetDesign(context, made.Id, kept?.Text, floating: false);
         }
         else if (kept is not null)
         {
@@ -340,7 +338,7 @@ public sealed class KeyPanel
     private readonly View toolbarClipboard;
 
     /// <summary>The toolbar's and the menu bar's height, in dp: Gboard's.</summary>
-    private const int ToolbarDp = 48;
+    internal const int ToolbarDp = 48;
 
     /// <summary>
     /// The standard keyboard's toolbar, as Gboard's on the emulator (pixels
@@ -440,7 +438,7 @@ public sealed class KeyPanel
     /// <summary>The toolbar's places while customising, in order, a gap's among them.</summary>
     private List<View> barSlots = [];
     private const float ToolSlotDp = 118 / 2.625f;
-    private const float ToolCircleDp = 89 / 2.625f;
+    internal const float ToolCircleDp = 89 / 2.625f;
     private const float ToolIconDp = 40 / (720f / 960) / 2.625f;
     private const float SuggestionSp = 35 / 0.711f / 2.625f;
     private const float SuggestionLineDp = 3 / 2.625f;
@@ -558,8 +556,8 @@ public sealed class KeyPanel
     /// <param name="preferences">The layout of the display the panel is on.</param>
     /// <param name="clipboard">The texts copied lately, which 📋 lists.</param>
     /// <param name="lettersFirst">Whether a screen with no mode kept opens on the whole keyboard (ABC), as a keyboard opens on its letters, rather than on Keys.</param>
-    /// <param name="keyboardScreen">Berpiztu AI Keyboard on a phone's screen: the keyboards of the list (Estándar, Estándar PC, those saved), the one the screen shows docked or floating; none, the popup's and the headset's keys.</param>
-    /// <param name="floating">Whether the keyboard floats, which picks the screen's keyboard for floating.</param>
+    /// <param name="keyboardScreen">Berpiztu AI Keyboard on a phone's screen: the keyboards of the list (Estándar, Estándar PC, those saved), the one the screen shows in the keyboard's language; none, the popup's and the headset's keys.</param>
+    /// <param name="floating">Whether the keyboard floats, which shows its floating design.</param>
     public KeyPanel(Context context, ISharedPreferences preferences, ClipboardHistory clipboard, Action<Keycode, MetaKeyStates> send, Action<string> type, bool lettersFirst = false, KeyPlusPreferences.Screen? keyboardScreen = null, bool floating = false)
     {
         this.context = context;
@@ -786,8 +784,8 @@ public sealed class KeyPanel
         designBar = DesignBar();
         strip.AddView(designBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         terminal = Rows(PanelKeys.Terminal);
-        this.floating = floating;
-        keyboard = keyboardScreen is { } screen ? Keyboards.Selected(context, preferences, screen, floating) : null;
+        ShowsFloating = floating;
+        keyboard = keyboardScreen is { } screen ? Keyboards.Selected(context, preferences, screen, KeyPlusPreferences.Language(context).Code) : null;
         design = ReadDesign();
         wholeKeyboard = WholeKeyboard();
         compact = Rows(PanelKeys.Compact);
@@ -797,6 +795,7 @@ public sealed class KeyPanel
         if (standardKeys)
         {
             standard = MakeStandard();
+            designer = new StandardDesigner(context, standardColors!, standard);
             ReadSettings();
             strip.AddView(standard, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
             floatingBar = FloatingBar();
@@ -1498,144 +1497,46 @@ public sealed class KeyPanel
     /// <summary>The keys a design can add (+ Tecla), in the keys' place while chosen.</summary>
     private readonly ScrollView? extraKeysView;
 
+    /// <summary>Diseñar's pills, + Tecla's list and Hecho's saving, shared with Tema's preview.</summary>
+    private StandardDesigner? designer;
+
     /// <summary>
     /// Diseñar on a standard keyboard, as the PC's designer: a tap marks a
     /// key in blue, − and + make it narrower or wider, a drag moves it;
     /// + Tecla, + Fila and Quitar over the keys, in the toolbar's place, with
-    /// Cancelar and Hecho. Its design, or the keyboard as made, to start from.
+    /// Cancelar and Hecho. Its design for the mode it shows in, or the
+    /// keyboard as made, to start from.
     /// </summary>
     private void StartStandardDesign()
     {
+        if (keyboard is null || designer is null)
+        {
+            return;
+        }
+
         Uncover();
-        var made = StandardKeys.Page(keyboard?.Base == Keyboards.StandardPcBase ? StandardPage.Pc : StandardPage.Letters, standard!.Language);
-        standard.Design = StandardDesign.FromText(keyboard?.Design) ?? StandardDesign.From(made);
-        standard.Designing = true;
+        designer.Start(keyboard, ShowsFloating);
         designingStandard = true;
         ShowBars();
     }
 
-    /// <summary>
-    /// Hecho: the design kept, a keyboard the keyboard comes with saved as a
-    /// new one, which this screen then shows, docked or floating as it is
-    /// (renamed in Tema); a saved one keeps it. Cancelar: as it was.
-    /// </summary>
+    /// <summary>Hecho or Cancelar (<see cref="StandardDesigner.End"/>): the keyboard shown as it now is, the toolbar back.</summary>
     private void EndStandardDesign(bool keep)
     {
         designingStandard = false;
-        standard!.Designing = false;
         Uncover();
-        if (keep && standard.Design is { } designed && keyboard is { } shown)
-        {
-            // The keyboard shown is then the one saved, as it now is: designed again, it opens as saved, and Hecho keeps it in its place.
-            if (shown.BuiltIn)
-            {
-                keyboard = Keyboards.SaveAs(context, Keyboards.NewName(context, shown), shown.Base, designed.Text);
-                Keyboards.Select(preferences, floating, keyboard.Id);
-            }
-            else
-            {
-                Keyboards.SetDesign(context, shown.Id, designed.Text);
-                keyboard = shown with { Design = designed.Text };
-            }
-        }
-        else
-        {
-            standard.Design = StandardDesign.FromText(keyboard?.Design);
-        }
-
+        keyboard = designer?.End(keep, preferences) ?? keyboard;
         ShowBars();
     }
 
-    /// <summary>The designer's buttons in the toolbar's place, Gboard's pills: −, +, + Tecla, + Fila, + Columna, Quitar, Cancelar, Hecho in blue.</summary>
-    private void FillDesignBar()
-    {
-        var colors = standardColors!;
-        (string Label, Action Pressed, bool Done)[] buttons =
-        [
-            ("−", () => standard!.ResizeMarked(wider: false), false),
-            ("+", () => standard!.ResizeMarked(wider: true), false),
-            (context.GetString(Resource.String.add_key), () => Toggle(extraKeysView!, ShowExtraKeys), false),
-            (context.GetString(Resource.String.add_row), () => standard!.AddRow(), false),
-            (context.GetString(Resource.String.add_column), () => standard!.AddColumn(), false),
-            (context.GetString(Resource.String.remove), () => standard!.RemoveMarked(), false),
-            (context.GetString(Resource.String.cancel), () => EndStandardDesign(keep: false), false),
-            (context.GetString(Resource.String.done), () => EndStandardDesign(keep: true), true),
-        ];
-        foreach (var (label, pressed, done) in buttons)
-        {
-            var ground = new GradientDrawable();
-            ground.SetColor(done ? colors.Primary : colors.Function);
-            ground.SetCornerRadius(Dp(ToolCircleDp) / 2f);
-            var button = new TextView(context)
-            {
-                Text = label,
-                Gravity = GravityFlags.Center,
-                Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null),
-                Clickable = true,
-            };
-            button.SetTextColor(done ? colors.OnPrimary : colors.FunctionGlyph);
-            button.SetSingleLine(true);
-            button.SetAutoSizeTextTypeUniformWithConfiguration(8, 16, 1, (int)ComplexUnitType.Sp);
-            button.Click += (_, _) => pressed();
-            var place = new FrameLayout(context);
-            place.AddView(button, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolCircleDp), GravityFlags.Center) { LeftMargin = Dp(2), RightMargin = Dp(2) });
-            standardBar.AddView(place, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, label.Length <= 1 ? 0.7f : 1f));
-        }
-    }
+    /// <summary>The designer's pills in the toolbar's place.</summary>
+    private void FillDesignBar() => designer!.FillBar(standardBar, () => Toggle(extraKeysView!, ShowExtraKeys), EndStandardDesign);
 
-    /// <summary>+ Tecla: the keys a design can add and the keyboard lacks, in the keys' place, by group; one tapped comes loose over the keys, to be dragged to its place.</summary>
+    /// <summary>+ Tecla's list in the keys' place.</summary>
     private void ShowExtraKeys()
     {
-        var colors = standardColors!;
-        var list = new LinearLayout(context) { Orientation = Orientation.Vertical };
-        list.SetPadding(Dp(12), Dp(4), Dp(12), Dp(8));
-        foreach (var (name, offered) in StandardKeys.Extras)
-        {
-            var ids = offered.Where(id => !standard!.HasKey(id)).ToArray();
-            if (ids.Length == 0)
-            {
-                continue;
-            }
-
-            var header = new TextView(context) { Text = context.GetString(name) };
-            header.SetTextColor(colors.Outline);
-            header.SetTextSize(ComplexUnitType.Sp, 13);
-            header.SetPadding(Dp(4), Dp(8), 0, Dp(4));
-            list.AddView(header);
-            const int across = 5;
-            for (var first = 0; first < ids.Length; first += across)
-            {
-                var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-                for (var i = first; i < first + across; i++)
-                {
-                    if (i >= ids.Length || StandardKeys.Extra(ids[i], standard!.Language) is not { } key)
-                    {
-                        row.AddView(new View(context), new LinearLayout.LayoutParams(0, Dp(40), 1f));
-                        continue;
-                    }
-
-                    var id = ids[i];
-                    var ground = new GradientDrawable();
-                    ground.SetColor(colors.Function);
-                    ground.SetCornerRadius(Dp(8));
-                    var button = new TextView(context) { Text = key.Label, Gravity = GravityFlags.Center, Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null), Clickable = true };
-                    button.SetTextColor(colors.FunctionGlyph);
-                    button.SetSingleLine(true);
-                    button.SetAutoSizeTextTypeUniformWithConfiguration(8, 15, 1, (int)ComplexUnitType.Sp);
-                    button.Click += (_, _) =>
-                    {
-                        Uncover();
-                        standard!.AddKey(id);
-                    };
-                    row.AddView(button, new LinearLayout.LayoutParams(0, Dp(40), 1f) { LeftMargin = Dp(2), RightMargin = Dp(2), BottomMargin = Dp(4) });
-                }
-
-                list.AddView(row);
-            }
-        }
-
         extraKeysView!.RemoveAllViews();
-        extraKeysView.AddView(list);
+        extraKeysView.AddView(designer!.ExtraKeys(Uncover));
         Cover(extraKeysView, settingsButton);
     }
 
@@ -2242,8 +2143,8 @@ public sealed class KeyPanel
     private string OtherStandardName =>
         context.GetString(OtherStandard == Keyboards.StandardPcId ? Resource.String.keyboard_standard_pc : Resource.String.keyboard_standard);
 
-    /// <summary>A keyboard of the list chosen for this screen, docked or floating as the keyboard is: the keyboard made again with it.</summary>
-    private void Choose(string id) => Keyboards.Select(preferences, floating, id);
+    /// <summary>A keyboard of the list chosen for this screen in the keyboard's language: the keyboard made again with it.</summary>
+    private void Choose(string id) => Keyboards.Select(preferences, standard?.Language.Code ?? KeyPlusPreferences.Language(context).Code, id);
 
     /// <summary>The standard keyboard in the keys' place, in the device's colours.</summary>
     private void ShowStandard()
@@ -2515,7 +2416,7 @@ public sealed class KeyPanel
             OfferWordsSoon();
         },
         Pc = keyboard?.Base == Keyboards.StandardPcBase,
-        Design = keyboard is { Standard: true } ? StandardDesign.FromText(keyboard.Design) : null,
+        Design = keyboard is { Standard: true } ? StandardDesign.FromText(keyboard.DesignFor(docked: !ShowsFloating)) : null,
         EmojisAsked = ShowEmojis,
         Entered = () =>
         {
@@ -2530,7 +2431,7 @@ public sealed class KeyPanel
                 Send(Keycode.Enter, MetaKeyStates.None);
             }
         },
-        Language = StandardKeys.Languages.FirstOrDefault(language => language.Code == KeyPlusPreferences.Global(context).GetString(LanguagePreference, null)) ?? StandardKeys.Spanish,
+        Language = KeyPlusPreferences.Language(context),
         NextLanguage = NextLanguage,
         NotMade = NotMadeYet,
         Swiped = (path, capital, capitals) => ReadSwipe(path, capital, capitals),
@@ -2555,14 +2456,14 @@ public sealed class KeyPanel
     private bool vibrates = true;
     private bool showsTrail = true;
 
-    /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen.</summary>
+    /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen; where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
     private void NextLanguage()
     {
         EndSwipe(letter: false);
         var languages = StandardKeys.Languages;
         var next = languages[(languages.ToList().IndexOf(standard!.Language) + 1) % languages.Count];
         standard.Language = next;
-        KeyPlusPreferences.Global(context).Edit()!.PutString(LanguagePreference, next.Code)!.Apply();
+        KeyPlusPreferences.Global(context).Edit()!.PutString(KeyPlusPreferences.LanguageKey, next.Code)!.Apply();
     }
 
     /// <summary>Enter as the field asks (Go, Search, Send…), where the keyboard can say; none, the Enter key.</summary>

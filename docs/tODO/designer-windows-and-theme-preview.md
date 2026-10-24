@@ -46,6 +46,13 @@ keyboard as a preview and to design it there too.
 
 Start with 1 and 2 (what does not work on Windows today), then 3 and 4.
 
+## Next, right after step 4: Shift's labels on Estándar PC
+
+Asked by the owner on 2026-10-23, the very next thing once Tema is on
+Android: on the PC keyboard, Shift pressed does not show the keys' shifted
+labels (each `PcKeys` key has its `Shifted`, ! over 1 and so on); the keys
+must show what they type with Shift on, on both platforms.
+
 ## Later: one key size for the whole keyboard
 
 Asked by the owner on 2026-10-23, to do after this plan, on both
@@ -69,11 +76,18 @@ Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
 
 ## Where things stand
 
+- Written on 2026-10-23, built, not tried yet: step 4 on Android
+  (`ThemeView.cs` in Ajustes › Tema; keyboards by language, each screen
+  its own one in each language, docked and floating alike, `Keyboards.cs`;
+  the designer shared by the keyboard and Tema, `StandardDesigner.cs`), and
+  Estándar PC in Spanish as the owner's design on both
+  (`StandardKeys.PcDesign`); the phone starts on Estándar, a tablet on its
+  side and DeX on Estándar PC, as before.
+
 - On `futo-swipe`, pushed to f31540c: 1 and 2 tried by the owner, with
   + Tecla, + Columna and the Enter's shapes on both platforms; 3 done on
   Windows (Tema with its preview, designed there one to one) with keyboards
-  by language (each language its own keyboards and chosen one), not yet on
-  Android, where 4 brings them.
+  by language (each language its own keyboards and chosen one).
 - Docked and floating, agreed on 2026-10-23: one keyboard per language;
   Windows starts floating, Android docked; Acoplar (Windows) or Flotante
   (Android) shows the same keyboard in the other mode; designing there and

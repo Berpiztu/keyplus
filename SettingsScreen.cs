@@ -25,15 +25,15 @@ public sealed record SettingsRow(
     bool? Chosen = null,
     bool Opens = false);
 
-/// <summary>A page of settings: its title and its rows in groups, each group a card.</summary>
-public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<SettingsRow>> Groups);
+/// <summary>A page of settings: its title and its rows in groups, each group a card; or, in their place, a view of its own that takes the page's room (Tema).</summary>
+public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<SettingsRow>> Groups, View? Body = null);
 
 /// <summary>
 /// The keyboard's app as Gboard's settings (docs/tODO/photos/gboard/fold-settings.png):
 /// a big title, then the rows in groups, each group a card whose ends are
 /// rounded and whose rows stand a little apart; a row opens its page, or
 /// switches. Where the screen is wide (the Fold open, 600 dp and more) the
-/// list stands at the left and the page at the right, as Gboard's. Its sizes
+/// list stands at the left, a third, and the page at the right. Its sizes
 /// are Gboard's on the Fold, pixels over 2.25; its colours the device's
 /// palette, light or dark as the device is: the list's ground
 /// system_surface_dim, a page's system_surface_container, the cards
@@ -64,6 +64,9 @@ public sealed class SettingsScreen
     /// <summary>Where the list and its page stand side by side.</summary>
     private const int WideDp = 600;
 
+    /// <summary>The list's share of a wide screen, the owner's: a third, the page the rest, its settings the room they need.</summary>
+    private const float ListShare = 1f / 3;
+
     private readonly Context context;
     private readonly float density;
     private readonly Color ground;
@@ -74,6 +77,9 @@ public sealed class SettingsScreen
     private readonly Stack<SettingsPage> opened = new();
     private SettingsPage? main;
     private View? top;
+
+    /// <summary>Whether the page opened has the whole screen to its view, its title and the list out of sight (Tema's designer).</summary>
+    private bool alone;
 
     public SettingsScreen(Context context)
     {
@@ -122,6 +128,7 @@ public sealed class SettingsScreen
     /// <summary>A page opened from the main one: in its place, or beside the list on a wide screen.</summary>
     public void Open(SettingsPage page)
     {
+        alone = false;
         if (Wide)
         {
             opened.Clear();
@@ -155,9 +162,17 @@ public sealed class SettingsScreen
             return false;
         }
 
+        alone = false;
         opened.Pop();
         Lay();
         return true;
+    }
+
+    /// <summary>The page opened with the whole screen to its own view, or laid as the others again.</summary>
+    public void Alone(bool on)
+    {
+        alone = on;
+        Lay();
     }
 
     private void Lay()
@@ -168,13 +183,23 @@ public sealed class SettingsScreen
             return;
         }
 
+        if (alone && opened.TryPeek(out var only) && only.Body is { } body)
+        {
+            (body.Parent as ViewGroup)?.RemoveView(body);
+            body.SetBackgroundColor(paneGround);
+            // The screen's whole width to it, the keyboard one to one where it fits.
+            body.SetPadding(0, Dp(24), 0, 0);
+            root.AddView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+            return;
+        }
+
         if (Wide)
         {
             var panes = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-            panes.AddView(Pane(main, top, ground, back: false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            panes.AddView(Pane(main, top, ground, back: false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, ListShare));
             var right = opened.TryPeek(out var shown) ? Pane(shown, null, paneGround, back: false) : new View(context);
             right.SetBackgroundColor(paneGround);
-            panes.AddView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            panes.AddView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1 - ListShare));
             root.AddView(panes);
             return;
         }
@@ -203,6 +228,13 @@ public sealed class SettingsScreen
         title.SetTextSize(ComplexUnitType.Sp, TitleSp);
         header.AddView(title);
         column.AddView(header);
+        if (page.Body is { } body)
+        {
+            (body.Parent as ViewGroup)?.RemoveView(body);
+            body.SetPadding(Dp(SideDp), 0, Dp(SideDp), Dp(SideDp));
+            column.AddView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
+            return column;
+        }
 
         var list = new LinearLayout(context) { Orientation = Orientation.Vertical };
         list.SetPadding(Dp(SideDp), 0, Dp(SideDp), Dp(GroupGapDp));

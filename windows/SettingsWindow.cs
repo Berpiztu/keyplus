@@ -124,7 +124,7 @@ public sealed class SettingsWindow : Window
         var languages = new ComboBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp, 0) };
         var keyboards = new ComboBox();
         var name = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
-        var saveAs = new Button { Content = Texts.Get(Resource.String.windows_save_as), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var saveAs = new Button { Content = Texts.Get(Resource.String.save_as), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
         var delete = new Button { Content = Texts.Get(Resource.String.delete), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
         var naming = new DockPanel();
         DockPanel.SetDock(delete, Dock.Right);
@@ -170,7 +170,7 @@ public sealed class SettingsWindow : Window
         // The language, the keyboard and its name in two rows of small type, each label beside its control, the room left to the keyboard drawn under them.
         TextBlock Caption(int text) => new() { Text = Texts.Get(text), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) };
         var languageLabel = Caption(Resource.String.languages);
-        var keyboardLabel = Caption(Resource.String.windows_keyboard);
+        var keyboardLabel = Caption(Resource.String.keyboard);
         var choosing = new DockPanel { Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
         foreach (var part in new FrameworkElement[] { languageLabel, languages, keyboardLabel })
         {
@@ -183,7 +183,7 @@ public sealed class SettingsWindow : Window
         TextElement.SetFontSize(controls, CompactSize);
         controls.Children.Add(choosing);
         controls.Children.Add(naming);
-        controls.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.windows_keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, FontSize = CompactHintSize, Margin = new Thickness(0, 2, 0, FieldGapDp / 2) });
+        controls.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, FontSize = CompactHintSize, Margin = new Thickness(0, 2, 0, FieldGapDp / 2) });
         DockPanel.SetDock(controls, Dock.Top);
         form.Children.Add(controls);
         var zoom = new Viewbox { Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Child = box };

@@ -82,9 +82,7 @@
   <string name="choose_keyboard">Elegir el teclado</string>
   <string name="wireless_debugging">Activar con la depuración inalámbrica</string>
   <string name="wireless_debugging_summary">Emparejar otra vez cuando Android lo haya olvidado</string>
-  <string name="rename">Renombrar</string>
   <string name="delete">Borrar</string>
-  <string name="keyboard_name">Nombre</string>
   <string name="ok">Aceptar</string>
   <string name="cancel">Cancelar</string>
   <string name="my_design">Mi diseño – %1$s</string>
@@ -94,9 +92,6 @@
   <string name="screen_dex">DeX</string>
   <string name="keyboard_standard">Estándar</string>
   <string name="keyboard_standard_pc">Estándar PC</string>
-  <string name="docked">Acoplado</string>
-  <string name="keyboards_saved">Guardados</string>
-  <string name="keyboards_saved_summary">Toca uno para renombrarlo o borrarlo</string>
   <string name="delete_ask">¿Borrar %1$s? Las pantallas que lo mostraban vuelven al suyo.</string>
   <string name="customize_hint">Mantén pulsado y arrastra para personalizar</string>
   <string name="done">Hecho</string>
@@ -172,7 +167,7 @@
   <string name="troubleshooting_vscode_already">Todos los accesos directos de VS Code ya lo tienen.</string>
   <string name="troubleshooting_vscode_none">No se encontró ningún acceso directo de VS Code en el menú Inicio, la barra de tareas ni el escritorio.</string>
   <string name="windows_delete_ask">¿Borrar %1$s? Si el teclado lo muestra, vuelve a Estándar PC.</string>
-  <string name="windows_keyboards_saved_summary">Guardar como copia el teclado elegido con el nombre escrito; Borrar quita uno guardado</string>
-  <string name="windows_keyboard">Teclado</string>
-  <string name="windows_save_as">Guardar como</string>
+  <string name="keyboards_saved_summary">Guardar como copia el teclado elegido con el nombre escrito; Borrar quita uno guardado</string>
+  <string name="keyboard">Teclado</string>
+  <string name="save_as">Guardar como</string>
 </resources>
