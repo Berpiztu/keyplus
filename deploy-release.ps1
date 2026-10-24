@@ -152,12 +152,13 @@ foreach ($line in $open) {
     Write-Host ""
     Write-Host "Pull request #$number - $title" -ForegroundColor Cyan
     Write-Host "Waiting for its checks..."
-    gh pr checks $number --watch --fail-fast | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    # One with no checks at all (this repository runs none on pull requests) is not one whose checks failed.
+    $checks = gh pr checks $number --watch --fail-fast 2>&1
+    if ($LASTEXITCODE -ne 0 -and -not ($checks -match 'no checks reported')) {
         Write-Host "Its checks did not pass: it is left out of this release." -ForegroundColor Yellow
         continue
     }
-    $answer = Read-Host "Its checks passed. Merge #$number into this release? (y/n)"
+    $answer = Read-Host "Its checks passed, or it has none. Merge #$number into this release? (y/n)"
     if ($answer -notmatch '^(y|yes|s|si)$') { continue }
     gh pr merge $number --squash --delete-branch
     if ($LASTEXITCODE -ne 0) { throw "#$number could not be merged; merge it on GitHub and run this again." }

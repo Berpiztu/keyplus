@@ -71,6 +71,18 @@
   <string name="avoid_menus">Apartarse también de los menús</string>
   <string name="avoid_menus_summary">En ventana, cuando un menú abierto queda debajo del teclado, se aparta una vez y se queda ahí</string>
   <string name="reset_size">Restablecer</string>
+  <string name="look">Colores</string>
+  <string name="look_system">Sistema</string>
+  <string name="look_light">Claro</string>
+  <string name="look_dark">Oscuro</string>
+  <string name="look_custom">Personalizado</string>
+  <string name="look_keyboard">Fondo</string>
+  <string name="look_accent">Acento</string>
+  <string name="per_app">Por app</string>
+  <string name="app_own">De la app</string>
+  <string name="hue">Tono</string>
+  <string name="saturation">Saturación</string>
+  <string name="brightness">Brillo</string>
   <string name="show_keyboard">Mostrar el teclado al escribir</string>
   <string name="show_keyboard_summary">Desactivado, no aparece nunca: para cuando usas otro teclado, y uno no pisa al otro</string>
   <string name="keyboard_icon">Mostrar un icono en su lugar</string>
@@ -82,9 +94,7 @@
   <string name="choose_keyboard">Elegir el teclado</string>
   <string name="wireless_debugging">Activar con la depuración inalámbrica</string>
   <string name="wireless_debugging_summary">Emparejar otra vez cuando Android lo haya olvidado</string>
-  <string name="rename">Renombrar</string>
   <string name="delete">Borrar</string>
-  <string name="keyboard_name">Nombre</string>
   <string name="ok">Aceptar</string>
   <string name="cancel">Cancelar</string>
   <string name="my_design">Mi diseño – %1$s</string>
@@ -94,9 +104,7 @@
   <string name="screen_dex">DeX</string>
   <string name="keyboard_standard">Estándar</string>
   <string name="keyboard_standard_pc">Estándar PC</string>
-  <string name="docked">Acoplado</string>
-  <string name="keyboards_saved">Guardados</string>
-  <string name="keyboards_saved_summary">Toca uno para renombrarlo o borrarlo</string>
+  <string name="keyboard_standard_xr">Estándar XR</string>
   <string name="delete_ask">¿Borrar %1$s? Las pantallas que lo mostraban vuelven al suyo.</string>
   <string name="customize_hint">Mantén pulsado y arrastra para personalizar</string>
   <string name="done">Hecho</string>
@@ -119,6 +127,7 @@
   <string name="design_arrows">Flechas</string>
   <string name="add_key">+ Tecla</string>
   <string name="add_row">+ Fila</string>
+  <string name="add_column">+ Columna</string>
   <string name="remove">Quitar</string>
   <string name="saved_as">%1$s %2$s</string>
   <string name="voice_listening">Escuchando…</string>
@@ -147,9 +156,9 @@
   <string name="voice_permission_summary">Escribir por voz lo necesita para oírte</string>
   <string name="voice_permission_asked">Escribir por voz necesita el micrófono: permítelo en los ajustes</string>
   <string name="voice_not_set">Sin poner</string>
-  <string name="menus_service_label">Berpiztu AI Keyboard: menús</string>
-  <string name="menus_service_summary">Aparta el teclado de los menús que se abren</string>
-  <string name="menus_service_description">Berpiztu AI Keyboard solo ve el campo en el que escribe. Con esto activado ve también dónde se abre un menú, de una app o una lista desplegable, para apartarse (Preferencias › Apartarse también de los menús). No lee nada de los menús.</string>
+  <string name="menus_service_label">Berpiztu AI Keyboard: menús y colores</string>
+  <string name="menus_service_summary">Aparta el teclado de los menús que se abren y ve el color de las apps para Tema › Por app</string>
+  <string name="menus_service_description">Berpiztu AI Keyboard solo ve el campo en el que escribe. Con esto activado ve también dónde se abre un menú, de una app o una lista desplegable, para apartarse (Preferencias › Apartarse también de los menús); y, con Tema › Colores › Por app, el color justo dentro del campo en que escribe, para tomar el de la app (De la app). No lee nada más.</string>
   <string name="menus_watch_off">Dejarle ver los menús</string>
   <string name="menus_watch_off_summary">Android solo muestra los menús de otras apps a un servicio de accesibilidad: un toque activa Berpiztu AI Keyboard: menús</string>
   <string name="voice_lan">Red local (IP)</string>
@@ -170,4 +179,8 @@
   <string name="troubleshooting_vscode_done">Puesto en %1$s accesos directos: cierra VS Code y vuelve a abrirlo desde uno de ellos.</string>
   <string name="troubleshooting_vscode_already">Todos los accesos directos de VS Code ya lo tienen.</string>
   <string name="troubleshooting_vscode_none">No se encontró ningún acceso directo de VS Code en el menú Inicio, la barra de tareas ni el escritorio.</string>
+  <string name="windows_delete_ask">¿Borrar %1$s? Si el teclado lo muestra, vuelve a Estándar PC.</string>
+  <string name="keyboards_saved_summary">Guardar como copia el teclado elegido con el nombre escrito; Borrar quita uno guardado</string>
+  <string name="keyboard">Teclado</string>
+  <string name="save_as">Guardar como</string>
 </resources>

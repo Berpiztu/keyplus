@@ -100,6 +100,39 @@ public static class KeyPlusPreferences
     public const string FocusLostStay = "stay";
     public static readonly string[] FocusLostChoices = [FocusLostHide, FocusLostIcon, FocusLostStay];
 
+    /// <summary>The standard keyboard's language, kept for every screen: 🌐 changes it, and with it the keyboard each screen shows in it.</summary>
+    public const string LanguageKey = "standardLanguage";
+
+    public static StandardLanguage Language(Context context) => StandardKeys.LanguageOf(Global(context).GetString(LanguageKey, null));
+
+    /// <summary>
+    /// Whether the device is dark, as its setting has it (Android's dark theme), or as a context's own configuration says:
+    /// on the Galaxy XR, with the setting dark, an application's light theme was not seen as on a dark device.
+    /// </summary>
+    public static bool DeviceDark(Context context) =>
+        context.GetSystemService(Context.UiModeService) is Android.App.UiModeManager modes && modes.NightMode == Android.App.UiNightMode.Yes
+        || (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
+
+    /// <summary>The keyboard's colours, Tema's choice, kept for every screen by its name: the system's at first.</summary>
+    public const string LookKey = "look";
+
+    public static KeyboardLook Look(Context context) => KeyboardLooks.Parse(Global(context).GetString(LookKey, null));
+
+    /// <summary>
+    /// Personalizado's keyboard and accent colours (#RRGGBB; one not chosen,
+    /// the device's own), the two as they were before the last one was
+    /// chosen (Deshacer, as "key|accent"), and whether each application has
+    /// colours of its own (Por app, <see cref="AppThemes"/>).
+    /// </summary>
+    public const string KeyColorKey = "keyColor";
+    public const string AccentColorKey = "accentColor";
+    public const string ColorsBeforeKey = "colorsBefore";
+    public const string PerAppKey = "perApp";
+
+    /// <summary>Whether a preference changed is one of the keyboard's colours (Tema's Colores).</summary>
+    public static bool IsColors(string? key) =>
+        key is LookKey or KeyColorKey or AccentColorKey or PerAppKey || AppThemes.IsList(key);
+
     public static ISharedPreferences Global(Context context) =>
         context.GetSharedPreferences(PhoneName, FileCreationMode.Private)!;
 

@@ -337,65 +337,9 @@ public sealed class MainActivity : Activity
     private SettingsRow NotMadeRow(int title, int icon) =>
         new(GetString(title), Icon: icon, Tapped: () => Toast.MakeText(this, GetString(Resource.String.not_made_yet, new Java.Lang.String(GetString(title))), ToastLength.Short)!.Show());
 
-    /// <summary>
-    /// Tema: the keyboards of the list twice, the one this screen shows
-    /// docked and the one it shows floating each marked, a tap choosing
-    /// another there; then those saved, one tapped renamed or deleted.
-    /// </summary>
-    private SettingsPage ThemePage()
-    {
-        var kind = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
-        var here = KeyPlusPreferences.ForScreen(this, kind);
-        var all = Keyboards.All(this);
-        SettingsRow[] Shown(bool floating)
-        {
-            var chosen = Keyboards.Selected(this, here, kind, floating);
-            return
-            [
-                new(GetString(floating ? Resource.String.floating : Resource.String.docked), Keyboards.ScreenName(this, kind)),
-                .. all.Select(keyboard => new SettingsRow(keyboard.Name, Chosen: keyboard.Id == chosen.Id, Tapped: () =>
-                {
-                    Keyboards.Select(here, floating, keyboard.Id);
-                    settings!.Refresh(ThemePage());
-                })),
-            ];
-        }
-
-        List<IReadOnlyList<SettingsRow>> groups = [Shown(floating: false), Shown(floating: true)];
-        if (all.Where(keyboard => !keyboard.BuiltIn).ToList() is { Count: > 0 } saved)
-        {
-            groups.Add([new(GetString(Resource.String.keyboards_saved), GetString(Resource.String.keyboards_saved_summary)), .. saved.Select(keyboard => new SettingsRow(keyboard.Name, Tapped: () => ChangeSaved(keyboard)))]);
-        }
-
-        return new(GetString(Resource.String.theme), groups);
-    }
-
-    /// <summary>A saved keyboard renamed or, once asked, deleted.</summary>
-    private void ChangeSaved(KeyboardEntry keyboard) => new AlertDialog.Builder(this)
-        .SetTitle(keyboard.Name)!
-        .SetItems([GetString(Resource.String.rename), GetString(Resource.String.delete)], (_, picked) =>
-        {
-            if (picked.Which == 0)
-            {
-                AskName(keyboard.Name, name =>
-                {
-                    Keyboards.Rename(this, keyboard.Id, name);
-                    settings!.Refresh(ThemePage());
-                });
-                return;
-            }
-
-            new AlertDialog.Builder(this)
-                .SetMessage(GetString(Resource.String.delete_ask, new Java.Lang.String(keyboard.Name)))!
-                .SetPositiveButton(Resource.String.delete, (_, _) =>
-                {
-                    Keyboards.Delete(this, keyboard.Id);
-                    settings!.Refresh(ThemePage());
-                })!
-                .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
-                .Show();
-        })!
-        .Show();
+    /// <summary>Tema, the Windows app's (<see cref="ThemeView"/>), for the screen the settings are on.</summary>
+    private SettingsPage ThemePage() =>
+        new(GetString(Resource.String.theme), [], new ThemeView(this, settings!, KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay), () => settings!.Refresh(ThemePage())));
 
     /// <summary>
     /// Escribir por voz, the Windows keyboard's settings with Android's own:
@@ -515,30 +459,6 @@ public sealed class MainActivity : Activity
             {
                 written(field.Text ?? "");
                 settings!.Refresh(VoicePage());
-            })!
-            .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
-            .Show();
-    }
-
-    /// <summary>A keyboard's name asked, the one it has offered; an empty one leaves it as it was.</summary>
-    private void AskName(string offered, Action<string> named)
-    {
-        var field = new EditText(this) { Text = offered, Hint = GetString(Resource.String.keyboard_name) };
-        field.SetSingleLine(true);
-        field.SelectAll();
-        var padding = (int)(20 * Resources!.DisplayMetrics!.Density);
-        var frame = new FrameLayout(this);
-        frame.SetPadding(padding, padding / 2, padding, 0);
-        frame.AddView(field);
-        new AlertDialog.Builder(this)
-            .SetTitle(Resource.String.keyboard_name)!
-            .SetView(frame)!
-            .SetPositiveButton(Resource.String.ok, (_, _) =>
-            {
-                if (field.Text?.Trim() is { Length: > 0 } name)
-                {
-                    named(name);
-                }
             })!
             .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
             .Show();
@@ -793,8 +713,8 @@ public sealed class MainActivity : Activity
     /// <summary>The keyboards saved in the list (Ajustes › Tema) written to the file chosen, each by its name with its design.</summary>
     private void WriteDesigns(Android.Net.Uri file)
     {
-        var designs = Keyboards.All(this)
-            .Where(keyboard => !keyboard.BuiltIn && keyboard.Design is not null)
+        var designs = Keyboards.Saved(this)
+            .Where(keyboard => keyboard.Design is not null)
             .GroupBy(keyboard => keyboard.Name)
             .ToDictionary(named => named.Key, named => named.First().Design!);
         var json = System.Text.Json.JsonSerializer.Serialize(
@@ -840,7 +760,7 @@ public sealed class MainActivity : Activity
 
         foreach (var (name, design) in designs)
         {
-            Keyboards.SaveAs(this, name, Keyboards.PcBase, design);
+            Keyboards.SaveAs(this, name, Keyboards.PcBase, design, StandardKeys.Spanish.Code);
         }
 
         Toast.MakeText(this, $"{designs.Count} keyboard(s) added to Tema: {string.Join(", ", designs.Select(design => design.Name))}.", ToastLength.Long)!.Show();

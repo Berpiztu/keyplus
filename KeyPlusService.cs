@@ -449,14 +449,17 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     }
 
     /// <summary>
-    /// Whether the phone is locked or its screen off: KeyPlus is not shown on
-    /// the lock screen. The screen off counts too, for the phone locks only
+    /// Whether the phone is locked or every screen off: KeyPlus is not shown
+    /// on the lock screen. The screens off count too, for the phone locks only
     /// later (a Samsung 30 s after, by default) and tells no one: the panel
     /// left in sight when the screen went off stayed on the Always On
-    /// Display and on the lock screen.
+    /// Display (a display dozing, not on) and on the lock screen. Every
+    /// display, not Android's "interactive", which is the phone's own screen
+    /// alone: on DeX, the phone's screen off and the glasses' or monitor's on,
+    /// it said off and the panel never showed.
     /// </summary>
     private bool Locked() =>
-        GetSystemService(PowerService).JavaCast<PowerManager>()?.IsInteractive != true
+        GetSystemService(DisplayService).JavaCast<DisplayManager>()?.GetDisplays()?.Any(display => display.State == DisplayState.On) != true
         || GetSystemService(KeyguardService).JavaCast<KeyguardManager>()?.IsKeyguardLocked == true;
 
     /// <summary>The screen going off or the phone unlocked: KeyPlus goes, or comes back.</summary>

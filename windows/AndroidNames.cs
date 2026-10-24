@@ -1,6 +1,7 @@
 // The Android names the files shared with the Android keyboard use
-// (StandardKeys.cs, EmojiList.cs), so the same files compile here: a key's
-// code, with Android's own values, and the ids of signs and texts, each
+// (StandardKeys.cs, EmojiList.cs, StandardDesign.cs), so the same files
+// compile here: a key's code, with Android's own values, a warning to the
+// log, and the ids of signs and texts, each
 // named as its Android resource (Resources/drawable/<name>.xml,
 // Resources/values*/strings.xml), which Icons and Texts read by that name.
 
@@ -38,6 +39,15 @@ namespace Android.Views
     }
 }
 
+namespace Android.Util
+{
+    /// <summary>Android's log, as the shared files warn: to the keyboard's own.</summary>
+    public static class Log
+    {
+        public static void Warn(string tag, string message) => Berpiztu.KeyPlus.Log.Write(message);
+    }
+}
+
 namespace Berpiztu.KeyPlus
 {
     /// <summary>The ids of the Android resources the shared files and the Windows app name, each field named as its resource.</summary>
@@ -68,6 +78,10 @@ namespace Berpiztu.KeyPlus
             public const int ic_tool_mic = 21;
             public const int ic_tool_settings = 22;
             public const int ic_keyplus = 23;
+            public const int ic_grid_design = 24;
+            public const int ic_grid_floating = 25;
+            public const int ic_grid_floating_off = 26;
+            public const int ic_tool_resize = 27;
         }
 
         public static class String
@@ -150,6 +164,30 @@ namespace Berpiztu.KeyPlus
             public const int troubleshooting_vscode_done = 79;
             public const int troubleshooting_vscode_already = 80;
             public const int troubleshooting_vscode_none = 81;
+            public const int design = 82;
+            public const int add_key = 83;
+            public const int add_row = 84;
+            public const int remove = 85;
+            public const int cancel = 86;
+            public const int done = 87;
+            public const int saved_as = 88;
+            public const int delete = 89;
+            public const int windows_delete_ask = 91;
+            public const int keyboards_saved_summary = 92;
+            public const int add_column = 93;
+            public const int save_as = 94;
+            public const int keyboard = 95;
+            public const int reset_size = 96;
+            public const int look = 97;
+            public const int look_system = 98;
+            public const int look_light = 99;
+            public const int look_dark = 100;
+            public const int look_custom = 101;
+            public const int look_keyboard = 102;
+            public const int look_accent = 103;
+            public const int undo = 104;
+            public const int per_app = 105;
+            public const int app_own = 107;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

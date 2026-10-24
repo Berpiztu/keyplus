@@ -39,6 +39,8 @@ public enum StandardLook
     Letter,
     Function,
     Pill,
+    /// <summary>A hole in a designed row (Diseñar › + Columna): nothing drawn, nothing typed; outlined while designing.</summary>
+    Gap,
 }
 
 /// <summary>
@@ -46,7 +48,10 @@ public enum StandardLook
 /// types (and with Shift), the symbol drawn in its corner that a long press
 /// types, its width in keys, how it is drawn and its icon, if a sign is drawn
 /// in place of its label; on a PC's, the key code it sends and whether it
-/// is a dead key, the accent it types going on the next letter.
+/// is a dead key, the accent it types going on the next letter. A shaped
+/// key (an Enter of + Tecla) goes on into the row below: its lower part,
+/// as wide as Below, right-aligned under it, laid there as a key of that
+/// row marked Lower, which does what the key does and shows no label.
 /// </summary>
 public sealed record StandardKey(
     string Label,
@@ -59,10 +64,15 @@ public sealed record StandardKey(
     int Icon = 0,
     int HintIcon = 0,
     Keycode Code = Keycode.Unknown,
-    bool Dead = false)
+    bool Dead = false,
+    float Below = 0f,
+    bool Lower = false)
 {
     /// <summary>Whether held it goes on and on, as a PC's arrows do.</summary>
     public bool Repeats => Code is Keycode.DpadLeft or Keycode.DpadRight or Keycode.DpadUp or Keycode.DpadDown;
+
+    /// <summary>What a PC's key shows in its top corner, as a PC's keycap prints it: its Shift's, but for a letter, whose capital goes without saying.</summary>
+    public string? ShiftCorner => Text is { Length: 1 } one && char.IsLetter(one[0]) ? null : Shifted;
 }
 
 /// <summary>The standard keyboard's pages.</summary>
@@ -73,6 +83,14 @@ public enum StandardPage
     MoreSymbols,
     /// <summary>Estándar PC's only page: a PC's keys, every symbol with Shift or Alt Gr.</summary>
     Pc,
+
+    /// <summary>Estándar XR's letters and symbols, Gboard's on the Galaxy XR: a tablet's keys.</summary>
+    XrLetters,
+    XrSymbols,
+
+    /// <summary>1234: the number pad, Gboard's; Estándar XR's, Gboard's on the Galaxy XR.</summary>
+    Numbers,
+    XrNumbers,
 }
 
 /// <summary>
@@ -124,6 +142,9 @@ public static class StandardKeys
 
     public static readonly IReadOnlyList<StandardLanguage> Languages = [Spanish, English];
 
+    /// <summary>A language by its code; none, or one unknown, Spanish.</summary>
+    public static StandardLanguage LanguageOf(string? code) => Languages.FirstOrDefault(language => language.Code == code) ?? Spanish;
+
     /// <summary>Each language's pages, made once.</summary>
     private static readonly Dictionary<(StandardPage, StandardLanguage), IReadOnlyList<IReadOnlyList<StandardKey>>> Made = [];
 
@@ -137,12 +158,52 @@ public static class StandardKeys
                 StandardPage.Symbols => SymbolsPage(language),
                 StandardPage.MoreSymbols => MoreSymbolsPage(language),
                 StandardPage.Pc => language == English ? UsPcPage() : SpanishPcPage(),
+                StandardPage.XrLetters => XrLettersPage(language),
+                StandardPage.XrSymbols => XrSymbolsPage(),
+                StandardPage.Numbers => NumbersPage(),
+                StandardPage.XrNumbers => XrNumbersPage(),
                 _ => LettersPage(language),
             };
         }
 
         return rows;
     }
+
+    /// <summary>Estándar PC's design in a language, the one the keyboard comes with, the owner's; none, the keys as made.</summary>
+    public static string? PcDesign(string language) => language == Spanish.Code ? SpanishPcDesign : language == English.Code ? EnglishPcDesign : null;
+
+    /// <summary>
+    /// Estándar PC in English as the owner designed it (2026-10-23, its copy in docs/tODO/designs/), as Spanish's: Insert
+    /// before Delete, ISO's Enter, and Home, End, PgUp and PgDn around the arrows.
+    /// </summary>
+    private static readonly string EnglishPcDesign = Designed(
+        "b:0:0 b:0:1 b:0:2 b:0:3 b:0:4 b:0:5 b:0:6 b:0:7 b:0:8 b:0:9 b:0:10 b:0:11 b:0:12 b:0:13 x:ins b:0:14",
+        "b:1:0 b:1:1 b:1:2 b:1:3 b:1:4 b:1:5 b:1:6 b:1:7 b:1:8 b:1:9 b:1:10 b:1:11 b:1:12 b:1:13=2",
+        "b:2:0=1.5 b:2:1 b:2:2 b:2:3 b:2:4 b:2:5 b:2:6 b:2:7 b:2:8 b:2:9 b:2:10 b:2:11 b:2:12 b:2:13=1.75 x:enterIso=2",
+        "b:3:0=1.75 b:3:1 b:3:2 b:3:3 b:3:4 b:3:5 b:3:6 b:3:7 b:3:8 b:3:9 b:3:10 b:3:11=1.5 below=1.75",
+        "b:4:0=2 b:4:1 b:4:2 b:4:3 b:4:4 b:4:5 b:4:6 b:4:7 b:4:8 b:4:9 b:4:10 b:4:12=1.25 x:home b:4:11 x:end x:pgup",
+        "b:5:0=1.25 b:5:1=1.75 b:5:2=1.25 b:5:3 b:5:4=6 b:5:5=1.25 b:5:6 b:5:7 b:5:8 x:pgdn");
+
+    /// <summary>
+    /// Estándar PC in Spanish as the owner designed it (2026-10-23,
+    /// docs/tODO/designs/2026-10-23_174700_Windows-IAMAX_keyboards.json):
+    /// Insert before Supr, ISO's Enter, and Inicio, Fin, AvPág and RePág
+    /// around the arrows. Each key "id" or "id=width", a key wide by default.
+    /// </summary>
+    private static readonly string SpanishPcDesign = Designed(
+        "b:0:0 b:0:1 b:0:2 b:0:3 b:0:4 b:0:5 b:0:6 b:0:7 b:0:8 b:0:9 b:0:10 b:0:11 b:0:12 b:0:13 x:ins b:0:14",
+        "b:1:0 b:1:1 b:1:2 b:1:3 b:1:4 b:1:5 b:1:6 b:1:7 b:1:8 b:1:9 b:1:10 b:1:11 b:1:12 b:1:13=2",
+        "b:2:0=1.5 b:2:1 b:2:2 b:2:3 b:2:4 b:2:5 b:2:6 b:2:7 b:2:8 b:2:9 b:2:10 b:2:11 b:2:12 x:enterIso=1.75",
+        "b:3:0=1.75 b:3:1 b:3:2 b:3:3 b:3:4 b:3:5 b:3:6 b:3:7 b:3:8 b:3:9 b:3:10 b:3:11 b:2:13=1.5 below=1.5",
+        "b:4:0=1.25 b:4:1 b:4:2 b:4:3 b:4:4 b:4:5 b:4:6 b:4:7 b:4:8 b:4:9 b:4:10 b:4:11 b:4:13=1.25 x:home b:4:12 x:end=1.25 x:pgdn",
+        "b:5:0=1.25 b:5:1=1.25 b:5:2=1.25 b:5:3 b:5:4=6 b:5:5=1.25 b:5:6 b:5:7 b:5:8 x:pgup");
+
+    private static string Designed(params string[] rows) => new StandardDesign
+    {
+        Rows = [.. rows.Select(row => row.Split(' ').Select(key => key.Split('=') is [var id, var width]
+            ? new DesignedKey(id, float.Parse(width, System.Globalization.CultureInfo.InvariantCulture))
+            : new DesignedKey(key, 1)).ToList())],
+    }.Text;
 
     private static IReadOnlyList<IReadOnlyList<StandardKey>> LettersPage(StandardLanguage language) =>
     [
@@ -181,6 +242,104 @@ public static class StandardKeys
             new(".", Text: ".", Look: StandardLook.Function),
             Enter(),
         ],
+    ];
+
+    /// <summary>
+    /// Estándar XR's letters, Gboard's on the Galaxy XR (docs/tODO/photos/gboard/xr-letters.png), 13 keys across as
+    /// measured there: the digits over the letters, Spanish's º before them, ⌫ at their end; Tab before q and Spanish's ´
+    /// after p; Bloq Mayús before a and Enter after the row; ⇧ at both ends of z's row, with the comma and the full stop;
+    /// ?123, 🌐, the space bar, ◀, ▶ and ?123 again at the bottom. No symbols in the letters' corners, as there.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> XrLettersPage(StandardLanguage language)
+    {
+        const float across = 13;
+        var spanish = language == Spanish;
+        IEnumerable<StandardKey> Plain(string letters) =>
+            letters.Select(letter => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString()));
+        StandardKey[] digits = [.. spanish ? PcKeys("º", "ª", "") : [], .. "1234567890".Zip("!@#$%^&*()", (digit, shifted) => new StandardKey(digit.ToString(), Text: digit.ToString(), Shifted: shifted.ToString()))];
+        var homeRow = Plain(language.LetterRows[1]).ToArray();
+        return
+        [
+            [.. digits, Delete() with { Width = across - digits.Length }],
+            [PcKey("⇥", Keycode.Tab, XrSideWidth), .. Plain(language.LetterRows[0]), .. spanish ? PcKeys("´", "¨", "").Select(key => key with { Width = XrSideWidth }) : []],
+            [CapsLock("⇪") with { Width = XrSideWidth }, .. homeRow, Enter() with { Width = across - XrSideWidth - homeRow.Length }],
+            [Shift(2f), .. Plain(language.LetterRows[2]), .. Characters(",."), Shift(across - 2f - language.LetterRows[2].Length - 2)],
+            [.. XrBottomRow(new("?123", StandardAction.Symbols, Look: StandardLook.Function), 1, 7)],
+        ];
+    }
+
+    /// <summary>Estándar XR's symbols, Gboard's on the Galaxy XR (docs/tODO/photos/gboard/xr-symbols.png), 13 keys across, the =\&lt; row a key short at its end, as there.</summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> XrSymbolsPage() =>
+    [
+        [.. Characters("¡1234567890"), Delete() with { Width = 2f }],
+        [PcKey("⇥", Keycode.Tab, XrSideWidth), .. Characters("%\\|=[]<>{}"), .. Characters("°").Select(key => key with { Width = XrSideWidth })],
+        [CapsLock("⇪") with { Width = XrSideWidth }, .. Characters("@#€_&-+()"), Enter() with { Width = 2.5f }],
+        [new("=\\<", StandardAction.MoreSymbols, Width: 2f, Look: StandardLook.Function), .. Characters("*\"':;!?,./"), Gap],
+        [.. XrBottomRow(new("ABC", StandardAction.Letters, Look: StandardLook.Function), 1.5f, 6.5f)],
+    ];
+
+    /// <summary>
+    /// 1234, Gboard's number pad (docs/tODO/photos/gboard/fold-numbers.png), as measured there: the digits in three rows
+    /// 1.7 keys wide each, a column of the operations at their left and %, a space and ⌫ at their right, a key wide each;
+    /// under them ABC, the comma, !?# (the symbols), 0, =, the full stop and Enter. Gboard's left column is a strip of
+    /// four, + − * /, scrolled in three rows' room: here + − and * a row each, / held on *.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> NumbersPage()
+    {
+        const float digit = 1.7f;
+        StandardKey Digit(char text) => new(text.ToString(), Text: text.ToString(), Width: digit);
+        StandardKey Side(string text, string? held = null) => new(text, Text: text, Hint: held, Look: StandardLook.Function);
+        return
+        [
+            [Side("+"), Digit('1'), Digit('2'), Digit('3'), Side("%")],
+            [Side("-"), Digit('4'), Digit('5'), Digit('6'), new("␣", Text: " ", Look: StandardLook.Function)],
+            [Side("*", held: "/"), Digit('7'), Digit('8'), Digit('9'), Delete() with { Width = 1f }],
+            [
+                new("ABC", StandardAction.Letters, Look: StandardLook.Pill),
+                Side(",") with { Width = 0.65f },
+                new("!?#", StandardAction.Symbols, Width: 0.95f),
+                new("0", Text: "0", Width: 1.75f),
+                new("=", Text: "=", Width: 0.95f),
+                Side(".") with { Width = 0.65f },
+                Enter() with { Width = 1.15f },
+            ],
+        ];
+    }
+
+    /// <summary>
+    /// Estándar XR's 1234, Gboard's number pad on the Galaxy XR (captured there, 2026-10-23): three columns of signs, the
+    /// digits 2.5 keys wide in three rows, two columns of operations, and a column of ⌫, Enter and a space; under them ABC
+    /// and !?# (the symbols), the comma, 0 and the full stop under the digits, ◀ ▶ under the operations, and ABC again.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> XrNumbersPage()
+    {
+        const float digit = 2.5f;
+        const float right = 1.25f;
+        StandardKey Wide(char text) => new(text.ToString(), Text: text.ToString(), Width: digit);
+        StandardKey Letters(float width) => new("ABC", StandardAction.Letters, Width: width, Look: StandardLook.Function);
+        return
+        [
+            [.. Characters("():"), Wide('1'), Wide('2'), Wide('3'), .. Characters("+-"), Delete() with { Width = right }],
+            [.. Characters("!?;"), Wide('4'), Wide('5'), Wide('6'), .. Characters("*/"), Enter() with { Width = right }],
+            [.. Characters("#$%"), Wide('7'), Wide('8'), Wide('9'), .. Characters("=&"), new("␣", Text: " ", Width: right, Look: StandardLook.Function)],
+            [Letters(1.5f), new("!?#", StandardAction.Symbols, Width: 1.5f, Look: StandardLook.Function), Wide(','), Wide('0'), Wide('.'), PcKey("◀", Keycode.DpadLeft), PcKey("▶", Keycode.DpadRight), Letters(right)],
+        ];
+    }
+
+    /// <summary>Tab's, Bloq Mayús's and the keys after p's width on Estándar XR.</summary>
+    private const float XrSideWidth = 1.5f;
+
+    /// <summary>Estándar XR's bottom row: the page's switch two keys wide, 🌐 (letters) or 1234 (symbols), the space bar, ◀ and ▶, and the switch again.</summary>
+    private static IEnumerable<StandardKey> XrBottomRow(StandardKey other, float secondWidth, float spaceWidth) =>
+    [
+        other with { Width = 2f },
+        other.Action == StandardAction.Symbols
+            ? new("🌐", StandardAction.Language, Width: secondWidth, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_language)
+            : new("1234", StandardAction.Numbers, Width: secondWidth, Look: StandardLook.Function),
+        Space() with { Width = spaceWidth },
+        PcKey("◀", Keycode.DpadLeft),
+        PcKey("▶", Keycode.DpadRight),
+        other,
     ];
 
     private static IReadOnlyList<IReadOnlyList<StandardKey>> MoreSymbolsPage(StandardLanguage language) =>
@@ -273,6 +432,14 @@ public static class StandardKeys
     /// <summary>A place a language has no key at, in a design: an empty key that does nothing.</summary>
     public static readonly StandardKey Blank = new("", StandardAction.Key, Look: StandardLook.Function, Code: Keycode.Unknown);
 
+    /// <summary>A hole a design leaves in a row, by its id there: room a key wide, empty.</summary>
+    public const string GapId = "gap";
+
+    public static readonly StandardKey Gap = new("", StandardAction.Key, Look: StandardLook.Gap, Code: Keycode.Unknown);
+
+    /// <summary>A shaped key's lower part, by its id in the row below it in a design.</summary>
+    public const string BelowId = "below";
+
     /// <summary>
     /// The keys a design can add (Diseñar › + Tecla), by group as the list
     /// shows them, each by its id: a PC's that the standard keyboards may
@@ -310,10 +477,33 @@ public static class StandardKeys
             "up" => PcKey("↑", Keycode.DpadUp),
             "down" => PcKey("↓", Keycode.DpadDown),
             "right" => PcKey("→", Keycode.DpadRight),
+            "enter" => Enter(),
+            "enterIso" => ShapedEnter(IsoEnterBelow),
+            "enterBig" => ShapedEnter(BigEnterBelow),
+            "enterSquare" => ShapedEnter(WideWidth),
             _ when id.StartsWith('f') && int.TryParse(id[1..], out var number) && number is >= 1 and <= 12 => PcKey($"F{number}", Keycode.F1 + (number - 1)),
             _ => null,
         };
     }
+
+    /// <summary>
+    /// The shaped Enters' lower parts, under a top a key and a half wide, as
+    /// a PC's: ISO's narrower (1.25, Spain's), the old ANSI L's wider (2.25,
+    /// as a PC's Enter row); the square one as wide as its top.
+    /// </summary>
+    private const float IsoEnterBelow = 1.25f;
+    private const float BigEnterBelow = 2.25f;
+
+    /// <summary>An Enter two rows tall, its top a key and a half wide and its lower part as wide as asked, drawn as a function key, not a pill.</summary>
+    private static StandardKey ShapedEnter(float below) => Enter() with { Look = StandardLook.Function, Below = below };
+
+    /// <summary>The shapes a marked Enter goes through, clicked again while designing (by their ids for <see cref="Extra"/>): one row, ISO's L, the old ANSI L, square, one row again.</summary>
+    public static readonly string[] EnterShapes = ["enter", "enterIso", "enterBig", "enterSquare"];
+
+    /// <summary>Whether a page has a key a design can add already: a PC's key by the code it sends, a modifier by what it does.</summary>
+    public static bool HasExtra(IReadOnlyList<IReadOnlyList<StandardKey>> page, string id, StandardLanguage language) =>
+        Extra(id, language) is { } extra && page.SelectMany(row => row).Any(key =>
+            extra.Action == StandardAction.Key ? key.Action == StandardAction.Key && key.Code == extra.Code : key.Action == extra.Action);
 
     private static IEnumerable<StandardKey> Letters(string letters, string hints) =>
         letters.Zip(hints, (letter, hint) => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString(), Hint: hint.ToString()));
