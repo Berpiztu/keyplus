@@ -69,8 +69,10 @@ picker of hue, saturation and brightness, Android having none), Sistema
 following the device's dark theme, Claro and Oscuro the palette's tones,
 Personalizado's colours with the Windows app's arithmetic (`Rgb`, shared),
 and Por app by the field's package, De la app taking the background the
-application's theme declares (`AppThemes.cs`): an Android keyboard cannot
-see another application's window.
+application's theme declares (`AppThemes.cs`), made light or dark as the
+device is (Chrome declares a light one and turns dark by itself), or, with
+the keyboard's accessibility service on, the colour seen on the screen
+beside the field (`MenuWatchService.SeeFieldColor`), as on Windows.
 
 ## Later: more keyboards the keyboard comes with
 

@@ -105,9 +105,11 @@ a window that does.
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
 | [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
 | [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Escribir por voz's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
-| [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where |
+| [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Tema's Por app, the colour beside the field typed in, on a screenshot |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema), by language: Estándar, Estándar PC and those saved; each screen's one in each language |
+| [ColorsRow.cs](ColorsRow.cs) | Tema's Colores row: Sistema, Claro, Oscuro, Personalizado, Por app with De la app, the two colours on hue, saturation and brightness bars, ↶ |
+| [AppThemes.cs](AppThemes.cs) | Por app's applications typed in, by package, with their colours: their theme's background made light or dark as the device is, or the colour seen on the screen |
 | [ThemeView.cs](ThemeView.cs) | Ajustes › Tema: the language and the keyboard, Guardar como and Borrar, and the keyboard drawn as the screen shows it, designed there |
 | [StandardDesigner.cs](StandardDesigner.cs) | Diseñar's pills, + Tecla's list and Hecho's saving, the keyboard's and Tema's alike |
 | [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |

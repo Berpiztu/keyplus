@@ -88,7 +88,7 @@ Default section order:
 - Android app (.NET 10, `net10.0-android`, API 33 and later, arm64 only) that sends the keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, arrows, Home, End, pages) to the focused editor
 - Two products from one code base, chosen by `-p:KeyPlusProduct`:
   - `Popup` (default): KeyPlus, `ai.berpiztu.keyplus`, an accessibility service whose key strip sits above the keyboard in use
-  - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR), with an optional accessibility service of its own (`MenuWatchService.cs`) that only sees menus open and close, for Apartarse también de los menús; the user turns it on, and a debug install may turn it off again
+  - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR), with an optional accessibility service of its own (`MenuWatchService.cs`) that only sees menus open and close, for Apartarse también de los menús, and the colour just inside the field typed in on a screenshot, for Tema's Por app (De la app); the user turns it on, and a debug install may turn it off again
 - `README.md` is the user and build guide and holds the file-by-file map of the sources
 - `windows/`: Berpiztu AI Keyboard for Windows, the standard keyboards in a floating card, a project of its own; its installer is `build-windows-installer.ps1` with `packaging/windows-install` (WiX 5, per-user MSI), built by the Release workflow beside the APKs
 
