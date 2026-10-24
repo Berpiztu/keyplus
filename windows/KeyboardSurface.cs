@@ -132,6 +132,13 @@ public sealed class KeyboardSurface : FrameworkElement
             holdTimer.Interval = RepeatInterval;
             heldAction?.Invoke();
         };
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible && pressed is not null)
+            {
+                Forget();
+            }
+        };
         Focusable = false;
     }
 
@@ -773,7 +780,7 @@ public sealed class KeyboardSurface : FrameworkElement
     {
         if (e.StylusDevice is null)
         {
-            ReleaseMouseCapture();
+            // Finished before the capture goes, for losing it forgets the key.
             if (designing)
             {
                 DesignUp(e.GetPosition(this));
@@ -782,9 +789,40 @@ public sealed class KeyboardSurface : FrameworkElement
             {
                 Finish(null);
             }
+
+            ReleaseMouseCapture();
         }
 
         e.Handled = true;
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (pressed is { Touch: null })
+        {
+            Forget();
+        }
+    }
+
+    protected override void OnLostTouchCapture(TouchEventArgs e)
+    {
+        base.OnLostTouchCapture(e);
+        if (pressed is { } now && now.Touch == e.TouchDevice.Id)
+        {
+            Forget();
+        }
+    }
+
+    /// <summary>
+    /// The key let go of without its release, as Android's cancel: the mouse's or the finger's capture lost (the window
+    /// hidden or made again, another taking it), the keys out of sight; nothing held goes on and nothing is typed.
+    /// </summary>
+    private void Forget()
+    {
+        StopHolding();
+        pressed = null;
+        InvalidateVisual();
     }
 
     protected override void OnTouchDown(TouchEventArgs e)
@@ -866,7 +904,6 @@ public sealed class KeyboardSurface : FrameworkElement
 
     protected override void OnTouchUp(TouchEventArgs e)
     {
-        ReleaseTouchCapture(e.TouchDevice);
         if (designing)
         {
             DesignUp(e.GetTouchPoint(this).Position);
@@ -876,6 +913,7 @@ public sealed class KeyboardSurface : FrameworkElement
             Finish(e.TouchDevice.Id);
         }
 
+        ReleaseTouchCapture(e.TouchDevice);
         e.Handled = true;
     }
 

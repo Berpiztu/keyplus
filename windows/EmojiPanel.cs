@@ -141,6 +141,9 @@ public sealed class EmojiPanel : DockPanel
             delete.ReleaseMouseCapture();
             e.Handled = true;
         };
+
+        // Let go of without its release (the panel hidden, the window gone): ⌫ deletes no more.
+        delete.LostMouseCapture += (_, _) => repeat.Stop();
         bar.Children.Add(delete);
         return bar;
     }
