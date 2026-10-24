@@ -17,7 +17,8 @@ namespace Berpiztu.KeyPlus;
 /// the screen's bottom rather than floating, as it starts; its colours
 /// (Tema: as Windows' mode, light, dark, or Personalizado's keyboard and
 /// accent colours, #RRGGBB, none chosen Windows' own) and those two as they
-/// were before the last one was chosen, for Deshacer. Kept in
+/// were before the last one was chosen, for Deshacer; whether each
+/// application has colours of its own (Por aplicación, <see cref="AppColors"/>). Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
 /// </summary>
@@ -40,8 +41,32 @@ public sealed record KeyboardPreferences(
     [property: JsonConverter(typeof(JsonStringEnumConverter<KeyboardLook>))] KeyboardLook Look = KeyboardLook.System,
     string? KeyColor = null,
     string? AccentColor = null,
-    KeyboardColors? Before = null)
+    KeyboardColors? Before = null,
+    bool PerApp = false)
 {
+    /// <summary>
+    /// The colours the keyboard takes typing in an application: Tema's, or,
+    /// with Personalizado's Por app, the application's own: its colours, or
+    /// its window's colour (<paramref name="own"/>, as the keyboard saw it)
+    /// as the keyboard's colour with Windows' accent; a keyboard colour it
+    /// has not chosen, Tema's Personalizado's, an accent, Windows' own.
+    /// </summary>
+    public KeyboardPreferences ColorsIn(string? app, System.Windows.Media.Color? own)
+    {
+        if (Look != KeyboardLook.Custom || !PerApp || app is null)
+        {
+            return this;
+        }
+
+        var color = AppColors.For(app);
+        return color.Look switch
+        {
+            AppLook.Custom => this with { KeyColor = color.KeyColor ?? KeyColor, AccentColor = color.AccentColor },
+            AppLook.Own when own is { } seen => this with { Look = KeyboardLook.Custom, KeyColor = Palette.Text(seen), AccentColor = null },
+            _ => this,
+        };
+    }
+
     /// <summary>Personalizado's colours as they are, kept as <see cref="Before"/> when one is chosen.</summary>
     [JsonIgnore]
     public KeyboardColors Colors => new(KeyColor, AccentColor);

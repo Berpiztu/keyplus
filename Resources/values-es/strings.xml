@@ -76,8 +76,10 @@
   <string name="look_light">Claro</string>
   <string name="look_dark">Oscuro</string>
   <string name="look_custom">Personalizado</string>
-  <string name="look_keyboard">Teclado</string>
+  <string name="look_keyboard">Fondo</string>
   <string name="look_accent">Acento</string>
+  <string name="per_app">Por app</string>
+  <string name="app_own">De la app</string>
   <string name="show_keyboard">Mostrar el teclado al escribir</string>
   <string name="show_keyboard_summary">Desactivado, no aparece nunca: para cuando usas otro teclado, y uno no pisa al otro</string>
   <string name="keyboard_icon">Mostrar un icono en su lugar</string>

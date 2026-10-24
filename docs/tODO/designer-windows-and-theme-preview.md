@@ -62,11 +62,11 @@ stayed: a shaped Enter's top is sized after its lower part
 
 Asked by the owner on 2026-10-23. On Windows, tried by the owner: Sistema,
 Claro, Oscuro and Personalizado (the keyboard's colour and the accent's,
-Windows' colour picker). On Android, written, not tried: Sistema follows the
-device's dark theme, Claro and Oscuro the palette's light or dark tones
-(`StandardColors`); Tema's Colores row and Personalizado's picker are still
-to come there. Next, asked on 2026-10-23: colours per application, on
-Windows first, behind a check box.
+Windows' colour picker, ↶ one step back), and Personalizado's Por app (each
+application its window's colour, De la app, or its own two, `apps.json`).
+On Android, written, not tried: Sistema follows the device's dark theme,
+Claro and Oscuro the palette's light or dark tones (`StandardColors`);
+Tema's Colores row, Personalizado and Por app are still to come there.
 
 ## Later: more keyboards the keyboard comes with
 

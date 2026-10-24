@@ -90,7 +90,15 @@ public sealed class KeyboardWindow : Window
     private static readonly string Kept = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", "window.json");
 
-    private readonly Palette colors = Palette.Read(KeyboardPreferences.Read());
+    private readonly Palette colors;
+
+    /// <summary>
+    /// The application typed in (<see cref="FocusWatch.App"/>) and its window's colour as seen, where it asks for it (Por
+    /// aplicación's De la aplicación): what the colours were made for, given again to a keyboard made again.
+    /// </summary>
+    private string? app;
+    private Color? ownColor;
+    private readonly IDisposable appsWatch;
     private readonly KeyboardSurface keys;
     private readonly SignButton switcher;
     private readonly TextBlock notice;
@@ -157,8 +165,18 @@ public sealed class KeyboardWindow : Window
     /// <summary>Opened by hand (started, the clock's icon, ⌨, the settings) rather than by a text field: it stays until a text field takes the focus.</summary>
     private bool openedByHand = true;
 
+    /// <summary>The keyboard started: in the colours of the application in front, its window's as seen there last.</summary>
     public KeyboardWindow()
+        : this(FocusWatch.FrontApp(), null)
     {
+    }
+
+    /// <summary>The keyboard in the colours of the application typed in, as Tema has them for it.</summary>
+    private KeyboardWindow(string? app, Color? ownColor)
+    {
+        ownColor ??= app is not null && AppColors.For(app) is { Look: AppLook.Own } appColor ? Palette.Parse(appColor.WindowColor) : null;
+        (this.app, this.ownColor) = (app, ownColor);
+        colors = Palette.Read(KeyboardPreferences.Read().ColorsIn(app, ownColor));
         Title = WindowTitle;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
@@ -215,6 +233,16 @@ public sealed class KeyboardWindow : Window
         focus.MenuClosed += () => movedForMenu = false;
         focus.TextFocused += () =>
         {
+            if (focus.App is { } typedIn)
+            {
+                AppColors.Seen(typedIn);
+            }
+
+            if (InAppColors())
+            {
+                return;
+            }
+
             if (preferences.ShowKeyboard)
             {
                 openedByHand = false;
@@ -232,6 +260,7 @@ public sealed class KeyboardWindow : Window
         icon.Moved += Keep;
         tray = new TrayIcon(OpenByHand, SettingsWindow.Start, Quit);
         preferencesWatch = KeyboardPreferences.Watch(Prefer);
+        appsWatch = AppColors.Watch(() => Prefer(KeyboardPreferences.Read()));
         // A saved keyboard's design changed elsewhere (the settings' Tema): the one in sight shown as it now is.
         keyboardsWatch = Keyboards.Watch(() =>
         {
@@ -346,6 +375,7 @@ public sealed class KeyboardWindow : Window
             focus.Dispose();
             preferencesWatch.Dispose();
             keyboardsWatch.Dispose();
+            appsWatch.Dispose();
             dockedBar?.Undock();
             tray.Dispose();
             icon.Close();
@@ -452,6 +482,78 @@ public sealed class KeyboardWindow : Window
         }
     }
 
+    /// <summary>
+    /// A text field focused, with Por aplicación on: the application typed in noted, its window's colour seen where it asks
+    /// for it; the keyboard made again, in sight, where its colours are not those. Whether it was.
+    /// </summary>
+    private bool InAppColors()
+    {
+        if (remade)
+        {
+            return true;
+        }
+
+        var kept = KeyboardPreferences.Read();
+        var sameApp = focus.App == app;
+        app = focus.App;
+        if (!kept.PerApp || keys.Designing)
+        {
+            return false;
+        }
+
+        // Its window's colour seen once as the application is come to, then kept while it is typed in: seen again at each
+        // focus (a field, a button) it differs a little each time, and each would make the keyboard again. Not seen, the one
+        // seen there last.
+        var appColor = app is not null ? AppColors.For(app) : null;
+        ownColor = appColor?.Look != AppLook.Own ? null
+            : sameApp && ownColor is not null ? ownColor
+            : SeenColor() ?? Palette.Parse(appColor.WindowColor);
+        if (app is not null && ownColor is { } seen)
+        {
+            AppColors.SeenColor(app, Palette.Text(seen));
+        }
+        if (colors.Matches(kept.ColorsIn(app, ownColor)))
+        {
+            return false;
+        }
+
+        // Made again once Windows' focus event is over: the old keyboard lets go of its focus hooks as it closes, which must
+        // not be done inside one of their calls; until then it heeds nothing more.
+        preferences = kept;
+        remade = true;
+        Dispatcher.BeginInvoke(() => Remake(show: true));
+        return true;
+    }
+
+    /// <summary>The colour of the text field focused, just inside its corner, as the screen shows it; none where it is unknown or under the keyboard.</summary>
+    private Color? SeenColor()
+    {
+        if (focus.Field is not { } field)
+        {
+            return null;
+        }
+
+        var (x, y) = (field.X + 3, field.Y + 3);
+        if (IsVisible && Dips(new Int32Rect(x, y, 1, 1)) is { } point && new Rect(Left, Top, ActualWidth, ActualHeight).Contains(point.TopLeft))
+        {
+            return null;
+        }
+
+        var screen = GetDC(IntPtr.Zero);
+        var pixel = GetPixel(screen, x, y);
+        ReleaseDC(IntPtr.Zero, screen);
+        return pixel == uint.MaxValue ? null : Color.FromRgb((byte)(pixel & 0xFF), (byte)((pixel >> 8) & 0xFF), (byte)((pixel >> 16) & 0xFF));
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr window, IntPtr context);
+
+    [DllImport("gdi32.dll")]
+    private static extern uint GetPixel(IntPtr context, int x, int y);
+
     /// <summary>Whether this keyboard was made again in new colours, and so ends: it heeds no more changes.</summary>
     private bool remade;
 
@@ -467,16 +569,17 @@ public sealed class KeyboardWindow : Window
     /// where it is and as it is kept, in sight or not as this one was, and this one ends; docked, its bar given back first, so
     /// the new one takes the same.
     /// </summary>
-    private void Remake()
+    private void Remake(bool show)
     {
         remade = true;
         preferencesWatch.Dispose();
         keyboardsWatch.Dispose();
-        Log.Write($"Keyboard: made again in its colours, {preferences.Look}");
+        appsWatch.Dispose();
+        Log.Write($"Keyboard: made again in its colours, {preferences.Look}{(app is null ? "" : $", typing in {app}")}");
         Keep();
-        var shown = IsVisible;
+        var shown = show || IsVisible;
         dockedBar?.Undock();
-        var made = new KeyboardWindow();
+        var made = new KeyboardWindow(app, ownColor);
         Application.Current.MainWindow = made;
         if (shown)
         {
@@ -553,9 +656,9 @@ public sealed class KeyboardWindow : Window
         }
 
         preferences = kept;
-        if (!colors.Matches(kept) && !keys.Designing)
+        if (!colors.Matches(kept.ColorsIn(app, ownColor)) && !keys.Designing)
         {
-            Remake();
+            Remake(show: false);
             return;
         }
 

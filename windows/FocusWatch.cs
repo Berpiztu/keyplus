@@ -87,6 +87,9 @@ public sealed class FocusWatch : IDisposable
     /// <summary>The focus went where text is typed.</summary>
     public event Action? TextFocused;
 
+    /// <summary>The application the text focused is in, by its program's name; none before one, or in the keyboard's own windows.</summary>
+    public string? App { get; private set; }
+
     /// <summary>The focus went somewhere no text is typed.</summary>
     public event Action? TextLeft;
 
@@ -164,6 +167,7 @@ public sealed class FocusWatch : IDisposable
                 {
                     focusSettling.Stop();
                     Log.Write($"Focus: a caret showed in {ProcessOf(window)}: writing");
+                    App = AppOf(window);
                     TextFocused?.Invoke();
                 }
 
@@ -190,6 +194,7 @@ public sealed class FocusWatch : IDisposable
                 Log.Write($"Focus: {RoleName(role)} \"{Named(accessible, child)}\" in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
                 if (editable)
                 {
+                    App = AppOf(window);
                     TextFocused?.Invoke();
                 }
                 else if (!menu)
@@ -364,6 +369,12 @@ public sealed class FocusWatch : IDisposable
             return "";
         }
     }
+
+    /// <summary>The application in front, before any focus is told: where a keyboard starting is about to type.</summary>
+    public static string? FrontApp() => GetForegroundWindow() is var front && front != IntPtr.Zero ? AppOf(front) : null;
+
+    /// <summary>A window's application by its program's name; none for the keyboard's own windows (the keyboard, its settings).</summary>
+    private static string? AppOf(IntPtr window) => ProcessOf(window) is var name && name != Process.GetCurrentProcess().ProcessName ? name : null;
 
     private static string ProcessOf(IntPtr window)
     {
