@@ -516,8 +516,8 @@ public sealed class KeyboardWindow : Window
             return false;
         }
 
-        // Made again once Windows' focus event is over: the old keyboard lets go of its focus hooks as it closes, which must
-        // not be done inside one of their calls; until then it heeds nothing more.
+        // Made again once this focus has been told to all that heed it, for the old keyboard closes, its focus watch with it;
+        // until then it heeds nothing more.
         preferences = kept;
         remade = true;
         Dispatcher.BeginInvoke(() => Remake(show: true));
