@@ -11,11 +11,17 @@ namespace Berpiztu.KeyPlus;
 /// foreground, the ground the background with a little of the foreground in
 /// it, a function key the accent's lightest tone (darkest in a dark theme)
 /// and its sign a dark one, a modifier on the next tone, ✓'s blue the accent,
-/// and what is written on it white or black, whichever reads.
+/// and what is written on it white or black, whichever reads. Tema's choice
+/// (<see cref="KeyboardLook"/>) makes it light or dark whatever Windows'
+/// mode: its background and foreground, black and white, change places;
+/// Personalizado puts the keyboard's colour chosen in the background's
+/// place, its letters white or black, whichever reads, and the accent chosen
+/// in the accent's, its tones made as Windows' are, each a quarter of the
+/// way further to white or to black; one not chosen, Windows' own.
 /// </summary>
 public sealed class Palette
 {
-    private Palette(UISettings ui)
+    private Palette(UISettings ui, KeyboardPreferences chosen)
     {
         Color Of(UIColorType type)
         {
@@ -25,19 +31,76 @@ public sealed class Palette
 
         var background = Of(UIColorType.Background);
         var foreground = Of(UIColorType.Foreground);
-        Dark = background.R + background.G + background.B < 3 * 128;
+        var windowsDark = background.R + background.G + background.B < 3 * 128;
+        Look = chosen.Look;
+        (KeyColor, AccentColor) = Look == KeyboardLook.Custom ? (Parse(chosen.KeyColor), Parse(chosen.AccentColor)) : (null, null);
+        if (KeyColor is { } keyboard)
+        {
+            (background, foreground) = (keyboard, Readable(keyboard));
+            Dark = foreground == Colors.White;
+        }
+        else
+        {
+            Dark = KeyboardLooks.IsDark(Look, windowsDark);
+            if (Dark != windowsDark)
+            {
+                (background, foreground) = (foreground, background);
+            }
+        }
+
+        // The accent's tones, lighter (+) or darker (−): Windows' own, or the colour chosen's.
+        Color Tone(int step) => AccentColor is { } accent
+            ? Mix(accent, step > 0 ? Colors.White : Colors.Black, Math.Abs(step) / 4.0)
+            : Of(step switch
+            {
+                3 => UIColorType.AccentLight3,
+                2 => UIColorType.AccentLight2,
+                1 => UIColorType.AccentLight1,
+                -1 => UIColorType.AccentDark1,
+                -2 => UIColorType.AccentDark2,
+                -3 => UIColorType.AccentDark3,
+                _ => UIColorType.Accent,
+            });
+
         Glyph = foreground;
         Key = Dark ? Mix(background, foreground, 0.16) : background;
         Ground = Mix(background, foreground, Dark ? 0.06 : 0.08);
-        Function = Of(Dark ? UIColorType.AccentDark3 : UIColorType.AccentLight3);
-        FunctionPressed = Of(Dark ? UIColorType.AccentDark2 : UIColorType.AccentLight2);
-        FunctionGlyph = Of(Dark ? UIColorType.AccentLight3 : UIColorType.AccentDark2);
-        On = Of(Dark ? UIColorType.AccentDark1 : UIColorType.AccentLight2);
-        Primary = Of(UIColorType.Accent);
+        Function = Tone(Dark ? -3 : 3);
+        FunctionPressed = Tone(Dark ? -2 : 2);
+        FunctionGlyph = Tone(Dark ? 3 : -2);
+        On = Tone(Dark ? -1 : 2);
+        Primary = Tone(0);
         OnPrimary = Readable(Primary);
         Outline = Mix(background, foreground, 0.45);
         Handle = Mix(background, foreground, 0.35);
     }
+
+    /// <summary>Tema's choice it was made for, and Personalizado's colours.</summary>
+    public KeyboardLook Look { get; }
+
+    public Color? KeyColor { get; }
+
+    public Color? AccentColor { get; }
+
+    /// <summary>Whether the preferences ask for these very colours: the same choice, and Personalizado's the same colours.</summary>
+    public bool Matches(KeyboardPreferences chosen) =>
+        chosen.Look == Look && (Look != KeyboardLook.Custom || (Parse(chosen.KeyColor) == KeyColor && Parse(chosen.AccentColor) == AccentColor));
+
+    /// <summary>A colour kept as #RRGGBB; none, or one unreadable, none.</summary>
+    public static Color? Parse(string? kept)
+    {
+        try
+        {
+            return kept is null ? null : (Color)ColorConverter.ConvertFromString(kept);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A colour as it is kept, #RRGGBB.</summary>
+    public static string Text(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 
     public bool Dark { get; }
 
@@ -69,7 +132,8 @@ public sealed class Palette
     /// <summary>The floating card's handle.</summary>
     public Color Handle { get; }
 
-    public static Palette Read() => new(new UISettings());
+    /// <summary>The colours as Tema's choice has them.</summary>
+    public static Palette Read(KeyboardPreferences chosen) => new(new UISettings(), chosen);
 
     /// <summary>White or black on a colour, whichever stands out from it more (WCAG's contrast ratio).</summary>
     private static Color Readable(Color ground)

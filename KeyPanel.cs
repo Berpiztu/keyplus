@@ -667,7 +667,7 @@ public sealed class KeyPanel
         toolbar.AddView(toolbarSettings, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         toolbar.AddView(toolbarMiddle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         var standardKeys = keyboardScreen is not null;
-        standardColors = standardKeys ? new StandardColors(context) : null;
+        standardColors = standardKeys ? StandardColors.Read(context) : null;
         standardBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
 
         // A keyboard made narrower or wider (a window resized): its toolbar's places again for that width.

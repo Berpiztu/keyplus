@@ -14,7 +14,9 @@ namespace Berpiztu.KeyPlus;
 /// it, by its id: <see cref="Keyboards"/>), as Idiomas and Tema choose them
 /// and the keyboard's own buttons change them;
 /// swiping over the letters and its trail; whether the keyboard is docked at
-/// the screen's bottom rather than floating, as it starts. Kept in
+/// the screen's bottom rather than floating, as it starts; its colours
+/// (Tema: as Windows' mode, light, dark, or Personalizado's keyboard and
+/// accent colours, #RRGGBB, none chosen Windows' own). Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
 /// </summary>
@@ -30,7 +32,10 @@ public sealed record KeyboardPreferences(
     bool GlideTrail = true,
     string? Keyboard = null,
     Dictionary<string, string>? Chosen = null,
-    bool Docked = false)
+    bool Docked = false,
+    [property: JsonConverter(typeof(JsonStringEnumConverter<KeyboardLook>))] KeyboardLook Look = KeyboardLook.System,
+    string? KeyColor = null,
+    string? AccentColor = null)
 {
     public const string FocusLostHide = "hide";
     public const string FocusLostIcon = "icon";

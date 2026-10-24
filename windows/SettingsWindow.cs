@@ -61,11 +61,7 @@ public sealed class SettingsWindow : Window
             list.Items.Add(name);
         }
 
-        list.SelectionChanged += (_, _) => page.Content = new ScrollViewer
-        {
-            Content = pages[Math.Max(0, list.SelectedIndex)].Page(),
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        };
+        list.SelectionChanged += (_, _) => ShowPage(pages[Math.Max(0, list.SelectedIndex)].Page());
         list.SelectedIndex = 0;
 
         // Under the pages, the keyboard opened: started, or shown where it runs hidden.
@@ -81,6 +77,9 @@ public sealed class SettingsWindow : Window
         panes.Children.Add(page);
         Content = panes;
     }
+
+    /// <summary>A page in the window's right, scrolling where it is taller.</summary>
+    private void ShowPage(FrameworkElement shown) => page.Content = new ScrollViewer { Content = shown, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
     /// <summary>The settings started as a program of their own; where they run already, that one comes to the front.</summary>
     public static void Start() => System.Diagnostics.Process.Start(Environment.ProcessPath!, Argument);
@@ -105,7 +104,8 @@ public sealed class SettingsWindow : Window
     /// parts each of one size whatever they hold, so nothing on the page moves:
     /// the language looked at (the one typed in at first, left as it is);
     /// the keyboard shown in it, chosen from that language's list (as the
-    /// toolbar's switch changes it); a name with Guardar como, which copies the
+    /// toolbar's switch changes it); its colours (Sistema, Claro, Oscuro), the
+    /// page made again in them; a name with Guardar como, which copies the
     /// keyboard chosen under it (to duplicate it, or design a copy), and
     /// Borrar, for one saved; and the keyboard drawn as the card shows it,
     /// zoomed whole to the page, its proportions kept, only to be seen, with
@@ -133,7 +133,27 @@ public sealed class SettingsWindow : Window
         naming.Children.Add(saveAs);
         naming.Children.Add(name);
 
-        var colors = Palette.Read();
+        var colors = Palette.Read(KeyboardPreferences.Read());
+        var looks = new ComboBox { VerticalAlignment = VerticalAlignment.Center };
+        foreach (var look in KeyboardLooks.All)
+        {
+            looks.Items.Add(new ComboBoxItem { Content = Texts.Get(KeyboardLooks.Name(look)), Tag = look });
+        }
+
+        looks.SelectedIndex = Array.IndexOf(KeyboardLooks.All, colors.Look);
+        looks.SelectionChanged += (_, _) =>
+        {
+            if (looks.SelectedItem is ComboBoxItem { Tag: KeyboardLook look } && look != colors.Look)
+            {
+                (KeyboardPreferences.Read() with { Look = look }).Keep();
+                ShowPage(ThemePage());
+            }
+        };
+
+        // Personalizado's two colours, each a button showing its colour, hidden in their place for the other choices.
+        var custom = colors.Look == KeyboardLook.Custom ? Visibility.Visible : Visibility.Hidden;
+        var keyColor = ColorButton(Resource.String.look_keyboard, colors.KeyColor ?? colors.Ground, custom, chosen => KeyboardPreferences.Read() with { KeyColor = chosen });
+        var accentColor = ColorButton(Resource.String.look_accent, colors.AccentColor ?? colors.Primary, custom, chosen => KeyboardPreferences.Read() with { AccentColor = chosen });
         var preview = new KeyboardSurface(colors) { Types = false };
         // The keyboard as it shows now, docked or floating, designed so.
         var docked = KeyboardPreferences.Read().Docked;
@@ -179,9 +199,15 @@ public sealed class SettingsWindow : Window
         }
 
         choosing.Children.Add(keyboards);
+        var coloring = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
+        coloring.Children.Add(Caption(Resource.String.look));
+        coloring.Children.Add(looks);
+        coloring.Children.Add(keyColor);
+        coloring.Children.Add(accentColor);
         var controls = new StackPanel();
         TextElement.SetFontSize(controls, CompactSize);
         controls.Children.Add(choosing);
+        controls.Children.Add(coloring);
         controls.Children.Add(naming);
         controls.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, FontSize = CompactHintSize, Margin = new Thickness(0, 2, 0, FieldGapDp / 2) });
         DockPanel.SetDock(controls, Dock.Top);
@@ -295,6 +321,29 @@ public sealed class SettingsWindow : Window
 
         Fill();
         return form;
+    }
+
+    /// <summary>
+    /// One of Personalizado's colours: a button with the colour shown and its name, which opens Windows' own colour picker
+    /// on it; one chosen is kept with Personalizado (<paramref name="keep"/> the preferences with it) and the page drawn again
+    /// in it, the keyboard taking it at once.
+    /// </summary>
+    private Button ColorButton(int name, Color shown, Visibility visibility, Func<string, KeyboardPreferences> keep)
+    {
+        var face = new StackPanel { Orientation = Orientation.Horizontal };
+        face.Children.Add(new Border { Width = 14, Height = 14, Background = new SolidColorBrush(shown), BorderBrush = SystemColors.ControlTextBrush, BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, FieldGapDp / 2, 0), VerticalAlignment = VerticalAlignment.Center });
+        face.Children.Add(new TextBlock { Text = Texts.Get(name), VerticalAlignment = VerticalAlignment.Center });
+        var button = new Button { Content = face, Visibility = visibility, Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        button.Click += (_, _) =>
+        {
+            using var picker = new System.Windows.Forms.ColorDialog { FullOpen = true, AnyColor = true, Color = System.Drawing.Color.FromArgb(shown.R, shown.G, shown.B) };
+            if (picker.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                keep(Palette.Text(Color.FromRgb(picker.Color.R, picker.Color.G, picker.Color.B))).Keep();
+                ShowPage(ThemePage());
+            }
+        };
+        return button;
     }
 
     /// <summary>Escritura deslizando el dedo, as Android's: swiping over the letters and its trail; FUTO Swipe's notice in sight, as its licence asks.</summary>

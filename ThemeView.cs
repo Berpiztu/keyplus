@@ -67,7 +67,7 @@ public sealed class ThemeView : LinearLayout
         language = KeyPlusPreferences.Language(context);
         shown = Keyboards.Selected(context, screen, kind, language.Code);
         Orientation = Orientation.Vertical;
-        colors = new StandardColors(context);
+        colors = StandardColors.Read(context);
 
         // The language, the keyboard and its name in two rows of small type, each label beside its control, the room left to the keyboard drawn under them.
         languages = new Spinner(context);

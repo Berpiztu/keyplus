@@ -90,7 +90,7 @@ public sealed class KeyboardWindow : Window
     private static readonly string Kept = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", "window.json");
 
-    private readonly Palette colors = Palette.Read();
+    private readonly Palette colors = Palette.Read(KeyboardPreferences.Read());
     private readonly KeyboardSurface keys;
     private readonly SignButton switcher;
     private readonly TextBlock notice;
@@ -452,11 +452,42 @@ public sealed class KeyboardWindow : Window
         }
     }
 
+    /// <summary>Whether this keyboard was made again in new colours, and so ends: it heeds no more changes.</summary>
+    private bool remade;
+
     /// <summary>Salir: the keyboard ends, its icons with it.</summary>
     private void Quit()
     {
         quitting = true;
         Close();
+    }
+
+    /// <summary>
+    /// Tema's colours changed: every part of the keyboard took them as it was made, so the keyboard is made again with them,
+    /// where it is and as it is kept, in sight or not as this one was, and this one ends; docked, its bar given back first, so
+    /// the new one takes the same.
+    /// </summary>
+    private void Remake()
+    {
+        remade = true;
+        preferencesWatch.Dispose();
+        keyboardsWatch.Dispose();
+        Log.Write($"Keyboard: made again in its colours, {preferences.Look}");
+        Keep();
+        var shown = IsVisible;
+        dockedBar?.Undock();
+        var made = new KeyboardWindow();
+        Application.Current.MainWindow = made;
+        if (shown)
+        {
+            made.Show();
+        }
+        else
+        {
+            new WindowInteropHelper(made).EnsureHandle();
+        }
+
+        Quit();
     }
 
     /// <summary>The icon where it was left; the first time, at the keyboard's bottom right corner.</summary>
@@ -511,10 +542,23 @@ public sealed class KeyboardWindow : Window
         Keep();
     }
 
-    /// <summary>The preferences as the settings saved them: the keyboard, its language and swiping taken at once; the keyboard not while it is being designed.</summary>
+    /// <summary>The preferences as the settings saved them: the keyboard, its language, swiping and its colours taken at once; the keyboard and its colours not while it is being designed.</summary>
     private void Prefer(KeyboardPreferences kept)
     {
+        // Made again already: Windows tells one change of the file several times, and those already on their way here
+        // would each make another keyboard.
+        if (remade)
+        {
+            return;
+        }
+
         preferences = kept;
+        if (!colors.Matches(kept) && !keys.Designing)
+        {
+            Remake();
+            return;
+        }
+
         if (kept.Language is { } code && code != keys.KeyLanguage.Code && StandardKeys.Languages.FirstOrDefault(language => language.Code == code) is { } chosen)
         {
             keys.KeyLanguage = chosen;

@@ -105,6 +105,11 @@ public static class KeyPlusPreferences
 
     public static StandardLanguage Language(Context context) => StandardKeys.LanguageOf(Global(context).GetString(LanguageKey, null));
 
+    /// <summary>The keyboard's colours, Tema's choice, kept for every screen by its name: the system's at first.</summary>
+    public const string LookKey = "look";
+
+    public static KeyboardLook Look(Context context) => KeyboardLooks.Parse(Global(context).GetString(LookKey, null));
+
     public static ISharedPreferences Global(Context context) =>
         context.GetSharedPreferences(PhoneName, FileCreationMode.Private)!;
 

@@ -178,6 +178,13 @@ namespace Berpiztu.KeyPlus
             public const int save_as = 94;
             public const int keyboard = 95;
             public const int reset_size = 96;
+            public const int look = 97;
+            public const int look_system = 98;
+            public const int look_light = 99;
+            public const int look_dark = 100;
+            public const int look_custom = 101;
+            public const int look_keyboard = 102;
+            public const int look_accent = 103;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

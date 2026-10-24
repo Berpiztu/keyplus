@@ -77,6 +77,13 @@
   <string name="avoid_menus">Also move out of the way of menus</string>
   <string name="avoid_menus_summary">In a window, when an open menu is under the keyboard, it moves away once and stays there</string>
   <string name="reset_size">Reset</string>
+  <string name="look">Colours</string>
+  <string name="look_system">System</string>
+  <string name="look_light">Light</string>
+  <string name="look_dark">Dark</string>
+  <string name="look_custom">Custom</string>
+  <string name="look_keyboard">Keyboard</string>
+  <string name="look_accent">Accent</string>
   <string name="show_keyboard">Show the keyboard when typing</string>
   <string name="show_keyboard_summary">Off, it never shows: for when another keyboard is in use, so one does not cover the other</string>
   <string name="keyboard_icon">Show an icon instead</string>

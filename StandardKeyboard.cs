@@ -18,57 +18,87 @@ namespace Berpiztu.KeyPlus;
 /// the toolbar's ⊞ circled system_accent1_200 while words are suggested and
 /// the lines between the words system_neutral2_200, the grid's dots and ✏'s
 /// outline system_outline_light (the dots not in sight at half), as on
-/// Gboard on the emulator and the Fold.
+/// Gboard on the emulator and the Fold. Dark (Tema's Oscuro, or Sistema with
+/// the device dark), each part the same role's dark tone: the surfaces'
+/// _dark ones, a key the highest container, so it stands out of the ground
+/// as the light one does; a container's accent tone 30 for 90 and its sign
+/// 90 for 30, the primary 80 for 40, a grey as far from the ground the other
+/// way. Only the colours: the keys' places never change with them.
 /// </summary>
-public sealed class StandardColors(Context context)
+public sealed class StandardColors(Context context, bool dark)
 {
-    public Color Ground { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLight : Android.Resource.Color.SystemNeutral1100);
+    /// <summary>The keyboard's colours as Tema's choice has them, the device's dark theme for Sistema.</summary>
+    public static StandardColors Read(Context context) => new(context, KeyboardLooks.IsDark(
+        KeyPlusPreferences.Look(context),
+        (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes));
 
-    public Color Key { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowestLight : Android.Resource.Color.SystemNeutral110);
+    public bool Dark => dark;
 
-    public Color Glyph { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnSurfaceLight : Android.Resource.Color.SystemNeutral1900);
+    public Color Ground { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLight : Android.Resource.Color.SystemNeutral1100,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerDark : Android.Resource.Color.SystemNeutral1900);
 
-    public Color Function { get; } = Read(context, Android.Resource.Color.SystemAccent2100);
+    public Color Key { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowestLight : Android.Resource.Color.SystemNeutral110,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighestDark : Android.Resource.Color.SystemNeutral1800);
 
-    /// <summary>A function key while pressed: the next tone down of its own.</summary>
-    public Color FunctionPressed { get; } = Read(context, Android.Resource.Color.SystemAccent2200);
+    public Color Glyph { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnSurfaceLight : Android.Resource.Color.SystemNeutral1900,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnSurfaceDark : Android.Resource.Color.SystemNeutral1100);
 
-    public Color FunctionGlyph { get; } = Read(context, Android.Resource.Color.SystemAccent2700);
+    public Color Function { get; } = Of(context, dark, Android.Resource.Color.SystemAccent2100, Android.Resource.Color.SystemAccent2700);
 
-    public Color Trail { get; } = Read(context, Android.Resource.Color.SystemAccent1600);
+    /// <summary>A function key while pressed: the next tone of its own, towards its sign.</summary>
+    public Color FunctionPressed { get; } = Of(context, dark, Android.Resource.Color.SystemAccent2200, Android.Resource.Color.SystemAccent2600);
 
-    public Color GridCircle { get; } = Read(context, Android.Resource.Color.SystemAccent1200);
+    public Color FunctionGlyph { get; } = Of(context, dark, Android.Resource.Color.SystemAccent2700, Android.Resource.Color.SystemAccent2100);
 
-    public Color Divider { get; } = Read(context, Android.Resource.Color.SystemNeutral2200);
+    public Color Trail { get; } = Of(context, dark, Android.Resource.Color.SystemAccent1600, Android.Resource.Color.SystemAccent1200);
+
+    public Color GridCircle { get; } = Of(context, dark, Android.Resource.Color.SystemAccent1200, Android.Resource.Color.SystemAccent1700);
+
+    public Color Divider { get; } = Of(context, dark, Android.Resource.Color.SystemNeutral2200, Android.Resource.Color.SystemNeutral2700);
 
     /// <summary>The floating keyboard's outline while resized, its corners and, at 80 %, its edge.</summary>
-    public Color Accent { get; } = Read(context, Android.Resource.Color.SystemAccent1600);
+    public Color Accent { get; } = Of(context, dark, Android.Resource.Color.SystemAccent1600, Android.Resource.Color.SystemAccent1200);
 
     /// <summary>The floating keyboard's Reset while resized: Gboard's 223 grey, the palette's nearest tone.</summary>
-    public Color ResetGround { get; } = Read(context, Android.Resource.Color.SystemNeutral1100);
+    public Color ResetGround { get; } = Of(context, dark, Android.Resource.Color.SystemNeutral1100, Android.Resource.Color.SystemNeutral1800);
 
     /// <summary>The floating keyboard's handle: Gboard's 168 grey, the palette's nearest tone.</summary>
-    public Color Handle { get; } = Read(context, Android.Resource.Color.SystemNeutral1300);
+    public Color Handle { get; } = Of(context, dark, Android.Resource.Color.SystemNeutral1300, Android.Resource.Color.SystemNeutral1600);
 
     /// <summary>The grid customised (✏): ✓'s circle and the outlines, Gboard's blue, the palette's primary (#387AFF on the Fold); ✓ on it.</summary>
-    public Color Primary { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemPrimaryLight : Android.Resource.Color.SystemAccent1600);
+    public Color Primary { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemPrimaryLight : Android.Resource.Color.SystemAccent1600,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemPrimaryDark : Android.Resource.Color.SystemAccent1200);
 
-    public Color OnPrimary { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnPrimaryLight : Android.Resource.Color.SystemAccent10);
+    public Color OnPrimary { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnPrimaryLight : Android.Resource.Color.SystemAccent10,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOnPrimaryDark : Android.Resource.Color.SystemAccent1800);
 
     /// <summary>The emoji's ground, system_surface_container_low_light (#F1F1F3 on the Fold), and their grey pills, system_surface_container_high_light (#CCCCCE).</summary>
-    public Color Low { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowLight : Android.Resource.Color.SystemNeutral150);
+    public Color Low { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowLight : Android.Resource.Color.SystemNeutral150,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowDark : Android.Resource.Color.SystemNeutral1900);
 
-    public Color High { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighLight : Android.Resource.Color.SystemNeutral1200);
+    public Color High { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighLight : Android.Resource.Color.SystemNeutral1200,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerHighDark : Android.Resource.Color.SystemNeutral1700);
 
     /// <summary>The grid customised: the ground inside its outlines, system_surface_dim_light (#DAD9E0 on the Fold).</summary>
-    public Color Dim { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceDimLight : Android.Resource.Color.SystemNeutral2100);
+    public Color Dim { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceDimLight : Android.Resource.Color.SystemNeutral2100,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceDimDark : Android.Resource.Color.SystemNeutral2900);
 
-    public Color Outline { get; } = Read(context, OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineLight : Android.Resource.Color.SystemNeutral1500);
+    public Color Outline { get; } = Of(context, dark,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineLight : Android.Resource.Color.SystemNeutral1500,
+        OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemOutlineDark : Android.Resource.Color.SystemNeutral1400);
 
     /// <summary>The outline at half: on the Fold, a dot not in sight 180 where the ground is 228 and the outline 132.</summary>
     public Color FaintOutline => Color.Argb(128, Outline.R, Outline.G, Outline.B);
 
-    private static Color Read(Context context, int color) => new(context.GetColor(color));
+    private static Color Of(Context context, bool dark, int light, int darkColor) => new(context.GetColor(dark ? darkColor : light));
 }
 
 /// <summary>

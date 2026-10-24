@@ -1199,7 +1199,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// The app's Pop-up turned on or off, its Reset or designs imported, a
     /// keyboard chosen for the screen, or the language or the keyboards
     /// saved changed so that the screen shows another keyboard, or the same
-    /// one otherwise designed (Tema): the keyboard made again from what is
+    /// one otherwise designed (Tema), or its colours (Tema): the keyboard made again from what is
     /// kept now, at once. Its own changes, already in sight, are left alone.
     /// </summary>
     private void OnPreferenceChanged(ISharedPreferences preferences, string? key)
@@ -1208,7 +1208,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var reset = screens && (key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key));
         var popupChanged = screens && key == PanelPlacement.FloatingPreference && placed is not null
             && new PanelPlacement(preferences).Floating != placed.Floating;
-        var keyboardChanged = (key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother();
+        var keyboardChanged = ((key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother()) || key == KeyPlusPreferences.LookKey;
         if (reset || popupChanged || keyboardChanged)
         {
             panel?.Root.Post(() => SetInputView(OnCreateInputView()));

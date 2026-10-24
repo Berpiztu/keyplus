@@ -47,6 +47,7 @@
     <Compile Include="..\StandardKeys.cs" Link="Shared\StandardKeys.cs" />
     <Compile Include="..\StandardDesign.cs" Link="Shared\StandardDesign.cs" />
     <Compile Include="..\KeyboardEntry.cs" Link="Shared\KeyboardEntry.cs" />
+    <Compile Include="..\KeyboardLook.cs" Link="Shared\KeyboardLook.cs" />
     <Compile Include="..\SwipeWords.cs" Link="Shared\SwipeWords.cs" />
     <Compile Include="..\EmojiList.cs" Link="Shared\EmojiList.cs" />
     <Compile Include="..\VoiceTyping.cs" Link="Shared\VoiceTyping.cs" />

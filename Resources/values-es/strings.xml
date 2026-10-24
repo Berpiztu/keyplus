@@ -71,6 +71,13 @@
   <string name="avoid_menus">Apartarse también de los menús</string>
   <string name="avoid_menus_summary">En ventana, cuando un menú abierto queda debajo del teclado, se aparta una vez y se queda ahí</string>
   <string name="reset_size">Restablecer</string>
+  <string name="look">Colores</string>
+  <string name="look_system">Sistema</string>
+  <string name="look_light">Claro</string>
+  <string name="look_dark">Oscuro</string>
+  <string name="look_custom">Personalizado</string>
+  <string name="look_keyboard">Teclado</string>
+  <string name="look_accent">Acento</string>
   <string name="show_keyboard">Mostrar el teclado al escribir</string>
   <string name="show_keyboard_summary">Desactivado, no aparece nunca: para cuando usas otro teclado, y uno no pisa al otro</string>
   <string name="keyboard_icon">Mostrar un icono en su lugar</string>

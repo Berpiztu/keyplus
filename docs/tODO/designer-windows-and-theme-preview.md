@@ -58,6 +58,16 @@ the owner's whole keyboard (rows of different lengths, margins). What
 stayed: a shaped Enter's top is sized after its lower part
 (`KeyWidths`). Equal keys across rows (↑ and ↓) is still open.
 
+## Colours (Tema › Colores)
+
+Asked by the owner on 2026-10-23. On Windows, tried by the owner: Sistema,
+Claro, Oscuro and Personalizado (the keyboard's colour and the accent's,
+Windows' colour picker). On Android, written, not tried: Sistema follows the
+device's dark theme, Claro and Oscuro the palette's light or dark tones
+(`StandardColors`); Tema's Colores row and Personalizado's picker are still
+to come there. Next, asked on 2026-10-23: colours per application, on
+Windows first, behind a check box.
+
 ## Later: more keyboards the keyboard comes with
 
 Asked by the owner on 2026-10-23, once the designer is done: keyboards
