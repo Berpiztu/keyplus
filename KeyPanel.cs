@@ -587,11 +587,11 @@ public sealed class KeyPanel
 
         dock = TitleButton("⤓", "Docked: the keys show while a keyboard is open, where you left them; pressed again, they float, in sight all the time", () => DockRequested?.Invoke());
         var minimize = TitleButton("–", "Minimize the keys into an icon", () => SetFolded(true));
-        closeButton = TitleButton("✕", "Close KeyPlus", () => Ask("¿Cerrar KeyPlus?", () => CloseRequested?.Invoke()));
+        closeButton = TitleButton("✕", "Close KeyPlus", () => Ask(context.GetString(Resource.String.close_keyplus_ask)!, () => CloseRequested?.Invoke()));
         var smaller = TitleButton("A−", "Smaller labels", () => SetLabelScale(labelScale - LabelScaleStep));
         var larger = TitleButton("A+", "Larger labels", () => SetLabelScale(labelScale + LabelScaleStep));
         // A↺ undoes every size made by hand, so it asks first, as ✕ does.
-        var usual = TitleButton("A↺", "Keys and labels at their usual size", () => Ask("¿Tamaño normal?", () =>
+        var usual = TitleButton("A↺", "Keys and labels at their usual size", () => Ask(context.GetString(Resource.String.usual_size_ask)!, () =>
         {
             SetLabelScale(1f);
             UsualSizeRequested?.Invoke();
@@ -633,13 +633,13 @@ public sealed class KeyPanel
         question.SetTextColor(Color.White);
         Shrinkable(question, 13);
         question.SetPadding(Dp(4), 0, Dp(4), 0);
-        var yes = TitleButton("Sí", "Yes", () =>
+        var yes = TitleButton(context.GetString(Resource.String.yes)!, "Yes", () =>
         {
             var confirmed = asked;
             Ask(null, null);
             confirmed?.Invoke();
         });
-        var no = TitleButton("No", "No", () => Ask(null, null));
+        var no = TitleButton(context.GetString(Resource.String.no)!, "No", () => Ask(null, null));
         closeBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
         closeBar.AddView(question, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         closeBar.AddView(yes, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
@@ -761,8 +761,8 @@ public sealed class KeyPanel
         editorButtons = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         editorGap = new View(context);
         editorButtons.AddView(editorGap, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-        editorButtons.AddView(WordButton("Cancelar", "Leave the copied text as it was", DimTextColor, () => EndEditing(save: false)));
-        editorButtons.AddView(WordButton("Guardar", "Keep the copied text as edited", HeldColor, () => EndEditing(save: true)));
+        editorButtons.AddView(WordButton(context.GetString(Resource.String.cancel)!, "Leave the copied text as it was", DimTextColor, () => EndEditing(save: false)));
+        editorButtons.AddView(WordButton(context.GetString(Resource.String.save)!, "Keep the copied text as edited", HeldColor, () => EndEditing(save: true)));
         editorBar = new LinearLayout(context) { Orientation = Orientation.Vertical, Visibility = ViewStates.Gone, Background = Card() };
         editorBar.SetPadding(Dp(12), Dp(8), Dp(12), Dp(4));
         editorBar.AddView(editorTitle);
@@ -1851,9 +1851,9 @@ public sealed class KeyPanel
     /// </summary>
     private IEnumerable<Setting> PanelTiles()
     {
-        yield return new("Letra más pequeña", () => SetLabelScale(labelScale - LabelScaleStep), "A−");
-        yield return new("Letra más grande", () => SetLabelScale(labelScale + LabelScaleStep), "A+");
-        yield return new("Tamaño normal", () => Ask("¿Tamaño normal?", () =>
+        yield return new(context.GetString(Resource.String.labels_smaller)!, () => SetLabelScale(labelScale - LabelScaleStep), "A−");
+        yield return new(context.GetString(Resource.String.labels_larger)!, () => SetLabelScale(labelScale + LabelScaleStep), "A+");
+        yield return new(context.GetString(Resource.String.usual_size)!, () => Ask(context.GetString(Resource.String.usual_size_ask)!, () =>
         {
             SetLabelScale(1f);
             UsualSizeRequested?.Invoke();
@@ -1867,18 +1867,18 @@ public sealed class KeyPanel
 
         if (!standardShown && wholeKeyboard.Visibility != ViewStates.Visible)
         {
-            yield return new("Dos filas", () => SetCompact(true), "▭");
+            yield return new(context.GetString(Resource.String.two_rows)!, () => SetCompact(true), "▭");
         }
 
         // Keys or the whole keyboard: the keyboard opens on its letters, so the switch is a tile, not the bar's.
         var whole = wholeKeyboard.Visibility == ViewStates.Visible;
         if (!standardShown)
         {
-            yield return new(whole ? "Teclas" : "ABC", () => SetWholeKeyboard(!whole), whole ? "⌨" : "ABC");
+            yield return new(whole ? context.GetString(Resource.String.keys)! : "ABC", () => SetWholeKeyboard(!whole), whole ? "⌨" : "ABC");
         }
 
-        yield return new("Minimizar", () => SetFolded(true), "–");
-        yield return new("Ajustes de la app", OpenApp, "⚙");
+        yield return new(context.GetString(Resource.String.minimize)!, () => SetFolded(true), "–");
+        yield return new(context.GetString(Resource.String.app_settings)!, OpenApp, "⚙");
     }
 
     /// <summary>
@@ -2895,10 +2895,10 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// A thing copied's menu, as Gboard has it: a card beside it with Pegar,
-    /// Fijar or Desfijar, Editar (a text) and Eliminar, each with its sign; a
-    /// touch outside it closes it. It never takes the focus, so the field
-    /// keeps it.
+    /// A thing copied's menu, as Gboard has it: a card beside it with Paste,
+    /// Pin or Unpin, Edit (a text) and Delete, each with its Material Symbols
+    /// sign in the text's colour; a touch outside it closes it. It never takes
+    /// the focus, so the field keeps it.
     /// </summary>
     private void ShowMenu(View anchor, ClipboardHistory.Entry entry, Action pasted)
     {
@@ -2911,14 +2911,18 @@ public sealed class KeyPanel
         };
         popup.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
 
-        void Item(string sign, string label, Action chosen)
+        void Item(int sign, string label, Action chosen)
         {
+            var icon = context.GetDrawable(sign)!.Mutate()!;
+            icon.SetTint(Color.White);
             var item = new TextView(context)
             {
-                Text = $"{sign}   {label}",
+                Text = label,
                 Gravity = GravityFlags.CenterVertical,
+                CompoundDrawablePadding = Dp(12),
                 Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
             };
+            item.SetCompoundDrawablesRelativeWithIntrinsicBounds(icon, null, null, null);
             item.SetTextColor(Color.White);
             item.SetTextSize(ComplexUnitType.Sp, MenuTextSp);
             item.SetPadding(Dp(16), Dp(12), Dp(24), Dp(12));
@@ -2931,14 +2935,15 @@ public sealed class KeyPanel
             menu.AddView(item);
         }
 
-        Item("📋", "Pegar", pasted);
-        Item("📌", entry.Pinned ? "Desfijar" : "Fijar", () => clipboard.SetPinned(entry, !entry.Pinned));
+        Item(Resource.Drawable.ic_menu_paste, context.GetString(Resource.String.paste)!, pasted);
+        Item(entry.Pinned ? Resource.Drawable.ic_menu_unpin : Resource.Drawable.ic_menu_pin,
+            entry.Pinned ? context.GetString(Resource.String.unpin)! : context.GetString(Resource.String.pin)!, () => clipboard.SetPinned(entry, !entry.Pinned));
         if (!entry.IsImage)
         {
-            Item("✏", "Editar", () => Edit(entry));
+            Item(Resource.Drawable.ic_grid_edit, context.GetString(Resource.String.edit)!, () => Edit(entry));
         }
 
-        Item("🗑", "Eliminar", () => clipboard.Remove(entry));
+        Item(Resource.Drawable.ic_menu_delete, context.GetString(Resource.String.erase)!, () => clipboard.Remove(entry));
         // Within the keyboard, which would cut it: beside the card if there
         // is room at its right, else at its left, at the card's height, kept
         // between the keyboard's top and bottom.
@@ -3218,13 +3223,13 @@ public sealed class KeyPanel
             new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         buttons.AddView(DesignButton("+", "The marked key a quarter wider", () => ResizeSelected(wider: true)),
             new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
-        buttons.AddView(DesignButton("+ Fila", "A new empty row at the top", AddDesignRow),
+        buttons.AddView(DesignButton(context.GetString(Resource.String.add_row)!, "A new empty row at the top", AddDesignRow),
             new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
-        buttons.AddView(DesignButton("Repartir", "The holes closed, every key the same size, the longest row as wide as the keyboard", SpreadDesign),
+        buttons.AddView(DesignButton(context.GetString(Resource.String.spread_keys)!, "The holes closed, every key the same size, the longest row as wide as the keyboard", SpreadDesign),
             new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
-        buttons.AddView(DesignButton("Restablecer", "The keyboard as it was made, on this screen",
-            () => Ask("¿Teclado como venía?", ResetDesign)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
-        buttons.AddView(DesignButton("Hecho", "Type with the keys again", EndDesign),
+        buttons.AddView(DesignButton(context.GetString(Resource.String.reset_size)!, "The keyboard as it was made, on this screen",
+            () => Ask(context.GetString(Resource.String.design_reset_ask)!, ResetDesign)), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        buttons.AddView(DesignButton(context.GetString(Resource.String.done)!, "Type with the keys again", EndDesign),
             new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         bar.AddView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(DesignButtonsDp)));
         return bar;
@@ -3240,7 +3245,7 @@ public sealed class KeyPanel
         designKeys.RemoveAll(key => key.Row == AsideRow);
         if (design is not { Removed.Count: > 0 })
         {
-            var hint = new TextView(context) { Text = "Arrastra aquí arriba las teclas que sobren", Gravity = GravityFlags.CenterVertical };
+            var hint = new TextView(context) { Text = context.GetString(Resource.String.aside_hint)!, Gravity = GravityFlags.CenterVertical };
             hint.SetTextColor(DimTextColor);
             hint.SetTextSize(ComplexUnitType.Sp, 13);
             hint.SetPadding(Dp(12), 0, Dp(12), 0);

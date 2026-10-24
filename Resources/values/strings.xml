@@ -199,4 +199,26 @@
   <string name="keyboards_saved_summary">Save as copies the keyboard chosen under the name written; Delete takes a saved one away</string>
   <string name="keyboard">Keyboard</string>
   <string name="save_as">Save as</string>
+  <string name="close_keyplus_ask">Close KeyPlus?</string>
+  <string name="usual_size">Normal size</string>
+  <string name="usual_size_ask">Normal size?</string>
+  <string name="labels_smaller">Smaller text</string>
+  <string name="labels_larger">Larger text</string>
+  <string name="two_rows">Two rows</string>
+  <string name="keys">Keys</string>
+  <string name="app_settings">App settings</string>
+  <string name="save">Save</string>
+  <string name="paste">Paste</string>
+  <string name="pin">Pin</string>
+  <string name="unpin">Unpin</string>
+  <string name="edit">Edit</string>
+  <string name="erase">Delete</string>
+  <string name="spread_keys">Spread out</string>
+  <string name="design_reset_ask">The keyboard as it came?</string>
+  <string name="aside_hint">Drag the keys you do not need up here</string>
+  <string name="mode_normal">Normal mode</string>
+  <string name="mode_window">Window mode</string>
+  <string name="attach_keyboard">Attach to the keyboard</string>
+  <string name="attach_app">Attach to the app</string>
+  <string name="detach_keys">Take the attached keys away</string>
 </resources>

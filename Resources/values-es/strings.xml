@@ -193,4 +193,26 @@
   <string name="keyboards_saved_summary">Guardar como copia el teclado elegido con el nombre escrito; Borrar quita uno guardado</string>
   <string name="keyboard">Teclado</string>
   <string name="save_as">Guardar como</string>
+  <string name="close_keyplus_ask">¿Cerrar KeyPlus?</string>
+  <string name="usual_size">Tamaño normal</string>
+  <string name="usual_size_ask">¿Tamaño normal?</string>
+  <string name="labels_smaller">Letra más pequeña</string>
+  <string name="labels_larger">Letra más grande</string>
+  <string name="two_rows">Dos filas</string>
+  <string name="keys">Teclas</string>
+  <string name="app_settings">Ajustes de la app</string>
+  <string name="save">Guardar</string>
+  <string name="paste">Pegar</string>
+  <string name="pin">Fijar</string>
+  <string name="unpin">Desfijar</string>
+  <string name="edit">Editar</string>
+  <string name="erase">Eliminar</string>
+  <string name="spread_keys">Repartir</string>
+  <string name="design_reset_ask">¿Teclado como venía?</string>
+  <string name="aside_hint">Arrastra aquí arriba las teclas que sobren</string>
+  <string name="mode_normal">Modo normal</string>
+  <string name="mode_window">Modo ventana</string>
+  <string name="attach_keyboard">Pegar al teclado</string>
+  <string name="attach_app">Pegar a la app</string>
+  <string name="detach_keys">Quitar lo pegado</string>
 </resources>

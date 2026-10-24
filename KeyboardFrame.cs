@@ -75,10 +75,10 @@ public sealed class KeyboardFrame : FrameLayout
         Hold(move, Part.Whole);
         buttons.AddView(move, Spaced());
         var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        reset = Button("↺ Restablecer", () => ResetRequested?.Invoke());
+        reset = Button("↺ " + context.GetString(Resource.String.reset_size)!, () => ResetRequested?.Invoke());
         row.AddView(reset, Spaced());
-        row.AddView(Button("✕ Cancelar", () => CancelRequested?.Invoke()), Spaced());
-        row.AddView(Button("✓ Hecho", () => DoneRequested?.Invoke()), Spaced());
+        row.AddView(Button("✕ " + context.GetString(Resource.String.cancel)!, () => CancelRequested?.Invoke()), Spaced());
+        row.AddView(Button("✓ " + context.GetString(Resource.String.done)!, () => DoneRequested?.Invoke()), Spaced());
         buttons.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
         AddView(buttons, new LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Center));
     }

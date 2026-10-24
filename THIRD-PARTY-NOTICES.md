@@ -36,4 +36,4 @@ public and the library is a separate artifact in the build
 | Icon | Licence | Source |
 | --- | --- | --- |
 | The clipboard (`Resources/drawable/ic_clipboard.xml`), Material Icons' content_paste | Apache-2.0 | https://github.com/google/material-design-icons |
-| The standard keyboard's keys and toolbar (`Resources/drawable/ic_key_*.xml`, `ic_tool_*.xml`, `ic_grid_*.xml`, `ic_settings_*.xml`, `ic_emoji_*.xml`), Material Symbols (outlined); `ic_grid_pc.xml`, `ic_grid_floating*.xml` its computer with "PC", keys or a slash drawn on | Apache-2.0 | https://github.com/google/material-design-icons |
+| The standard keyboard's keys and toolbar (`Resources/drawable/ic_key_*.xml`, `ic_tool_*.xml`, `ic_grid_*.xml`, `ic_settings_*.xml`, `ic_emoji_*.xml`, `ic_menu_*.xml`), Material Symbols (outlined); `ic_grid_pc.xml`, `ic_grid_floating*.xml` its computer with "PC", keys or a slash drawn on | Apache-2.0 | https://github.com/google/material-design-icons |

@@ -33,10 +33,9 @@ move it. The headset gives every keyboard the same box (1166 × 656 pixels on
 the Galaxy XR): the keyboard fills it, the keys across its width and, under
 the title bar, a row of what was copied and the rows of keys, all as tall;
 there the whole keyboard has no column at its right, so its keys are wider
-(Fn and the arrows are Inicio, Fin, RePág and AvPág), and no grips. On the
+(Fn and the arrows are Home, End, Page up and Page down), and no grips. On the
 keyboard the title bar does not move it nor ⤓ dock it, for Android places
-it; in ✕'s place it has **⚙**, its settings, whose first is **Cambiar de
-teclado**, Android's keyboard picker.
+it; in ✕'s place it has **⚙**, its settings, whose first is **Switch keyboard**, Android's keyboard picker.
 
 On a phone the keyboard's title bar is Gboard's toolbar, one height and one
 size of words whatever the keys' size: **⚙** at its left, **ABC** (or
@@ -46,20 +45,20 @@ anything else. A tap on the chip pastes it, a long press opens its menu
 (Pegar, Fijar, Editar, Eliminar). Editar shows its card above the keyboard,
 over the app, as Gboard does: one line that scrolls across, so neither the
 card nor the keys change size with the text, and the keys type into it
-until Cancelar or Guardar. A long press on the bar's buttons, its free room
+until Cancel or Save. A long press on the bar's buttons, its free room
 or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
 bar into **✕** and **📋** and opens, in the keys' place and as Gboard's
-rounded tiles, **Letra más pequeña**, **Letra más grande**, **Tamaño
-normal**, **Dos filas** (in Keys), **Minimizar**, **Ajustes de la app**,
-**Mover**, **Redimensionar**, **Diseñar**, **Modo normal**, **Modo
-ventana** and **Cambiar de teclado** ([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
-over the keyboard until **Hecho**: moving, it follows a finger held anywhere
+rounded tiles, **Smaller text**, **Larger text**, **Normal
+size**, **Two rows** (in Keys), **Minimize**, **App settings**,
+**Move**, **Resize**, **Design**, **Normal mode**, **Window
+mode** and **Switch keyboard** ([KeyboardFrame.cs](KeyboardFrame.cs)). Move and Resize lay a frame
+over the keyboard until **Done**: moving, it follows a finger held anywhere
 on it; resizing, the top and bottom bars size the keys and the side ones
-their width, **Restablecer** takes it back to its usual size and
-**Cancelar** to what it was when the frame opened. Modo
-normal docks it at the bottom on a ground as wide as the screen, which the
+their width, **Reset** takes it back to its usual size and
+**Cancel** to what it was when the frame opened. Normal
+mode docks it at the bottom on a ground as wide as the screen, which the
 app gives way to as to any keyboard: the keys as wide as it, or narrower,
-for a finger to reach them, where Mover left them, across and up; Modo ventana makes it a window of its own over the app, which
+for a finger to reach them, where Move left them, across and up; Window mode makes it a window of its own over the app, which
 keeps the whole screen and its touches outside the keyboard. Each screen
 and mode keeps its own place and size.
 
@@ -89,7 +88,7 @@ a window that does.
 | [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
 | [KeyPlusKeyboard.cs](KeyPlusKeyboard.cs) | The keyboard product: the same panel as a keyboard of its own, docked or in a window on a phone |
-| [KeyboardFrame.cs](KeyboardFrame.cs) | The frame ⚙'s Mover and Redimensionar lay over the keyboard |
+| [KeyboardFrame.cs](KeyboardFrame.cs) | The frame ⚙'s Move and Resize lay over the keyboard |
 | [KeySender.cs](KeySender.cs) | Sending a key with its scan code and its modifiers pressed around it, for both products |
 | [ClipboardHistory.cs](ClipboardHistory.cs) | What was copied lately, texts and images, kept to paste again |
 | [ClipboardImages.cs](ClipboardImages.cs) | The keyboard's images handed to the app they are pasted into |
@@ -106,14 +105,14 @@ a window that does.
 | [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
 | [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
 | [AndroidUpdates.cs](AndroidUpdates.cs) | Updates on Android: the day's check from the keyboard or the service, its notification, the app's question, Android's installer |
-| [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Escribir por voz's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
-| [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Tema's Por app, the colour beside the field typed in, on a screenshot |
-| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
-| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema), by language: Estándar, Estándar PC and those saved; each screen's one in each language |
-| [ColorsRow.cs](ColorsRow.cs) | Tema's Colores row: Sistema, Claro, Oscuro, Personalizado, Por app with De la app, the two colours on hue, saturation and brightness bars, ↶ |
-| [AppThemes.cs](AppThemes.cs) | Por app's applications typed in, by package, with their colours: their theme's background made light or dark as the device is, or the colour seen on the screen |
-| [ThemeView.cs](ThemeView.cs) | Ajustes › Tema: the language and the keyboard, Guardar como and Borrar, and the keyboard drawn as the screen shows it, designed there |
-| [StandardDesigner.cs](StandardDesigner.cs) | Diseñar's pills, + Tecla's list and Hecho's saving, the keyboard's and Tema's alike |
+| [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Voice typing's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
+| [MenuWatchService.cs](MenuWatchService.cs) | Also move out of the way of menus on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Theme's Per app, the colour beside the field typed in, on a screenshot |
+| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Standard PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
+| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Settings › Theme), by language: Standard, Standard PC and those saved; each screen's one in each language |
+| [ColorsRow.cs](ColorsRow.cs) | Theme's Colours row: System, Light, Dark, Custom, Per app with App's, the two colours on hue, saturation and brightness bars, ↶ |
+| [AppThemes.cs](AppThemes.cs) | Per app's applications typed in, by package, with their colours: their theme's background made light or dark as the device is, or the colour seen on the screen |
+| [ThemeView.cs](ThemeView.cs) | Settings › Theme: the language and the keyboard, Save as and Delete, and the keyboard drawn as the screen shows it, designed there |
+| [StandardDesigner.cs](StandardDesigner.cs) | Design's pills, + Key's list and Done's saving, the keyboard's and Theme's alike |
 | [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
@@ -140,44 +139,43 @@ a window that does.
   Windows' MSI, or Android's own installer, which asks too (and, the first
   time, to allow installing from the app). The popup has Check now on its
   screen. On Windows and Android alike.
-- **On a headset (Galaxy XR), a third: Estándar XR**, Gboard's there
+- **On a headset (Galaxy XR), a third: Standard XR**, Gboard's there
   (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
-  keys, the digits over the letters, Tab, Bloq Mayús, ⇧ at both ends, ◀ and
+  keys, the digits over the letters, Tab, Caps Lock, ⇧ at both ends, ◀ and
   ▶ by the space bar; the headset's first keyboard, with Gboard's band over
   the bar and, in the dark, the keys darker than the ground, as there.
 - **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
-  and the device's colours: **Estándar**, Gboard's keys, and **Estándar
-  PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
+  and the device's colours: **Standard**, Gboard's keys, and **Standard PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
   keycap, its Shift's symbol in its top corner and its Alt Gr's in its
   bottom one (a letter's capital going without saying), and with Shift or
   Alt Gr on only what the keys type then (Alt Gr's, the others blank), ´ and ` as dead
-  keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key (a character
+  keys, Caps Lock, Ctrl, Alt and ⊞ on until the next key (a character
   then goes out as the key a physical keyboard of the language has for it:
   Ctrl+ç is Spanish's, VS Code's comment), the arrows
-  repeating; Estándar PC in Spanish and English as the owner designed it (Insert, ISO's
-  Enter, Inicio, Fin, RePág and AvPág). The keyboards go by language, a
+  repeating; Standard PC in Spanish and English as the owner designed it (Insert, ISO's
+  Enter, Home, End, Page up and Page down). The keyboards go by language, a
   PC's keys differing between them: each screen (phone, tablet upright or
   on its side, DeX) shows one in each language, docked and floating alike,
-  chosen in **Ajustes › Tema**, 🌐 changing it with the language; at first
-  Estándar on a phone, Estándar PC on a tablet on its side and on DeX.
-  Tema shows the keyboard chosen as the screen does, in a box of one size,
-  copies it under a new name with Guardar como, deletes a saved one with
-  Borrar, and designs it there with Diseñar, the screen to itself. The PC
+  chosen in **Settings › Theme**, 🌐 changing it with the language; at first
+  Standard on a phone, Standard PC on a tablet on its side and on DeX.
+  Theme shows the keyboard chosen as the screen does, in a box of one size,
+  copies it under a new name with Save as, deletes a saved one with
+  Delete, and designs it there with Design, the screen to itself. The PC
   designs made before are saved keyboards in Spanish. On the keyboard, one
   button (a phone or a computer reading PC) switches between the two, and
-  Flotante (a screen with keys, crossed while floating) docks or floats it.
-- **⊞ › Diseñar** designs a standard keyboard: a tap marks a key in blue,
-  − and + make it narrower or wider, a drag moves it; + Tecla lists those
-  of Esc, Tab, Supr, Insert, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞,
-  Alt Gr, Bloq Mayús, F1–F12, ImpPnt and the arrows the keyboard lacks, and
+  Floating (a screen with keys, crossed while floating) docks or floats it.
+- **⊞ › Design** designs a standard keyboard: a tap marks a key in blue,
+  − and + make it narrower or wider, a drag moves it; + Key lists those
+  of Esc, Tab, Delete, Insert, Home, End, Page up, Page down, Ctrl, Alt, ⊞,
+  Alt Gr, Caps Lock, F1–F12, Print Screen and the arrows the keyboard lacks, and
   the one tapped comes loose over the keys, to be dragged to its place; a
   marked Enter tapped again takes its next shape, one row, ISO's L, the old
   ANSI L or square, the shaped ones growing up into the row above as one
   key, − and + making both parts wider or narrower alike;
-  + Fila adds a row at the top; + Columna adds a column at the right, a
+  + Row adds a row at the top; + Column adds a column at the right, a
   hole a key wide at the end of every row, which a key let go on fills and
-  which, left empty, is room with nothing in it; Quitar takes one out.
-  Hecho saves Estándar or Estándar PC as a new keyboard of the language,
+  which, left empty, is room with nothing in it; Remove takes one out.
+  Done saves Standard or Standard PC as a new keyboard of the language,
   this screen's in it; designed floating, the design is the keyboard's
   floating one, docked it stays as it was.
 - **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
@@ -187,11 +185,10 @@ a window that does.
   by group with a tab for each, those typed lately first; once one is
   typed, the latest are in a row over the toolbar.
 - **Words as you type**: while a word is typed letter by letter, the
-  toolbar offers the commonest words that start so, accents aside ("cancio"
-  offers "canción"), the likeliest in the centre; a tap writes it with a
+  toolbar offers the commonest words that start so, accents aside ("cafe" offers "café"), the likeliest in the centre; a tap writes it with a
   space after it.
 - **🎤** writes what you say, the words in the field as they are heard,
-  until it is tapped again or, if Escribir por voz says so, after a
+  until it is tapped again or, if Voice typing says so, after a
   silence. Local is Android's own recognizer; Local network is ia-voice
   (NVIDIA Nemotron 3.5 ASR) on a computer at home, by its IP; Remote is a
   published one, with the user and password its proxy asks for, kept
@@ -212,14 +209,14 @@ a window that does.
   (Enter) end the terminal's two rows.
 - **ABC** in the title bar turns the window into a whole keyboard laid out
   as Windows' touch keyboard lays out Spain's (ISO, es-ES), each key labelled
-  as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Bloq May, ´ ` ^ ¨
-  as dead keys (´ then a is á, ¨ then u is ü), Entrar as tall as two rows,
-  the arrows as an inverted T at the bottom right, and ImpPnt
+  as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Caps Lock, ´ ` ^ ¨
+  as dead keys (´ then a is á, ¨ then u is ü), Enter as tall as two rows,
+  the arrows as an inverted T at the bottom right, and Print Screen
   (Windows+Shift+S, the snipping tool, since Print Screen does not reach a
-  remote desktop), Inicio, Fin, RePág and AvPág in a column at the right,
-  keys as wide as the others, ImpPnt beside ⌫. Rows keep their height whatever their keys read. **Fn** stays on until
-  pressed again: it makes 1 to ¡ F1 to F12 and the arrows Inicio, Fin, RePág
-  and AvPág. **⊞** (Windows) holds for the next key, as Ctrl does (⊞ then E
+  remote desktop), Home, End, Page up and Page down in a column at the right,
+  keys as wide as the others, Print Screen beside ⌫. Rows keep their height whatever their keys read. **Fn** stays on until
+  pressed again: it makes 1 to ¡ F1 to F12 and the arrows Home, End, Page up
+  and Page down. **⊞** (Windows) holds for the next key, as Ctrl does (⊞ then E
   is Windows+E); pressed twice it is Windows alone, the Start menu. The keyboard types its characters as text, so it types what it
   shows whatever layout the editor expects; with Ctrl or Alt held its keys
   go out as keys (Ctrl+S). **Keys** in the title bar turns it back into the
@@ -237,12 +234,12 @@ a window that does.
 - **Two rows.** **▭** in the title bar makes the keys small: no title bar
   and no shortcuts' row, the terminal's two rows as Termux has them, the
   arrows a cross, PgUp and PgDn narrow, Alt beside PgDn, and ⌫ wider, which
-  is Supr with Shift held. Hold **PgUp** a moment to open the full window
+  is Delete with Shift held. Hold **PgUp** a moment to open the full window
   again (PgUp does not repeat there). Whether it is two rows is kept for each screen, with its own place
   and size ([doc/compact-keys.md](doc/compact-keys.md)).
 - **Keys repeat while held**, as a keyboard's do: every key acts on the
   touch, and one that types or sends a key goes on doing it while held. Not
-  Ctrl, Alt, Shift, Alt Gr, Fn or ⊞, nor Ctrl+A, Ctrl+C, Ctrl+V and ImpPnt,
+  Ctrl, Alt, Shift, Alt Gr, Fn or ⊞, nor Ctrl+A, Ctrl+C, Ctrl+V and Print Screen,
   which should happen once, nor the accents, which wait for a letter.
 - **A window, docked or floating.** The keys are a small window with a title
   bar. It starts docked: right above the keyboard, as wide as it, while a
@@ -278,17 +275,17 @@ a window that does.
   width, keys' size, labels' size and whether they float. Turn the phone, or
   switch between Keys and ABC, and the window is as you last left it there.
 - **Designing the whole keyboard.** On Berpiztu AI Keyboard, ⚙ →
-  **Diseñar**: drag a key to another place; nothing else moves, it leaves a
+  **Design**: drag a key to another place; nothing else moves, it leaves a
   hole and takes a hole it is dropped on. Dragged above the keys it waits
   there, to be dragged back. A tap marks a key, and **−** and **+** make it
-  narrower or wider. **+ Fila** adds an empty row at the top, **Repartir**
-  closes the holes and sizes every key alike, **Restablecer** brings the
+  narrower or wider. **+ Row** adds an empty row at the top, **Repartir**
+  closes the holes and sizes every key alike, **Reset** brings the
   keyboard back as made. Each screen keeps its own design
   ([docs/tODO/designs.md](docs/tODO/designs.md)).
 - **–** minimizes the window into the **⌨** icon: a tap opens it again, a
   drag moves it. The icon is always in sight, and always where you last left
   it, apart from the window's own place.
-- **✕** closes KeyPlus, once you say yes to "¿Quieres cerrar KeyPlus?" in the
+- **✕** closes KeyPlus, once you say yes to "Close KeyPlus?" in the
   title bar: nothing of it is in sight. Opening the KeyPlus app brings it
   back. The service stays on meanwhile, since only Settings can turn an
   accessibility service on again; turn it off there to stop it altogether.
@@ -372,20 +369,20 @@ too small for it.
 ### Windows
 
 Berpiztu AI Keyboard for Windows (`windows/`, WPF, .NET 10) is the
-standard keyboards, Estándar and Estándar PC, and those designed, with
+standard keyboards, Standard and Standard PC, and those designed, with
 the Android one's layouts and signs, in a card that floats over every window and never takes
 the focus from the one typed in: its keys go to that window as Windows'
-own. Over the keys, the keyboard in sight (a phone for Estándar, a
-computer for the others), a click Estándar PC or Estándar, Diseñar and ✕.
-Diseñar is Android's designer: a click marks a key in blue, − and + make
-it narrower or wider, a drag moves it, + Tecla adds a PC's key the
+own. Over the keys, the keyboard in sight (a phone for Standard, a
+computer for the others), a click Standard PC or Standard, Design and ✕.
+Design is Android's designer: a click marks a key in blue, − and + make
+it narrower or wider, a drag moves it, + Key adds a PC's key the
 keyboard lacks, loose over the keys until dragged to its place; a marked
 Enter clicked again takes its next shape, one row, ISO's L, the old ANSI L
 or square, the shaped ones growing up into the row above, right-aligned over
-it, as one key; + Fila an
-empty row above, + Columna a column at the right (a hole at the end of
-every row, filled by a key let go on it), Quitar takes the marked one out; Hecho saves Estándar or
-Estándar PC as a new keyboard, a saved one in its place, and Cancelar
+it, as one key; + Row an
+empty row above, + Column a column at the right (a hole at the end of
+every row, filled by a key let go on it), Remove takes the marked one out; Done saves Standard or
+Standard PC as a new keyboard, a saved one in its place, and Cancel
 leaves it as it was. The toolbar and the handle under the keys move it, and
 its edges and corners make it larger or smaller as any window's, the rows
 growing with it; its place, size, keyboard and language are kept. A drag
@@ -397,12 +394,11 @@ first; Windows draws no flags, so they are left out. 🎤 types what
 ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
-the settings, an app of their own as on Android: Idiomas, Preferencias,
-Tema (Colores: Sistema, Claro, Oscuro, or Personalizado with the keyboard's and the accent's colour picked; by language, a PC's keys differing between them: the keyboard each
-language shows, copied under a new name with Guardar como or deleted, drawn
-as on screen and designed there one to one, the window to itself), Escritura
-deslizando el dedo, Escribir por voz, Solución de problemas and
-Información. The grid is not on Windows yet.
+the settings, an app of their own as on Android: Languages, Preferences,
+Theme (Colours: System, Light, Dark, or Custom with the keyboard's and the accent's colour picked; by language, a PC's keys differing between them: the keyboard each
+language shows, copied under a new name with Save as or deleted, drawn
+as on screen and designed there one to one, the window to itself), Glide typing, Voice typing, Troubleshooting and
+About. The grid is not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj
@@ -471,7 +467,7 @@ is signed in as in its `submitters.txt`. GitHub Actions only asks;
 
 - On Windows, VS Code (and other Electron apps) tells its menus only while
   its accessibility is on: start it with `--force-renderer-accessibility`
-  (in its shortcut; the keyboard's settings, Solución de problemas, put it
+  (in its shortcut; the keyboard's settings, Troubleshooting, put it
   there with a button) for the keyboard to move out of the way of its menus.
   Edge, Chrome and Windows' own menus need nothing.
 - Android 13 or later: before it, only a keyboard or root can send keys to
