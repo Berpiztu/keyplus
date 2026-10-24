@@ -14,7 +14,8 @@ namespace Berpiztu.KeyPlus;
 /// it, ✥ in the middle to say so. Resizing, a bar at each edge that can be
 /// dragged, the top and bottom ones for the height (the keys' size), the side
 /// ones for the width, which only a keyboard in a window has; Restablecer
-/// takes it back to its usual size.
+/// takes it back to its usual size, Cancelar to what it was when the frame
+/// opened.
 /// </summary>
 public sealed class KeyboardFrame : FrameLayout
 {
@@ -66,7 +67,7 @@ public sealed class KeyboardFrame : FrameLayout
             Edge(Part.Right, GravityFlags.Right, horizontal: false),
         ];
 
-        // ✥ over Restablecer and Hecho: they fit a keyboard in a narrow window.
+        // ✥ over Restablecer, Cancelar and Hecho: they fit a keyboard in a narrow window.
         buttons = new LinearLayout(context) { Orientation = Orientation.Vertical };
         buttons.SetGravity(GravityFlags.Center);
         var move = Button("✥", null);
@@ -76,6 +77,7 @@ public sealed class KeyboardFrame : FrameLayout
         var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         reset = Button("↺ Restablecer", () => ResetRequested?.Invoke());
         row.AddView(reset, Spaced());
+        row.AddView(Button("✕ Cancelar", () => CancelRequested?.Invoke()), Spaced());
         row.AddView(Button("✓ Hecho", () => DoneRequested?.Invoke()), Spaced());
         buttons.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
         AddView(buttons, new LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Center));
@@ -85,6 +87,9 @@ public sealed class KeyboardFrame : FrameLayout
     public event Action<Part, KeyPanel.Drag, float, float>? Dragged;
 
     public event Action? ResetRequested;
+
+    /// <summary>Cancelar: the keyboard as the frame found it.</summary>
+    public event Action? CancelRequested;
 
     public event Action? DoneRequested;
 

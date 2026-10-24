@@ -57,15 +57,19 @@ public sealed class KeyboardWindow : Window
     /// <summary>
     /// Docked, the keys' own width, never stretched to the screen's, how far from the bar's middle they stand and how high
     /// above its bottom, as wide as they floated, in its middle and on its bottom at first, then as Redimensionar leaves them;
-    /// Redimensionar's button and frame; a drag's height and lift until it is let go.
+    /// Redimensionar's button and frame; the keyboard as the frame found it, for Cancelar; a drag's start, the cursor on the
+    /// screen in pixels and the keyboard as it was, every step measured from there as Android's.
     /// </summary>
     private double dockedWidth;
     private double dockedOffset;
     private double dockedLift;
     private readonly SignButton resize;
     private readonly Grid resizeFrame = new() { Visibility = Visibility.Collapsed };
-    private double resizedHeight;
-    private double lifted;
+    private Sizing resizeStart = new(0, 0, 0, 1, 0, 0, 0);
+    private (Point Cursor, Sizing Keyboard, double Room) held;
+
+    /// <summary>The keyboard's place and size: floating, the window's; docked, the keys' width, place and lift on the bar; the rows' scale either way.</summary>
+    private sealed record Sizing(double Left, double Top, double Width, double RowScale, double DockedWidth, double DockedOffset, double DockedLift);
 
     /// <summary>Windows' WINDOWPOS, a window's place as it is about to change.</summary>
     [StructLayout(LayoutKind.Sequential)]
@@ -851,14 +855,17 @@ public sealed class KeyboardWindow : Window
     /// <summary>The bar, the handle and the shadow's band around the keys, at the window's height for rows at a share of Gboard's; docked, the bar alone.</summary>
     private double ChromeHeight => docked ? BarDp + dockedLift : (2 * ShadowDp) + BarDp + HandleBandDp;
 
-    /// <summary>The window as tall as the keyboard in use needs for rows at a share of Gboard's: its rows keep their height when the keyboard changes; docked, the bar made as tall.</summary>
-    private void FitKeys(double scale)
+    /// <summary>
+    /// The window as tall as the keyboard in use needs for rows at a share of Gboard's: its rows keep their height when the
+    /// keyboard changes; docked, the bar made as tall, asked of Windows again or, while a drag goes on, only shown so.
+    /// </summary>
+    private void FitKeys(double scale, bool asked = true)
     {
         MinHeight = ChromeHeight + keys.HeightAt(KeyboardSurface.MinRowScale);
         Height = ChromeHeight + keys.HeightAt(Math.Max(KeyboardSurface.MinRowScale, scale));
         if (docked)
         {
-            PlaceDocked();
+            PlaceDocked(asked);
         }
     }
 
@@ -919,11 +926,37 @@ public sealed class KeyboardWindow : Window
         Log.Write(on ? "Keyboard: docked" : "Keyboard: floating");
     }
 
-    /// <summary>Redimensionar, as Android's: its frame over the keyboard, or the keyboard as it was left.</summary>
+    /// <summary>Redimensionar, as Android's: its frame over the keyboard, the keyboard as it is kept for Cancelar; or the keyboard as it was left.</summary>
     private void ToggleResize()
     {
         resize.Lit = !resize.Lit;
         resizeFrame.Visibility = resize.Lit ? Visibility.Visible : Visibility.Collapsed;
+        if (resize.Lit)
+        {
+            resizeStart = Current();
+        }
+    }
+
+    private Sizing Current() => new(Left, Top, Width, keys.RowScale, dockedWidth, dockedOffset, dockedLift);
+
+    /// <summary>Cancelar: the keyboard as the frame found it, Restablecer undone too, the frame gone.</summary>
+    private void CancelResize()
+    {
+        var start = resizeStart;
+        if (docked)
+        {
+            (dockedWidth, dockedOffset, dockedLift) = (start.DockedWidth, start.DockedOffset, start.DockedLift);
+            LayDocked();
+            FitKeys(start.RowScale);
+        }
+        else
+        {
+            (Left, Top, Width) = (start.Left, start.Top, start.Width);
+            FitKeys(start.RowScale);
+        }
+
+        Keep();
+        ToggleResize();
     }
 
     /// <summary>What a drag on the frame holds: the whole keyboard, to move it, or one of its edges, to size it.</summary>
@@ -939,8 +972,8 @@ public sealed class KeyboardWindow : Window
     /// <summary>
     /// Redimensionar's frame over the keyboard, Android's (KeyboardFrame.cs): the keys dimmed and out of reach under it, a bar
     /// at each edge that can be dragged, the top and bottom ones for the height (the keys' size), the side ones for the width;
-    /// ✥ in the middle, dragged, moves the keyboard; under it Restablecer, the keyboard at its usual size and place again, and
-    /// Hecho, the frame gone.
+    /// ✥ in the middle, dragged, moves the keyboard; under it Restablecer, the keyboard at its usual size and place again,
+    /// Cancelar, as the frame found it, and Hecho, the frame gone.
     /// </summary>
     private void FillResizeFrame()
     {
@@ -955,11 +988,13 @@ public sealed class KeyboardWindow : Window
         move.HorizontalAlignment = HorizontalAlignment.Center;
         var reset = new PillButton(colors, "↺ " + Texts.Get(Resource.String.reset_size), done: false, 14) { Height = FrameButtonDp, Margin = new Thickness(4) };
         reset.Clicked += ResetSize;
+        var cancel = new PillButton(colors, "✕ " + Texts.Get(Resource.String.cancel), done: false, 14) { Height = FrameButtonDp, Margin = new Thickness(4) };
+        cancel.Clicked += CancelResize;
         var done = new PillButton(colors, "✓ " + Texts.Get(Resource.String.done), done: true, 14) { Height = FrameButtonDp, Margin = new Thickness(4) };
         done.Clicked += ToggleResize;
         var buttons = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         buttons.Children.Add(move);
-        buttons.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { reset, done } });
+        buttons.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { reset, cancel, done } });
         resizeFrame.Children.Add(buttons);
     }
 
@@ -980,87 +1015,119 @@ public sealed class KeyboardWindow : Window
         return edge;
     }
 
-    /// <summary>A part the keyboard or an edge is dragged by: what it shows in its middle, under a grip as large as the part, the drag told as it goes and once let go.</summary>
+    /// <summary>
+    /// A part the keyboard or an edge is dragged by: what it shows in its middle, under a grip as large as the part, the drag
+    /// told as it goes and once let go. Where it began is kept on the screen, not the grip's own change: the grip moves with
+    /// what it sizes or not, so that change is a step at times and the whole way at others.
+    /// </summary>
     private Grid Held(Part part, FrameworkElement shown, Cursor cursor)
     {
         var look = new ControlTemplate(typeof(Thumb)) { VisualTree = new FrameworkElementFactory(typeof(Border)) };
         look.VisualTree.SetValue(Border.BackgroundProperty, Brushes.Transparent);
         var grip = new Thumb { Template = look, Cursor = cursor };
-        grip.DragStarted += (_, _) => (resizedHeight, lifted) = (keys.ActualHeight, dockedLift);
-        grip.DragDelta += (_, e) => Adjust(part, e.HorizontalChange, e.VerticalChange);
+        grip.DragStarted += (_, _) => held = (CursorOnScreen(), Current(), ScreenRoom());
+        grip.DragDelta += (_, _) => Adjust(part);
         grip.DragCompleted += (_, _) => Adjusted(part);
         (shown.HorizontalAlignment, shown.VerticalAlignment, shown.IsHitTestVisible) = (HorizontalAlignment.Center, VerticalAlignment.Center, false);
         return new Grid { Children = { shown, grip } };
     }
 
-    /// <summary>
-    /// A drag on the frame, as it goes: the width and the place at once (docked, the keys' width and their place on the bar,
-    /// the other edge staying where it is); the height (the keys' size) and, docked, how high above the bottom it stands, kept
-    /// to be made once it is let go, for the bar Windows gives is asked for again.
-    /// </summary>
-    private void Adjust(Part part, double dx, double dy)
+    private Point CursorOnScreen() => PointToScreen(Mouse.GetPosition(this));
+
+    /// <summary>The screen's height for the window, in DIPs: from its top to the taskbar, the docked bar's own room counted (Windows leaves it out of the work area).</summary>
+    private double ScreenRoom()
     {
+        var room = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea.Height + (docked && dockedPlace is { } place ? place.Height : 0);
+        return PresentationSource.FromVisual(this)?.CompositionTarget is { } target ? target.TransformFromDevice.Transform(new Vector(0, room)).Y : room;
+    }
+
+    /// <summary>
+    /// A drag on the frame, as it goes, from the keyboard as it began: the width and the place (docked, the keys' width and
+    /// their place on the bar, the other edge staying where it is), the height (the keys' size) and, docked, how high above
+    /// the bottom it stands, the bar Windows gives asked for again once it is let go.
+    /// </summary>
+    private void Adjust(Part part)
+    {
+        var moved = PresentationSource.FromVisual(this)?.CompositionTarget is { } target ? target.TransformFromDevice.Transform(CursorOnScreen() - held.Cursor) : CursorOnScreen() - held.Cursor;
+        var start = held.Keyboard;
         switch (part)
         {
             case Part.Top:
-                resizedHeight -= dy;
+                SizeKeys(keys.HeightAt(start.RowScale) - moved.Y, keepBottom: true);
                 break;
             case Part.Bottom:
-                resizedHeight += dy;
+                SizeKeys(keys.HeightAt(start.RowScale) + moved.Y, keepBottom: false);
                 break;
             case Part.Left when docked:
-                SizeDocked(dockedWidth - dx, -1);
+                SizeDocked(start.DockedWidth - moved.X, -1);
                 break;
             case Part.Right when docked:
-                SizeDocked(dockedWidth + dx, 1);
+                SizeDocked(start.DockedWidth + moved.X, 1);
                 break;
             case Part.Whole when docked:
-                MoveDocked(dockedOffset + dx);
-                lifted = Math.Max(0, lifted - dy);
+                MoveDocked(start.DockedOffset + moved.X);
+                LiftDocked(start.DockedLift - moved.Y);
                 break;
             case Part.Left:
-                var narrower = Math.Max(MinWidth, Width - dx);
-                Left += Width - narrower;
-                Width = narrower;
+                var narrower = Math.Max(MinWidth, start.Width - moved.X);
+                (Left, Width) = (start.Left + start.Width - narrower, narrower);
                 break;
             case Part.Right:
-                Width = Math.Max(MinWidth, Width + dx);
+                Width = Math.Max(MinWidth, start.Width + moved.X);
                 break;
             case Part.Whole:
-                (Left, Top) = (Left + dx, Top + dy);
+                (Left, Top) = (start.Left + moved.X, start.Top + moved.Y);
                 break;
         }
     }
 
-    /// <summary>A drag on the frame let go: a new height made, the floating keyboard's bottom staying where it was; docked, its lift; the bar asked for again.</summary>
+    /// <summary>A drag on the frame let go: docked, the bar it made asked of Windows; the keyboard kept.</summary>
     private void Adjusted(Part part)
     {
-        if (part is Part.Top or Part.Bottom)
+        if (docked && part is Part.Top or Part.Bottom or Part.Whole)
         {
-            var bottom = Top + Height;
-            FitKeys(keys.ScaleFor(resizedHeight));
-            if (!docked && part == Part.Top)
-            {
-                Top = bottom - Height;
-            }
-        }
-        else if (part == Part.Whole && docked && lifted != dockedLift)
-        {
-            dockedLift = lifted;
-            frame.Margin = new Thickness(0, 0, 0, dockedLift);
-            FitKeys(keys.RowScale);
+            PlaceDocked();
         }
 
         Keep();
     }
 
+    /// <summary>The keys as tall as dragged, the window no taller than the screen; floating, its bottom staying where it is when the top is dragged.</summary>
+    private void SizeKeys(double height, bool keepBottom)
+    {
+        var bottom = Top + Height;
+        FitKeys(keys.ScaleFor(Math.Min(height, held.Room - ChromeHeight)), asked: false);
+        if (!docked && keepBottom)
+        {
+            Top = bottom - Height;
+        }
+    }
+
+    /// <summary>The docked keys as high above the bar's bottom as dragged: half the screen at most, as Android's, and never past its top.</summary>
+    private void LiftDocked(double lift)
+    {
+        var scale = held.Keyboard.RowScale;
+        var most = Math.Min(held.Room / 2, held.Room - BarDp - keys.HeightAt(scale));
+        dockedLift = Math.Clamp(lift, 0, Math.Max(0, most));
+        frame.Margin = new Thickness(0, 0, 0, dockedLift);
+        FitKeys(scale, asked: false);
+    }
+
     /// <summary>The docked keys as wide as asked, at least the floating keyboard's least and at most the bar, the edge not dragged (side) staying where it was.</summary>
     private void SizeDocked(double width, int side)
     {
-        var wider = Math.Clamp(width, MinWidthDp, Math.Max(MinWidthDp, ActualWidth)) - dockedWidth;
-        dockedWidth += wider;
+        var start = held.Keyboard;
+        dockedWidth = Math.Clamp(width, MinWidthDp, Math.Max(MinWidthDp, ActualWidth));
         frame.Width = dockedWidth;
-        MoveDocked(dockedOffset + (side * wider / 2));
+        MoveDocked(start.DockedOffset + (side * (dockedWidth - start.DockedWidth) / 2));
+    }
+
+    /// <summary>The docked keys at their width, place and lift on the bar.</summary>
+    private void LayDocked()
+    {
+        frame.Width = dockedWidth;
+        frame.RenderTransform = new TranslateTransform(dockedOffset, 0);
+        frame.Margin = new Thickness(0, 0, 0, dockedLift);
     }
 
     /// <summary>The docked keys moved along the bar, from its middle, never past its ends.</summary>
@@ -1082,9 +1149,7 @@ public sealed class KeyboardWindow : Window
         if (docked)
         {
             (dockedWidth, dockedOffset, dockedLift) = ((area.Width * FirstWidthShare) - (2 * ShadowDp), 0, 0);
-            frame.Width = dockedWidth;
-            frame.RenderTransform = Transform.Identity;
-            frame.Margin = new Thickness(0);
+            LayDocked();
             FitKeys(1);
         }
         else
@@ -1098,22 +1163,39 @@ public sealed class KeyboardWindow : Window
         Keep();
     }
 
-    /// <summary>The window on the bar Windows gives it at the bottom of the screen it is on: as wide, as tall as its keys need.</summary>
-    private void PlaceDocked()
+    /// <summary>
+    /// The window on the bar Windows gives it at the bottom of the screen it is on: as wide, as tall as its keys need; not
+    /// <paramref name="asked"/>, as tall on the bottom it has, Windows asked once the drag making it so is let go, for each ask
+    /// lays the other windows out again.
+    /// </summary>
+    private void PlaceDocked(bool asked = true)
     {
         if (dockedBar is null || !IsVisible || PresentationSource.FromVisual(this)?.CompositionTarget is not { } target)
         {
             return;
         }
 
-        var screen = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;
-        var place = dockedBar.Dock(screen, (int)Math.Ceiling(target.TransformToDevice.Transform(new Vector(0, Height)).Y));
+        var height = (int)Math.Ceiling(target.TransformToDevice.Transform(new Vector(0, Height)).Y);
+        Int32Rect place;
+        if (!asked && dockedPlace is { } shown)
+        {
+            place = new Int32Rect(shown.X, shown.Y + shown.Height - height, shown.Width, height);
+        }
+        else
+        {
+            var screen = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;
+            place = dockedBar.Dock(screen, height);
+            Log.Write($"Keyboard: docked bar at {place} on the screen {screen}, its work area {System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea}");
+        }
+
         dockedPlace = place;
-        Log.Write($"Keyboard: docked bar at {place} on the screen {screen}, its work area {System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea}");
         var corner = target.TransformFromDevice.Transform(new Point(place.X, place.Y));
         var size = target.TransformFromDevice.Transform(new Vector(place.Width, place.Height));
         (Left, Top, Width, Height) = (corner.X, corner.Y, size.X, size.Y);
-        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => Log.Write($"Keyboard: docked window at {Left:0},{Top:0} {Width:0}x{Height:0}"));
+        if (asked)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => Log.Write($"Keyboard: docked window at {Left:0},{Top:0} {Width:0}x{Height:0}"));
+        }
     }
 
     /// <summary>Where it was left, as wide, with the keyboard and language it had; the first time, three fifths of the screen wide at its bottom's middle.</summary>

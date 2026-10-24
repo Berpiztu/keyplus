@@ -88,14 +88,14 @@ Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
   docked keys never stretched: their own width centred, the bar's ground
   around (`dockedWidth`, `dockedOffset`, `dockedLift` in `window.json`);
   Redimensionar as Android's `KeyboardFrame.cs` (edges for height and
-  width, ✥ to move, Restablecer, Hecho), floating and docked.
-- To fix next, the owner's findings on 2026-10-23: Redimensionar needs
-  Cancelar too (Restablecer is the keyboard as made, Cancelar undoes this
-  resizing); the height and the lift must follow the drag as it goes, not
-  jump when let go; moving it side to side lifts it when it reaches a
-  corner (the drag's small vertical part is taken as lift), and once the
-  docked bar became enormous: the lift and the height's arithmetic to be
-  checked and bounded.
+  width, ✥ to move, Restablecer, Cancelar, Hecho), floating and docked.
+- The owner's findings on 2026-10-23, written, not tried yet: Cancelar
+  (as the frame found it, Restablecer undone too) on Windows and Android
+  (Mover's frame too); the height and the lift follow the drag as it goes;
+  the lift that grew sideways and the enormous bar came from summing the
+  `Thumb`'s change, which is the whole way from the start when the grip
+  does not move: every drag is now measured on the screen from where it
+  began, the window bounded by the screen and the lift by half of it.
 - Windows: `windows/KeyboardSurface.cs` draws and types the standard keys
   as `StandardKeyboard.cs` does; `windows/SettingsWindow.cs` has the pages
   (Idiomas, Preferencias, Tema, Escritura deslizando el dedo, Escribir por

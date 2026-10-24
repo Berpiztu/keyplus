@@ -55,7 +55,8 @@ normal**, **Dos filas** (in Keys), **Minimizar**, **Ajustes de la app**,
 ventana** and **Cambiar de teclado** ([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
 over the keyboard until **Hecho**: moving, it follows a finger held anywhere
 on it; resizing, the top and bottom bars size the keys and the side ones
-their width, and **Restablecer** takes it back to its usual size. Modo
+their width, **Restablecer** takes it back to its usual size and
+**Cancelar** to what it was when the frame opened. Modo
 normal docks it at the bottom on a ground as wide as the screen, which the
 app gives way to as to any keyboard: the keys as wide as it, or narrower,
 for a finger to reach them, where Mover left them, across and up; Modo ventana makes it a window of its own over the app, which

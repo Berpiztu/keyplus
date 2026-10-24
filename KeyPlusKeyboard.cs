@@ -56,6 +56,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Where the keyboard stood and how large it was when a drag on the frame or the title bar started.</summary>
     private (int X, int Y, int Width, int Lift, float Scale, int Height) adjustStart;
 
+    /// <summary>The keyboard's place and size as Mover or Redimensionar found it, for Cancelar.</summary>
+    private (int X, int Y, int Width, float Scale, int Lift, int DockedX, int DockedWidth) frameStart;
+
     /// <summary>The texts copied lately, which 📋 lists.</summary>
     private ClipboardHistory? clipboard;
     private ClipboardManager? clipboardManager;
@@ -495,7 +498,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 dx,
                 dy);
             frame = new KeyboardFrame(this);
-            panel.ResizeRequested += () => frame.Show(resizing: true, sides: true);
+            panel.ResizeRequested += () => ShowFrame(resizing: true);
             panel.HideRequested += () =>
             {
                 hideAsked = true;
@@ -504,6 +507,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.ResetSizeRequested += ResetSize;
             frame.Dragged += Adjust;
             frame.ResetRequested += ResetSize;
+            frame.CancelRequested += CancelFrame;
             frame.DoneRequested += frame.Hide;
             box = new FrameLayout(this);
             box.AddView(panel.Root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
@@ -547,8 +551,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var windowed = placed?.Floating == true;
         return
         [
-            new("Mover", () => frame?.Show(resizing: false, sides: false), "✥"),
-            new("Redimensionar", () => frame?.Show(resizing: true, sides: true), "⇲"),
+            new("Mover", () => ShowFrame(resizing: false), "✥"),
+            new("Redimensionar", () => ShowFrame(resizing: true), "⇲"),
             new("Diseñar", () => panel?.Design(), "✎"),
             new("Modo normal", () => SetWindowed(false), "⬓", InUse: !windowed),
             new("Modo ventana", () => SetWindowed(true), "❐", InUse: windowed),
@@ -579,7 +583,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             new("undo", GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
             new("nextLanguage", GetString(Resource.String.next_language), Resource.Drawable.ic_key_language, () => NotMade(Resource.String.next_language)),
             new("textEditing", GetString(Resource.String.text_editing), Resource.Drawable.ic_grid_text_editing, () => NotMade(Resource.String.text_editing), More: true),
-            new("move", GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => frame?.Show(resizing: false, sides: false)),
+            new("move", GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => ShowFrame(resizing: false)),
             new("switchKeyboard", GetString(Resource.String.switch_keyboard), Resource.Drawable.ic_grid_keyboard, ShowKeyboardPicker),
         ];
     }
@@ -1122,6 +1126,33 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 (placed.DockedWidth, placed.DockedX) = (width, left);
             }
         }
+    }
+
+    /// <summary>Mover (<paramref name="resizing"/> false) or Redimensionar: the frame over the keyboard, with the side bars to size it; the keyboard as it is kept for Cancelar.</summary>
+    private void ShowFrame(bool resizing)
+    {
+        if (frame is null || placed is null)
+        {
+            return;
+        }
+
+        frameStart = (placed.X, placed.Y, placed.Width, placed.Scale, placed.Lift, placed.DockedX, placed.DockedWidth);
+        frame.Show(resizing, sides: resizing);
+    }
+
+    /// <summary>Cancelar: the keyboard as the frame found it, Restablecer undone too, the frame gone.</summary>
+    private void CancelFrame()
+    {
+        frame?.Hide();
+        if (panel is null || placed is null)
+        {
+            return;
+        }
+
+        (placed.X, placed.Y, placed.Width, placed.Scale, placed.Lift, placed.DockedX, placed.DockedWidth) = frameStart;
+        panel.Scale = placed.Scale;
+        placed.Save();
+        Place();
     }
 
     /// <summary>Restablecer: the keys at their usual size and, in a window, three quarters of the screen wide; docked, as wide as the screen and on the bottom again.</summary>
