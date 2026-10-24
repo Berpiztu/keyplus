@@ -72,7 +72,26 @@
     <SetProperty Id="WixShellExecTarget" Value="[INSTALLFOLDER]BerpiztuKeyboard.exe" Before="StartKeyboard" Sequence="execute" />
     <CustomAction Id="StartKeyboard" BinaryRef="Wix4UtilCA_X64" DllEntry="WixShellExec" Execute="immediate" Return="ignore" />
 
+    <!-- The installed keyboard and its settings stopped before the installer
+         looks for files in use: asked to close, the keyboard only hides, as
+         its ✕ does, so the installer could not replace it. Every process
+         running out of the install folder, by its path: never one picked by
+         image name, since a development build is called the same and runs
+         elsewhere. Nothing is running there on a first install, and nothing
+         is stopped. No braces in the command: a formatted text reads them as
+         its own. -->
+    <SetProperty Id="WixQuietExec64CmdLine"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Get-Process | Where-Object Path -Like '[INSTALLFOLDER]*' | Stop-Process -Force&quot;"
+                 Before="StopInstalledKeyboard"
+                 Sequence="execute" />
+    <CustomAction Id="StopInstalledKeyboard"
+                  BinaryRef="Wix4UtilCA_X64"
+                  DllEntry="WixQuietExec64"
+                  Execute="immediate"
+                  Return="ignore" />
+
     <InstallExecuteSequence>
+      <Custom Action="StopInstalledKeyboard" Before="InstallValidate" />
       <RemoveExistingProducts After="InstallValidate" />
       <Custom Action="StartKeyboard" After="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot; AND UILevel &gt; 2" />
     </InstallExecuteSequence>
