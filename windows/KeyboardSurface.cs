@@ -681,13 +681,36 @@ public sealed class KeyboardSurface : FrameworkElement
         }
 
         var showsHint = key.Hint is not null && (altGr || pressed is { LongPressed: true } held && held.Key == key);
-        DrawText(context, showsHint ? key.Hint! : LabelOf(key), centre, h * LabelShare, glyph, Regular);
-        if (key.Hint is not null && !showsHint)
+
+        // Alt Gr on, a PC's keys show only its symbols: a key with none, blank.
+        if (pc && altGr && key.Hint is null)
         {
-            var hint = Text(key.Hint, h * HintShare, glyph, Regular);
-            var baseline = box.Y + (box.Height * glyphScale * HintTopShare) + (h * HintShare * CapHeight);
-            context.DrawText(hint, new Point(box.Right - (box.Height * glyphScale * HintRightShare) - hint.Width, baseline - hint.Baseline));
+            return;
         }
+
+        DrawText(context, showsHint ? key.Hint! : LabelOf(key), centre, h * LabelShare, glyph, Regular);
+
+        // A PC's key, as a PC's keycap: its Shift's at the top corner, its Alt Gr's at the bottom one, and with Shift or
+        // Alt Gr on only what it types then; Gboard's, its held symbol at the top but while it stands in the key's place.
+        var corners = !showsHint && !(pc && (shift != Shift.Off || altGr));
+        if (corners && pc && key.ShiftCorner is { } shifted)
+        {
+            DrawCorner(context, shifted, box, h, glyph, top: true);
+        }
+
+        if (corners && key.Hint is not null)
+        {
+            DrawCorner(context, key.Hint, box, h, glyph, top: !pc);
+        }
+    }
+
+    /// <summary>A symbol in a key's right corner, Android's size and inset (on the Fold 9 px from the edge and 8 px in, of an 82 px key), at its top or bottom.</summary>
+    private void DrawCorner(DrawingContext context, string symbol, Rect box, double h, Color glyph, bool top)
+    {
+        var corner = Text(symbol, h * HintShare, glyph, Regular);
+        var inset = box.Height * glyphScale * HintTopShare;
+        var baseline = top ? box.Y + inset + (h * HintShare * CapHeight) : box.Bottom - inset;
+        context.DrawText(corner, new Point(box.Right - (box.Height * glyphScale * HintRightShare) - corner.Width, baseline - corner.Baseline));
     }
 
     /// <summary>A line of text centred on a point as Android centres it: its baseline half the ascent and descent from the middle.</summary>

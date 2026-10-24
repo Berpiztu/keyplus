@@ -127,8 +127,10 @@ a window that does.
 
 - **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
   and the device's colours: **Estándar**, Gboard's keys, and **Estándar
-  PC**, a PC's (Spanish ISO, or US in English): F1–F12, Alt Gr's symbol in
-  each key's corner and on the keys while Alt Gr is on, ´ and ` as dead
+  PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
+  keycap, its Shift's symbol in its top corner and its Alt Gr's in its
+  bottom one (a letter's capital going without saying), and with Shift or
+  Alt Gr on only what the keys type then (Alt Gr's, the others blank), ´ and ` as dead
   keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key, the arrows
   repeating; Estándar PC in Spanish as the owner designed it (Insert, ISO's
   Enter, Inicio, Fin, RePág and AvPág). The keyboards go by language, a

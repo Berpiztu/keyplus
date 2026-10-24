@@ -70,6 +70,9 @@ public sealed record StandardKey(
 {
     /// <summary>Whether held it goes on and on, as a PC's arrows do.</summary>
     public bool Repeats => Code is Keycode.DpadLeft or Keycode.DpadRight or Keycode.DpadUp or Keycode.DpadDown;
+
+    /// <summary>What a PC's key shows in its top corner, as a PC's keycap prints it: its Shift's, but for a letter, whose capital goes without saying.</summary>
+    public string? ShiftCorner => Text is { Length: 1 } one && char.IsLetter(one[0]) ? null : Shifted;
 }
 
 /// <summary>The standard keyboard's pages.</summary>

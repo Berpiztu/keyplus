@@ -46,13 +46,6 @@ keyboard as a preview and to design it there too.
 
 Start with 1 and 2 (what does not work on Windows today), then 3 and 4.
 
-## Next, right after step 4: Shift's labels on Estándar PC
-
-Asked by the owner on 2026-10-23, the very next thing once Tema is on
-Android: on the PC keyboard, Shift pressed does not show the keys' shifted
-labels (each `PcKeys` key has its `Shifted`, ! over 1 and so on); the keys
-must show what they type with Shift on, on both platforms.
-
 ## Later: one key size for the whole keyboard
 
 Asked by the owner on 2026-10-23, to do after this plan, on both
@@ -76,7 +69,7 @@ Insert, Inicio, Fin, RePág, AvPág) to be Estándar PC itself.
 
 ## Where things stand
 
-- Written on 2026-10-23, built, not tried yet: step 4 on Android
+- Pushed on 2026-10-23 (b8808e1), the preview tried by the owner on the Galaxy XR: step 4 on Android
   (`ThemeView.cs` in Ajustes › Tema; keyboards by language, each screen
   its own one in each language, docked and floating alike, `Keyboards.cs`;
   the designer shared by the keyboard and Tema, `StandardDesigner.cs`), and

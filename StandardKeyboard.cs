@@ -613,15 +613,39 @@ public sealed class StandardKeyboard : View
 
         // The corner's symbol in the key's place while held, or for every key while Alt Gr is on, as Shift shows its capitals.
         var showsHint = key.Hint is not null && (altGr || (finger is { LongPressed: true } longPress && longPress.Key == key));
-        DrawText(canvas, showsHint ? key.Hint! : LabelOf(key), box.CenterX(), box.CenterY(), h * LabelShare, glyph);
-        if (key.Hint is not null && !showsHint)
+
+        // Alt Gr on, a PC's keys show only its symbols: a key with none, blank.
+        if (pc && altGr && key.Hint is null)
         {
-            text.TextAlign = Paint.Align.Right;
-            text.TextSize = h * HintShare;
-            text.Color = glyph;
-            canvas.DrawText(key.Hint, box.Right - (box.Height() * glyphScale * HintRightShare), box.Top + (box.Height() * glyphScale * HintTopShare) + (text.TextSize * CapHeight), text);
-            text.TextAlign = Paint.Align.Center;
+            return;
         }
+
+        DrawText(canvas, showsHint ? key.Hint! : LabelOf(key), box.CenterX(), box.CenterY(), h * LabelShare, glyph);
+
+        // A PC's key, as a PC's keycap: its Shift's at the top corner, its Alt Gr's at the bottom one, and with Shift or
+        // Alt Gr on only what it types then; Gboard's, its held symbol at the top but while it stands in the key's place.
+        var corners = !showsHint && !(pc && (shift != ShiftState.Off || altGr));
+        if (corners && pc && key.ShiftCorner is { } shifted)
+        {
+            DrawCorner(canvas, shifted, box, h, glyph, top: true);
+        }
+
+        if (corners && key.Hint is not null)
+        {
+            DrawCorner(canvas, key.Hint, box, h, glyph, top: !pc);
+        }
+    }
+
+    /// <summary>A symbol in a key's right corner, Gboard's size and inset (on the Fold 9 px from the edge and 8 px in, of an 82 px key), at its top or bottom.</summary>
+    private void DrawCorner(Canvas canvas, string symbol, RectF box, float h, Color glyph, bool top)
+    {
+        text.TextAlign = Paint.Align.Right;
+        text.TextSize = h * HintShare;
+        text.Color = glyph;
+        var inset = box.Height() * glyphScale * HintTopShare;
+        var baseline = top ? box.Top + inset + (text.TextSize * CapHeight) : box.Bottom - inset;
+        canvas.DrawText(symbol, box.Right - (box.Height() * glyphScale * HintRightShare), baseline, text);
+        text.TextAlign = Paint.Align.Center;
     }
 
     /// <summary>A key's label as Shift has it: a letter in capitals, a digit as its symbol.</summary>
