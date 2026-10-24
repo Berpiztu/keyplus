@@ -67,6 +67,26 @@ public static class Keyboards
         return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == FirstOf(context, kind));
     }
 
+    /// <summary>
+    /// A language come to keeps the kind of keyboard in sight (Estándar, Estándar PC, Estándar XR): the screen's keyboard
+    /// in it where it is of that kind, a saved one too; else the one of that kind the keyboard comes with chosen there.
+    /// </summary>
+    public static void Carry(Context context, ISharedPreferences screen, KeyPlusPreferences.Screen kind, string language, KeyboardEntry shown)
+    {
+        if (SameKind(Selected(context, screen, kind, language)) != SameKind(shown))
+        {
+            Select(screen, language, SameKind(shown));
+        }
+    }
+
+    /// <summary>A keyboard's kind as a keyboard the keyboard comes with: itself, or the one a saved one was made from.</summary>
+    private static string SameKind(KeyboardEntry keyboard) => keyboard.BuiltIn ? keyboard.Id : keyboard.Base switch
+    {
+        StandardBase => StandardId,
+        StandardXrBase => StandardXrId,
+        _ => StandardPcId,
+    };
+
     /// <summary>A keyboard chosen for a screen in a language: the keyboard open there made again with it.</summary>
     public static void Select(ISharedPreferences screen, string language, string id) => screen.Edit()!.PutString(KeyOf(language), id)!.Apply();
 

@@ -620,7 +620,8 @@ public sealed class KeyboardWindow : Window
     {
         var languages = StandardKeys.Languages;
         keys.KeyLanguage = languages[(languages.ToList().IndexOf(keys.KeyLanguage) + 1) % languages.Count];
-        (preferences = preferences with { Language = keys.KeyLanguage.Code }).Keep();
+        Keyboards.Carry(keys.KeyLanguage.Code, keyboard);
+        (preferences = KeyboardPreferences.Read() with { Language = keys.KeyLanguage.Code }).Keep();
         ChooseKeyboard(Keyboards.Selected(preferences, keys.KeyLanguage.Code));
         Keep();
     }

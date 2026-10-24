@@ -44,6 +44,19 @@ public static class Keyboards
         return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == StandardPcId);
     }
 
+    /// <summary>
+    /// A language come to keeps the kind of keyboard in sight (Estándar, Estándar PC): the language's keyboard where it is
+    /// of that kind, a saved one too; else the one of that kind the keyboard comes with chosen for it.
+    /// </summary>
+    public static void Carry(string language, KeyboardEntry shown)
+    {
+        static string Kind(KeyboardEntry keyboard) => keyboard.Base == StandardBase ? StandardId : StandardPcId;
+        if (Kind(Selected(KeyboardPreferences.Read(), language)) != Kind(shown))
+        {
+            Select(language, Kind(shown));
+        }
+    }
+
     /// <summary>A keyboard chosen for a language: the keyboard shows it at once while it types in it.</summary>
     public static void Select(string language, string id)
     {

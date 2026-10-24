@@ -174,6 +174,9 @@ public sealed class KeyPanel
     /// <summary>The keyboard of the list this screen shows in the keyboard's language (Ajustes › Tema); none in the popup.</summary>
     private KeyboardEntry? keyboard;
 
+    /// <summary>The screen the keyboards of the list are chosen for; none in the popup and the headset's box.</summary>
+    private readonly KeyPlusPreferences.Screen? keyboardScreen;
+
     /// <summary>Whether the keyboard floats: its floating design shown, and designed.</summary>
     public bool ShowsFloating { get; set; }
 
@@ -796,6 +799,7 @@ public sealed class KeyPanel
         strip.AddView(designBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         terminal = Rows(PanelKeys.Terminal);
         ShowsFloating = floating;
+        this.keyboardScreen = keyboardScreen;
         keyboard = keyboardScreen is { } screen ? Keyboards.Selected(context, preferences, screen, KeyPlusPreferences.Language(context).Code) : null;
         design = ReadDesign();
         wholeKeyboard = WholeKeyboard();
@@ -2484,12 +2488,17 @@ public sealed class KeyPanel
     private bool vibrates = true;
     private bool showsTrail = true;
 
-    /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen; where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
+    /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen, the kind of keyboard in sight kept in it (Estándar, Estándar PC); where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
     private void NextLanguage()
     {
         EndSwipe(letter: false);
         var languages = StandardKeys.Languages;
         var next = languages[(languages.ToList().IndexOf(standard!.Language) + 1) % languages.Count];
+        if (keyboard is { } shown && keyboardScreen is { } screen)
+        {
+            Keyboards.Carry(context, preferences, screen, next.Code, shown);
+        }
+
         standard.Language = next;
         KeyPlusPreferences.Global(context).Edit()!.PutString(KeyPlusPreferences.LanguageKey, next.Code)!.Apply();
     }
