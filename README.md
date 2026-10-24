@@ -398,7 +398,8 @@ dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj
 wslc-ai-agent's client installer): the app published self-contained for
 x64, so no .NET is installed first, at the Android apps' version; per user,
 no administrator asked, under `%LOCALAPPDATA%\Berpiztu AI Keyboard`, the
-keyboard and its settings in the Start menu, the keyboard started once
+keyboard and its settings in the Start menu, the ones running from the
+install folder stopped first (by their path), the keyboard started once
 installed and out of sight at every sign-in (`--hidden`). Its icon is the
 Android app's, drawn at Windows' sizes by `packaging\Make-WindowsIcon.ps1`.
 
