@@ -161,9 +161,9 @@
   <string name="voice_permission_summary">Voice typing needs it to hear you</string>
   <string name="voice_permission_asked">Voice typing needs the microphone: allow it in the settings</string>
   <string name="voice_not_set">Not set</string>
-  <string name="menus_service_label">Berpiztu AI Keyboard: menus</string>
-  <string name="menus_service_summary">Moves the keyboard out of the way of the menus that open</string>
-  <string name="menus_service_description">Berpiztu AI Keyboard sees only the field it types in. With this on, it also sees where a menu opens, an app\'s or a list that drops down, to move out of its way (Preferences › Also move out of the way of menus). It reads nothing in the menus.</string>
+  <string name="menus_service_label">Berpiztu AI Keyboard: menus and colours</string>
+  <string name="menus_service_summary">Moves the keyboard out of the way of the menus that open, and sees an app\'s colour for Theme › Per app</string>
+  <string name="menus_service_description">Berpiztu AI Keyboard sees only the field it types in. With this on, it also sees where a menu opens, an app\'s or a list that drops down, to move out of its way (Preferences › Also move out of the way of menus); and, with Theme › Colours › Per app, the colour just inside the field it types in, to take the app\'s colour (App\'s). It reads nothing else.</string>
   <string name="menus_watch_off">Let it see the menus</string>
   <string name="menus_watch_off_summary">Android shows other apps\' menus only to an accessibility service: a tap turns on Berpiztu AI Keyboard: menus</string>
   <string name="voice_lan">Local network (IP)</string>

@@ -1227,10 +1227,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// </summary>
     private void InAppColors(string? package)
     {
+        var cameTo = package != StandardColors.App;
         StandardColors.App = package is not null && package != PackageName ? package : null;
         if (StandardColors.App is { } app)
         {
             AppThemes.Seen(this, app);
+
+            // Its colour as it shows, seen once as the application is come to (each look a screenshot), the keyboard made
+            // again in it if it differs, through the preference written.
+            if (cameTo && AppThemes.For(this, app).Look == AppLook.Own && KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.PerAppKey, false))
+            {
+                MenuWatchService.Running?.SeeFieldColor(seen => AppThemes.SeenOnScreen(this, app, seen));
+            }
         }
 
         if (panel is not null && !OnHeadset && StandardColors.Chosen(this, StandardColors.App) != shownColors)

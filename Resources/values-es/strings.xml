@@ -155,9 +155,9 @@
   <string name="voice_permission_summary">Escribir por voz lo necesita para oírte</string>
   <string name="voice_permission_asked">Escribir por voz necesita el micrófono: permítelo en los ajustes</string>
   <string name="voice_not_set">Sin poner</string>
-  <string name="menus_service_label">Berpiztu AI Keyboard: menús</string>
-  <string name="menus_service_summary">Aparta el teclado de los menús que se abren</string>
-  <string name="menus_service_description">Berpiztu AI Keyboard solo ve el campo en el que escribe. Con esto activado ve también dónde se abre un menú, de una app o una lista desplegable, para apartarse (Preferencias › Apartarse también de los menús). No lee nada de los menús.</string>
+  <string name="menus_service_label">Berpiztu AI Keyboard: menús y colores</string>
+  <string name="menus_service_summary">Aparta el teclado de los menús que se abren y ve el color de las apps para Tema › Por app</string>
+  <string name="menus_service_description">Berpiztu AI Keyboard solo ve el campo en el que escribe. Con esto activado ve también dónde se abre un menú, de una app o una lista desplegable, para apartarse (Preferencias › Apartarse también de los menús); y, con Tema › Colores › Por app, el color justo dentro del campo en que escribe, para tomar el de la app (De la app). No lee nada más.</string>
   <string name="menus_watch_off">Dejarle ver los menús</string>
   <string name="menus_watch_off_summary">Android solo muestra los menús de otras apps a un servicio de accesibilidad: un toque activa Berpiztu AI Keyboard: menús</string>
   <string name="voice_lan">Red local (IP)</string>

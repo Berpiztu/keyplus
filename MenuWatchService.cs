@@ -12,7 +12,9 @@ namespace Berpiztu.KeyPlus;
 /// the user turns it on, watches for a menu opening (a popup: a window of an
 /// app's own with the app's window as its parent, as an app's menu or an
 /// autocompletion's list is) and tells the keyboard where it is, then that it
-/// closed. It reads nothing else, only the windows' places.
+/// closed; and, for Tema's Por app, sees the colour just inside the corner of
+/// the field typed in, on a screenshot (Android 11 and later), for De la app
+/// to take an application's colour as it shows. It reads nothing else.
 /// </summary>
 [Service(Name = "ai.berpiztu.keyboard.MenuWatchService", Label = "@string/menus_service_label",
     Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
@@ -28,6 +30,56 @@ public sealed class MenuWatchService : AccessibilityService
 
     /// <summary>The open menu's window, to see it close.</summary>
     private int? menuWindow;
+
+    /// <summary>The service as it runs, for the keyboard to ask it a field's colour; none while it is off.</summary>
+    public static MenuWatchService? Running { get; private set; }
+
+    protected override void OnServiceConnected()
+    {
+        base.OnServiceConnected();
+        Running = this;
+    }
+
+    public override bool OnUnbind(Intent? intent)
+    {
+        Running = null;
+        return base.OnUnbind(intent);
+    }
+
+    /// <summary>The colour just inside the corner of the field typed in, as the screen shows it, told once seen; nothing where it cannot be seen.</summary>
+    public void SeeFieldColor(System.Action<Rgb> seen)
+    {
+        if (!OperatingSystem.IsAndroidVersionAtLeast(30) || FindFocus(NodeFocus.Input) is not { } field)
+        {
+            return;
+        }
+
+        var place = new Android.Graphics.Rect();
+        field.GetBoundsInScreen(place);
+        if (place.IsEmpty)
+        {
+            return;
+        }
+
+        TakeScreenshot(Android.Views.Display.DefaultDisplay, MainExecutor!, new Screenshot(shot =>
+        {
+            using var buffer = shot.HardwareBuffer;
+            using var drawn = Android.Graphics.Bitmap.WrapHardwareBuffer(buffer!, shot.ColorSpace)?.Copy(Android.Graphics.Bitmap.Config.Argb8888!, false);
+            if (drawn is not null && place.Left + 3 < drawn.Width && place.Top + 3 < drawn.Height)
+            {
+                var pixel = new Android.Graphics.Color(drawn.GetPixel(place.Left + 3, place.Top + 3));
+                seen(new Rgb(pixel.R, pixel.G, pixel.B));
+            }
+        }));
+    }
+
+    /// <summary>A screenshot taken, told; one refused (too soon after another, the screen secure) told nothing.</summary>
+    private sealed class Screenshot(System.Action<ScreenshotResult> taken) : Java.Lang.Object, ITakeScreenshotCallback
+    {
+        public void OnSuccess(ScreenshotResult screenshot) => taken(screenshot);
+
+        public void OnFailure(int errorCode) => Android.Util.Log.Info("KeyPlus", $"Screenshot refused: {errorCode}");
+    }
 
     /// <summary>Whether the service is turned on, as Android's secure setting of the accessibility services on has it (written at once, where Android's manager tells it a moment later).</summary>
     public static bool On(Context context)

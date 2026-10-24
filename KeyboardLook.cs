@@ -47,14 +47,16 @@ public enum AppLook
 
 /// <summary>
 /// An application's choice and, for Personalizado, its keyboard and accent colours (#RRGGBB; one not chosen, Tema's
-/// Personalizado's); and its window's colour as the keyboard last saw it there (Windows) or as
-/// the application's theme declares it (Android), for De la app.
+/// Personalizado's); and its window's colour as the keyboard last saw it there, for De la app: on Windows always seen on the
+/// screen, on Android seen there where the keyboard's accessibility service is on (<see cref="OnScreen"/>), else as the
+/// application's theme declares it.
 /// </summary>
 public sealed record AppColor(
     [property: JsonConverter(typeof(JsonStringEnumConverter<AppLook>))] AppLook Look = AppLook.Own,
     string? KeyColor = null,
     string? AccentColor = null,
-    string? WindowColor = null);
+    string? WindowColor = null,
+    bool OnScreen = false);
 
 /// <summary>
 /// A colour as Tema keeps it, #RRGGBB, and the arithmetic both keyboards make
@@ -95,4 +97,33 @@ public readonly record struct Rgb(byte R, byte G, byte B)
 
     /// <summary>An accent's tone, as Windows makes its own: each step lighter (+) or darker (−) a quarter of the way to white or black.</summary>
     public Rgb Tone(int step) => Mix(step > 0 ? White : Black, Math.Abs(step) / 4.0);
+
+    /// <summary>The colour on the other side of light and dark, its hue and saturation kept, its lightness (HSL) mirrored: a light theme's background as its dark one would be.</summary>
+    public Rgb Mirrored
+    {
+        get
+        {
+            double r = R / 255.0, g = G / 255.0, b = B / 255.0;
+            double most = Math.Max(r, Math.Max(g, b)), least = Math.Min(r, Math.Min(g, b));
+            var lightness = (most + least) / 2;
+            var range = most - least;
+            var saturation = range == 0 ? 0 : range / (1 - Math.Abs((2 * lightness) - 1));
+            var hue = range == 0 ? 0 : most == r ? ((g - b) / range % 6 + 6) % 6 : most == g ? ((b - r) / range) + 2 : ((r - g) / range) + 4;
+            lightness = 1 - lightness;
+            var chroma = (1 - Math.Abs((2 * lightness) - 1)) * saturation;
+            var x = chroma * (1 - Math.Abs((hue % 2) - 1));
+            var (r1, g1, b1) = hue switch
+            {
+                < 1 => (chroma, x, 0.0),
+                < 2 => (x, chroma, 0.0),
+                < 3 => (0.0, chroma, x),
+                < 4 => (0.0, x, chroma),
+                < 5 => (x, 0.0, chroma),
+                _ => (chroma, 0.0, x),
+            };
+            var m = lightness - (chroma / 2);
+            static byte Byte(double value) => (byte)Math.Round(Math.Clamp(value, 0, 1) * 255);
+            return new Rgb(Byte(r1 + m), Byte(g1 + m), Byte(b1 + m));
+        }
+    }
 }

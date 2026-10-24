@@ -8,9 +8,11 @@ namespace Berpiztu.KeyPlus;
 /// Personalizado's Por app on Android, as the Windows app's apps.json: the
 /// applications typed in, by their package, each with its colours
 /// (<see cref="AppColor"/>), kept for every screen; the keyboard adds one the
-/// first time it types in it, with the background its theme declares, for an
-/// Android keyboard cannot see another application's window: what De la app
-/// takes there.
+/// first time it types in it, with the background its theme declares, for a
+/// keyboard alone cannot see another application's window, made light or
+/// dark as the device is; with the keyboard's accessibility service on, the
+/// colour seen on the screen beside the field (MenuWatchService) instead.
+/// What De la app takes.
 /// </summary>
 public static class AppThemes
 {
@@ -42,7 +44,7 @@ public static class AppThemes
     /// <summary>An application's colours; one not typed in yet, its theme's.</summary>
     public static AppColor For(Context context, string app) => All(context).GetValueOrDefault(app) ?? new AppColor();
 
-    /// <summary>An application typed in: added the first time, taking its theme's background; its background noted again where it changed (the device dark now).</summary>
+    /// <summary>An application typed in: added the first time, taking its theme's background; noted again where it changed (the device dark now), unless its colour was seen on the screen.</summary>
     public static void Seen(Context context, string app)
     {
         var all = All(context);
@@ -51,7 +53,7 @@ public static class AppThemes
         {
             all[app] = new AppColor(WindowColor: background);
         }
-        else if (background is not null && kept.WindowColor != background)
+        else if (background is not null && !kept.OnScreen && kept.WindowColor != background)
         {
             all[app] = kept with { WindowColor = background };
         }
@@ -61,6 +63,17 @@ public static class AppThemes
         }
 
         Keep(context, all);
+    }
+
+    /// <summary>An application's colour as seen on the screen beside its field, kept where it changed.</summary>
+    public static void SeenOnScreen(Context context, string app, Rgb color)
+    {
+        var all = All(context);
+        if (all.TryGetValue(app, out var kept) && (kept.WindowColor != color.Text || !kept.OnScreen))
+        {
+            all[app] = kept with { WindowColor = color.Text, OnScreen = true };
+            Keep(context, all);
+        }
     }
 
     public static void Set(Context context, string app, AppColor color)
@@ -83,7 +96,11 @@ public static class AppThemes
         }
     }
 
-    /// <summary>The background an application's theme declares (android:colorBackground), as the device is now, light or dark; none where it declares none or cannot be read.</summary>
+    /// <summary>
+    /// The background an application's theme declares (android:colorBackground), light or dark as the device is now: an app
+    /// that turns dark by itself (Chrome) declares a light one, mirrored then (<see cref="Rgb.Mirrored"/>); none where it
+    /// declares none or cannot be read.
+    /// </summary>
     private static Rgb? Background(Context context, string app)
     {
         try
@@ -98,7 +115,9 @@ public static class AppThemes
             }
 
             var color = new Android.Graphics.Color(read.GetColor(0, 0));
-            return new Rgb(color.R, color.G, color.B);
+            var declared = new Rgb(color.R, color.G, color.B);
+            var deviceDark = (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
+            return (declared.Readable == Rgb.Black) == deviceDark ? declared.Mirrored : declared;
         }
         catch (Exception unread) when (unread is PackageManager.NameNotFoundException or Java.Lang.SecurityException or Android.Content.Res.Resources.NotFoundException)
         {
