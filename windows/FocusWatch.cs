@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Threading;
 using Accessibility;
 
 namespace Berpiztu.KeyPlus;
@@ -17,6 +18,10 @@ namespace Berpiztu.KeyPlus;
 /// in the window (VS Code's suggestions, focused while the editor keeps its
 /// caret). Places on the screen, in pixels, told on the thread that made the
 /// watch; each focus and what was made of it written to the log.
+/// Watched and read on a thread of its own: reading another application's
+/// accessibility waits for that application to answer, and one busy (a VS
+/// Code window connecting by SSH) held the keyboard's keys still while it
+/// did.
 /// </summary>
 public sealed class FocusWatch : IDisposable
 {
@@ -47,19 +52,52 @@ public sealed class FocusWatch : IDisposable
     /// <summary>How far up from a focused item its menu is looked for.</summary>
     private const int MostParents = 8;
 
+    /// <summary>The thread that made the watch, where what is seen is told.</summary>
+    private readonly Dispatcher keyboard = Dispatcher.CurrentDispatcher;
+
+    /// <summary>The watch's own thread: its hooks, its timers and every read of another application's accessibility.</summary>
+    private readonly Dispatcher watching;
+
     private readonly WinEventProc seen;
-    private readonly IntPtr[] hooks;
-    private readonly System.Windows.Threading.DispatcherTimer focusSettling = new() { Interval = CaretAfterFocus };
-    private readonly System.Windows.Threading.DispatcherTimer menuSettling = new() { Interval = MenuSettling };
+    private IntPtr[] hooks = [];
+    private DispatcherTimer focusSettling = null!;
+    private DispatcherTimer menuSettling = null!;
     private bool inMenu;
+
+    /// <summary>Set on the keyboard's thread: nothing more is told once the watch is disposed.</summary>
+    private bool disposed;
 
     public FocusWatch()
     {
         seen = Seen;
-        hooks = [Hook(ForegroundChanged, ForegroundChanged), Hook(MenuPopupStart, MenuPopupEnd), Hook(ObjectShow, ObjectShow), Hook(ObjectFocus, ObjectFocus), Hook(ObjectLocationChange, ObjectLocationChange)];
+        Dispatcher? made = null;
+        using var started = new ManualResetEventSlim();
+        var thread = new Thread(() =>
+        {
+            made = Dispatcher.CurrentDispatcher;
+            Watch();
+            started.Set();
 
-        // The window in front already, asked as those that come to the front later are.
-        Awaken(GetForegroundWindow());
+            // The window in front already, asked as those that come to the front later are.
+            Seen(IntPtr.Zero, ForegroundChanged, GetForegroundWindow(), 0, 0, 0, 0);
+            Dispatcher.Run();
+            foreach (var hook in hooks)
+            {
+                UnhookWinEvent(hook);
+            }
+        })
+        { IsBackground = true, Name = "Focus watch" };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        started.Wait();
+        watching = made!;
+    }
+
+    /// <summary>On the watch's thread: its timers, then its hooks, whose calls come to the thread that set them.</summary>
+    private void Watch()
+    {
+        focusSettling = new DispatcherTimer { Interval = CaretAfterFocus };
+        menuSettling = new DispatcherTimer { Interval = MenuSettling };
         focusSettling.Tick += (_, _) =>
         {
             focusSettling.Stop();
@@ -70,7 +108,7 @@ public sealed class FocusWatch : IDisposable
             }
 
             Log.Write("Focus: left the text");
-            TextLeft?.Invoke();
+            Tell(() => TextLeft?.Invoke());
         };
         menuSettling.Tick += (_, _) =>
         {
@@ -79,10 +117,21 @@ public sealed class FocusWatch : IDisposable
             {
                 inMenu = false;
                 Log.Write("Menu: closed");
-                MenuClosed?.Invoke();
+                Tell(() => MenuClosed?.Invoke());
             }
         };
+
+        hooks = [Hook(ForegroundChanged, ForegroundChanged), Hook(MenuPopupStart, MenuPopupEnd), Hook(ObjectShow, ObjectShow), Hook(ObjectFocus, ObjectFocus), Hook(ObjectLocationChange, ObjectLocationChange)];
     }
+
+    /// <summary>What was seen told on the keyboard's thread, in the order it was seen; nothing once the watch is disposed.</summary>
+    private void Tell(Action told) => keyboard.BeginInvoke(() =>
+    {
+        if (!disposed)
+        {
+            told();
+        }
+    });
 
     /// <summary>The focus went where text is typed.</summary>
     public event Action? TextFocused;
@@ -105,14 +154,11 @@ public sealed class FocusWatch : IDisposable
     /// <summary>The menus closed, or the focus gone from them, for a moment with no other menu.</summary>
     public event Action? MenuClosed;
 
+    /// <summary>On the keyboard's thread, never waiting: the watch's thread lets go of its hooks once done with what it is asking.</summary>
     public void Dispose()
     {
-        focusSettling.Stop();
-        menuSettling.Stop();
-        foreach (var hook in hooks)
-        {
-            UnhookWinEvent(hook);
-        }
+        disposed = true;
+        watching.BeginInvokeShutdown(DispatcherPriority.Send);
     }
 
     private IntPtr Hook(uint first, uint last) => SetWinEventHook(first, last, IntPtr.Zero, seen, 0, 0, OutOfContext);
@@ -180,13 +226,12 @@ public sealed class FocusWatch : IDisposable
                 {
                     focusSettling.Stop();
                     Log.Write($"Focus: a caret showed in {ProcessOf(window)}: writing");
-                    App = AppOf(window);
-                    TextFocused?.Invoke();
+                    TellTextFocused(AppOf(window));
                 }
 
                 if (Place(accessible, child) is { Height: > 0 } at)
                 {
-                    CaretMoved?.Invoke(at);
+                    Tell(() => CaretMoved?.Invoke(at));
                 }
 
                 return;
@@ -200,15 +245,15 @@ public sealed class FocusWatch : IDisposable
                 focusSettling.Stop();
                 if (!menu)
                 {
-                    Field = Place(accessible, child) is { Width: > 0, Height: > 0 } place ? place : null;
+                    Int32Rect? field = Place(accessible, child) is { Width: > 0, Height: > 0 } place ? place : null;
+                    Tell(() => Field = field);
                 }
 
                 var editable = role == TextRole && (accessible.get_accState(child) is not int state || (state & ReadOnlyState) == 0);
                 Log.Write($"Focus: {RoleName(role)} \"{Named(accessible, child)}\" in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
                 if (editable)
                 {
-                    App = AppOf(window);
-                    TextFocused?.Invoke();
+                    TellTextFocused(AppOf(window));
                 }
                 else if (!menu)
                 {
@@ -228,7 +273,7 @@ public sealed class FocusWatch : IDisposable
 
                     menuSettling.Stop();
                     inMenu = true;
-                    MenuOpened?.Invoke(shown);
+                    Tell(() => MenuOpened?.Invoke(shown));
                 }
             }
             else
@@ -242,7 +287,12 @@ public sealed class FocusWatch : IDisposable
         }
     }
 
-    /// <summary>A menu ended, or the focus left it: closed unless another menu comes at once.</summary>
+    private void TellTextFocused(string? app) => Tell(() =>
+    {
+        App = app;
+        TextFocused?.Invoke();
+    });
+
     /// <summary>Windows already asked for their accessibility, so it is asked once a window.</summary>
     private readonly HashSet<IntPtr> awakened = [];
 
@@ -307,6 +357,7 @@ public sealed class FocusWatch : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr window, StringBuilder name, int size);
 
+    /// <summary>A menu ended, or the focus left it: closed unless another menu comes at once.</summary>
     private void EndMenu()
     {
         if (inMenu && !menuSettling.IsEnabled)
