@@ -117,7 +117,20 @@ public sealed class FocusWatch : IDisposable
 
     private IntPtr Hook(uint first, uint last) => SetWinEventHook(first, last, IntPtr.Zero, seen, 0, 0, OutOfContext);
 
+    /// <summary>Windows' call: nothing thrown may go back to it, for that ends the keyboard; what failed is written to the log.</summary>
     private void Seen(IntPtr hook, uint kind, IntPtr window, int objectId, int childId, uint thread, uint time)
+    {
+        try
+        {
+            See(kind, window, objectId, childId);
+        }
+        catch (Exception failed)
+        {
+            Log.Write($"Focus: event 0x{kind:X4} in window 0x{window:X} could not be followed: {failed}");
+        }
+    }
+
+    private void See(uint kind, IntPtr window, int objectId, int childId)
     {
         if (kind == ForegroundChanged)
         {
@@ -384,8 +397,9 @@ public sealed class FocusWatch : IDisposable
             using var process = Process.GetProcessById((int)id);
             return process.ProcessName;
         }
-        catch (ArgumentException)
+        catch (Exception gone) when (gone is ArgumentException or InvalidOperationException)
         {
+            // No such process, or it ended as it was asked.
             return $"process {id}";
         }
     }

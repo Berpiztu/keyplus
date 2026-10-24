@@ -35,6 +35,8 @@ public static class Program
             return;
         }
 
+        // An error that ends the program written to the log first, for Windows' own report keeps no trace of it.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"Ended by an error: {e.ExceptionObject}");
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
         if (settings)
         {
