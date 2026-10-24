@@ -129,17 +129,17 @@ a window that does.
 
 ## Using it
 
-- **Ajustes › Preferencias**: **Sonido al pulsar las teclas** (off, as
-  Gboard's) plays Android's keypress sounds, the space's, the delete's and
-  Enter's their own, at the system's volume; **Vibración al pulsar las
-  teclas** (on) makes each touch felt. Android only: Windows has neither.
-- **Ajustes › Información**: **Buscar actualizaciones automáticamente** (on)
-  asks GitHub once a day whether a new version is out, and **Buscar ahora**
-  at once; a new one asks whether to update (on Android a notification
-  first, which opens the app), and a yes downloads it and opens its
-  installer: Windows' MSI, or Android's own installer, which asks too (and,
-  the first time, to allow installing from the app). The popup has Buscar
-  ahora on its screen. On Windows and Android alike.
+- **Settings › Preferences**: **Sound on keypress** (off, as Gboard's)
+  plays Android's keypress sounds, the space's, the delete's and Enter's
+  their own, at the system's volume; **Haptic feedback on keypress** (on)
+  makes each touch felt. Android only: Windows has neither.
+- **Settings › About**: **Check for updates automatically** (on) asks
+  GitHub once a day whether a new version is out, and **Check now** at
+  once; a new one asks whether to update (on Android a notification first,
+  which opens the app), and a yes downloads it and opens its installer:
+  Windows' MSI, or Android's own installer, which asks too (and, the first
+  time, to allow installing from the app). The popup has Check now on its
+  screen. On Windows and Android alike.
 - **On a headset (Galaxy XR), a third: Estándar XR**, Gboard's there
   (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
   keys, the digits over the letters, Tab, Bloq Mayús, ⇧ at both ends, ◀ and
