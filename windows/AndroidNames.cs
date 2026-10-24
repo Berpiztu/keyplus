@@ -185,6 +185,7 @@ namespace Berpiztu.KeyPlus
             public const int look_custom = 101;
             public const int look_keyboard = 102;
             public const int look_accent = 103;
+            public const int undo = 104;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

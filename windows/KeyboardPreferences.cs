@@ -16,10 +16,14 @@ namespace Berpiztu.KeyPlus;
 /// swiping over the letters and its trail; whether the keyboard is docked at
 /// the screen's bottom rather than floating, as it starts; its colours
 /// (Tema: as Windows' mode, light, dark, or Personalizado's keyboard and
-/// accent colours, #RRGGBB, none chosen Windows' own). Kept in
+/// accent colours, #RRGGBB, none chosen Windows' own) and those two as they
+/// were before the last one was chosen, for Deshacer. Kept in
 /// the app's folder, where the settings, a program of their own, write them
 /// and the keyboard sees each change at once.
 /// </summary>
+/// <summary>Personalizado's keyboard and accent colours.</summary>
+public sealed record KeyboardColors(string? KeyColor, string? AccentColor);
+
 public sealed record KeyboardPreferences(
     bool ShowKeyboard = true,
     string FocusLost = KeyboardPreferences.FocusLostHide,
@@ -35,8 +39,16 @@ public sealed record KeyboardPreferences(
     bool Docked = false,
     [property: JsonConverter(typeof(JsonStringEnumConverter<KeyboardLook>))] KeyboardLook Look = KeyboardLook.System,
     string? KeyColor = null,
-    string? AccentColor = null)
+    string? AccentColor = null,
+    KeyboardColors? Before = null)
 {
+    /// <summary>Personalizado's colours as they are, kept as <see cref="Before"/> when one is chosen.</summary>
+    [JsonIgnore]
+    public KeyboardColors Colors => new(KeyColor, AccentColor);
+
+    /// <summary>The preferences with these Personalizado colours.</summary>
+    public KeyboardPreferences With(KeyboardColors colors) => this with { KeyColor = colors.KeyColor, AccentColor = colors.AccentColor };
+
     public const string FocusLostHide = "hide";
     public const string FocusLostIcon = "icon";
     public const string FocusLostStay = "stay";

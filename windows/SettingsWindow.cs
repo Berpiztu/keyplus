@@ -152,8 +152,21 @@ public sealed class SettingsWindow : Window
 
         // Personalizado's two colours, each a button showing its colour, hidden in their place for the other choices.
         var custom = colors.Look == KeyboardLook.Custom ? Visibility.Visible : Visibility.Hidden;
-        var keyColor = ColorButton(Resource.String.look_keyboard, colors.KeyColor ?? colors.Ground, custom, chosen => KeyboardPreferences.Read() with { KeyColor = chosen });
-        var accentColor = ColorButton(Resource.String.look_accent, colors.AccentColor ?? colors.Primary, custom, chosen => KeyboardPreferences.Read() with { AccentColor = chosen });
+        var keyColor = ColorButton(Resource.String.look_keyboard, colors.KeyColor ?? colors.Ground, custom, (kept, chosen) => kept.Colors with { KeyColor = chosen });
+        var accentColor = ColorButton(Resource.String.look_accent, colors.AccentColor ?? colors.Primary, custom, (kept, chosen) => kept.Colors with { AccentColor = chosen });
+
+        // Deshacer, Personalizado's: its two colours as they were before the last one was chosen, one step back, hidden in its
+        // place once used, with none, or for the other choices.
+        var undo = new Button { Content = "↶ " + Texts.Get(Resource.String.undo), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        undo.Visibility = custom == Visibility.Visible && KeyboardPreferences.Read().Before is not null ? Visibility.Visible : Visibility.Hidden;
+        undo.Click += (_, _) =>
+        {
+            if (KeyboardPreferences.Read() is { Before: { } before } kept)
+            {
+                (kept.With(before) with { Before = null }).Keep();
+                ShowPage(ThemePage());
+            }
+        };
         var preview = new KeyboardSurface(colors) { Types = false };
         // The keyboard as it shows now, docked or floating, designed so.
         var docked = KeyboardPreferences.Read().Docked;
@@ -204,6 +217,7 @@ public sealed class SettingsWindow : Window
         coloring.Children.Add(looks);
         coloring.Children.Add(keyColor);
         coloring.Children.Add(accentColor);
+        coloring.Children.Add(undo);
         var controls = new StackPanel();
         TextElement.SetFontSize(controls, CompactSize);
         controls.Children.Add(choosing);
@@ -323,12 +337,19 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
+    /// <summary>One of Personalizado's colours chosen: the two as they were kept for Deshacer, the page drawn again in the new ones, the keyboard taking them at once.</summary>
+    private void KeepColors(Func<KeyboardPreferences, KeyboardColors> change)
+    {
+        var kept = KeyboardPreferences.Read();
+        (kept.With(change(kept)) with { Before = kept.Colors }).Keep();
+        ShowPage(ThemePage());
+    }
+
     /// <summary>
     /// One of Personalizado's colours: a button with the colour shown and its name, which opens Windows' own colour picker
-    /// on it; one chosen is kept with Personalizado (<paramref name="keep"/> the preferences with it) and the page drawn again
-    /// in it, the keyboard taking it at once.
+    /// on it; one chosen is kept (<paramref name="change"/> the colours with it, <see cref="KeepColors"/>).
     /// </summary>
-    private Button ColorButton(int name, Color shown, Visibility visibility, Func<string, KeyboardPreferences> keep)
+    private Button ColorButton(int name, Color shown, Visibility visibility, Func<KeyboardPreferences, string, KeyboardColors> change)
     {
         var face = new StackPanel { Orientation = Orientation.Horizontal };
         face.Children.Add(new Border { Width = 14, Height = 14, Background = new SolidColorBrush(shown), BorderBrush = SystemColors.ControlTextBrush, BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, FieldGapDp / 2, 0), VerticalAlignment = VerticalAlignment.Center });
@@ -339,8 +360,8 @@ public sealed class SettingsWindow : Window
             using var picker = new System.Windows.Forms.ColorDialog { FullOpen = true, AnyColor = true, Color = System.Drawing.Color.FromArgb(shown.R, shown.G, shown.B) };
             if (picker.ShowDialog() == System.Windows.Forms.DialogResult.OK)
             {
-                keep(Palette.Text(Color.FromRgb(picker.Color.R, picker.Color.G, picker.Color.B))).Keep();
-                ShowPage(ThemePage());
+                var chosen = Palette.Text(Color.FromRgb(picker.Color.R, picker.Color.G, picker.Color.B));
+                KeepColors(kept => change(kept, chosen));
             }
         };
         return button;
