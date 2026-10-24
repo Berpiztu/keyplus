@@ -77,6 +77,18 @@
   <string name="avoid_menus">Also move out of the way of menus</string>
   <string name="avoid_menus_summary">In a window, when an open menu is under the keyboard, it moves away once and stays there</string>
   <string name="reset_size">Reset</string>
+  <string name="look">Colours</string>
+  <string name="look_system">System</string>
+  <string name="look_light">Light</string>
+  <string name="look_dark">Dark</string>
+  <string name="look_custom">Custom</string>
+  <string name="look_keyboard">Base</string>
+  <string name="look_accent">Accent</string>
+  <string name="per_app">Per app</string>
+  <string name="app_own">App\'s</string>
+  <string name="hue">Hue</string>
+  <string name="saturation">Saturation</string>
+  <string name="brightness">Brightness</string>
   <string name="show_keyboard">Show the keyboard when typing</string>
   <string name="show_keyboard_summary">Off, it never shows: for when another keyboard is in use, so one does not cover the other</string>
   <string name="keyboard_icon">Show an icon instead</string>
@@ -88,9 +100,7 @@
   <string name="choose_keyboard">Choose the keyboard</string>
   <string name="wireless_debugging">Turn it on with Wireless debugging</string>
   <string name="wireless_debugging_summary">Pair again when Android has forgotten it</string>
-  <string name="rename">Rename</string>
   <string name="delete">Delete</string>
-  <string name="keyboard_name">Name</string>
   <string name="ok">OK</string>
   <string name="cancel">Cancel</string>
   <string name="my_design">My design – %1$s</string>
@@ -100,9 +110,7 @@
   <string name="screen_dex">DeX</string>
   <string name="keyboard_standard">Standard</string>
   <string name="keyboard_standard_pc">Standard PC</string>
-  <string name="docked">Docked</string>
-  <string name="keyboards_saved">Saved</string>
-  <string name="keyboards_saved_summary">Tap one to rename or delete it</string>
+  <string name="keyboard_standard_xr">Standard XR</string>
   <string name="delete_ask">Delete %1$s? The screens that showed it go back to their own.</string>
   <string name="customize_hint">Hold and drag to customize</string>
   <string name="done">Done</string>
@@ -125,6 +133,7 @@
   <string name="design_arrows">Arrows</string>
   <string name="add_key">+ Key</string>
   <string name="add_row">+ Row</string>
+  <string name="add_column">+ Column</string>
   <string name="remove">Remove</string>
   <string name="saved_as">%1$s %2$s</string>
   <string name="voice_listening">Listening…</string>
@@ -153,9 +162,9 @@
   <string name="voice_permission_summary">Voice typing needs it to hear you</string>
   <string name="voice_permission_asked">Voice typing needs the microphone: allow it in the settings</string>
   <string name="voice_not_set">Not set</string>
-  <string name="menus_service_label">Berpiztu AI Keyboard: menus</string>
-  <string name="menus_service_summary">Moves the keyboard out of the way of the menus that open</string>
-  <string name="menus_service_description">Berpiztu AI Keyboard sees only the field it types in. With this on, it also sees where a menu opens, an app\'s or a list that drops down, to move out of its way (Preferences › Also move out of the way of menus). It reads nothing in the menus.</string>
+  <string name="menus_service_label">Berpiztu AI Keyboard: menus and colours</string>
+  <string name="menus_service_summary">Moves the keyboard out of the way of the menus that open, and sees an app\'s colour for Theme › Per app</string>
+  <string name="menus_service_description">Berpiztu AI Keyboard sees only the field it types in. With this on, it also sees where a menu opens, an app\'s or a list that drops down, to move out of its way (Preferences › Also move out of the way of menus); and, with Theme › Colours › Per app, the colour just inside the field it types in, to take the app\'s colour (App\'s). It reads nothing else.</string>
   <string name="menus_watch_off">Let it see the menus</string>
   <string name="menus_watch_off_summary">Android shows other apps\' menus only to an accessibility service: a tap turns on Berpiztu AI Keyboard: menus</string>
   <string name="voice_lan">Local network (IP)</string>
@@ -176,4 +185,8 @@
   <string name="troubleshooting_vscode_done">Put in %1$s shortcuts: close VS Code and open it again from one of them.</string>
   <string name="troubleshooting_vscode_already">Every VS Code shortcut has it already.</string>
   <string name="troubleshooting_vscode_none">No VS Code shortcut was found in the Start menu, the taskbar or on the desktop.</string>
+  <string name="windows_delete_ask">Delete %1$s? If the keyboard shows it, it goes back to Standard PC.</string>
+  <string name="keyboards_saved_summary">Save as copies the keyboard chosen under the name written; Delete takes a saved one away</string>
+  <string name="keyboard">Keyboard</string>
+  <string name="save_as">Save as</string>
 </resources>

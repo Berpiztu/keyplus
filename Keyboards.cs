@@ -4,27 +4,15 @@ using Android.Content;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// A keyboard of the list (Ajustes › Tema): its id, its name, what it is made
-/// from (Estándar, Gboard's keys; Estándar PC, a PC's keys in Gboard's look;
-/// or PC, the whole keyboard of the designs made before the list), and its
-/// design, which goes with it; none, as its base is.
-/// </summary>
-public sealed record KeyboardEntry(string Id, string Name, string Base, string? Design = null)
-{
-    /// <summary>Whether it is one the keyboard comes with (Estándar, Estándar PC): never changed, never deleted.</summary>
-    public bool BuiltIn => Id is Keyboards.StandardId or Keyboards.StandardPcId;
-
-    /// <summary>Whether it is drawn as Gboard draws its keys, in the device's colours.</summary>
-    public bool Standard => Base is Keyboards.StandardBase or Keyboards.StandardPcBase;
-}
-
-/// <summary>
-/// The keyboards of the list: Estándar (Gboard's) and Estándar PC (a PC's
-/// keys: Alt Gr, Ctrl, Alt, ⊞, Esc, F1–F12, the arrows), which the keyboard
-/// comes with and which never change, and those saved, kept for every
-/// screen; and the one each screen shows docked and the one it shows
-/// floating, kept by the screen: at first Estándar on a phone and a tablet
-/// upright, Estándar PC on a tablet on its side and on DeX.
+/// The keyboards of the list, by language as on Windows (a PC's keys differ
+/// between them): Estándar (Gboard's) and Estándar PC (a PC's keys: Alt Gr,
+/// Ctrl, Alt, ⊞, Esc, F1–F12, the arrows, with the language's design), which
+/// the keyboard comes with in every language and which never change, and
+/// those saved, kept for every screen, each in the language it was designed
+/// in; and the one each screen shows in each language, docked and floating
+/// alike (each mode with its own design where it has one), kept by the
+/// screen: at first Estándar on a phone and a tablet upright, Estándar PC on
+/// a tablet on its side and on DeX.
 /// </summary>
 public static class Keyboards
 {
@@ -32,10 +20,17 @@ public static class Keyboards
     public const string StandardPcId = "standardPc";
     public const string StandardBase = "standard";
     public const string StandardPcBase = "standardPc";
+
+    /// <summary>Estándar XR, Gboard's on the Galaxy XR (a tablet's keys), listed on a headset alone.</summary>
+    public const string StandardXrId = "standardXr";
+    public const string StandardXrBase = "standardXr";
     public const string PcBase = "pc";
 
-    /// <summary>What a screen's chosen keyboards are kept under: this, then ".docked" or ".floating".</summary>
+    /// <summary>What a screen's chosen keyboards are kept under: this, then "." and the language's code.</summary>
     public const string SelectedKey = "keyboardId";
+
+    /// <summary>Before the languages, a screen kept the keyboard it showed docked under this; read as Spanish's.</summary>
+    private const string DockedBeforeKey = SelectedKey + ".docked";
 
     /// <summary>The keyboards saved, kept for every screen.</summary>
     private const string MadeKey = "keyboards";
@@ -44,32 +39,61 @@ public static class Keyboards
     private const string MovedKey = "keyboardsMoved";
     private const string StandardShownKey = "standard";
 
-    /// <summary>Every keyboard: the two the keyboard comes with, then those saved, in the order they were.</summary>
-    public static IReadOnlyList<KeyboardEntry> All(Context context) =>
+    /// <summary>A language's keyboards: the two the keyboard comes with, Estándar PC with that language's design, then those saved in it, in the order they were.</summary>
+    public static IReadOnlyList<KeyboardEntry> All(Context context, string language) =>
     [
         new(StandardId, context.GetString(Resource.String.keyboard_standard), StandardBase),
-        new(StandardPcId, context.GetString(Resource.String.keyboard_standard_pc), StandardPcBase),
-        .. Made(context),
+        new(StandardPcId, context.GetString(Resource.String.keyboard_standard_pc), StandardPcBase, StandardKeys.PcDesign(language)),
+        .. KeyPlusPreferences.IsHeadset(context) ? [new KeyboardEntry(StandardXrId, context.GetString(Resource.String.keyboard_standard_xr), StandardXrBase)] : Array.Empty<KeyboardEntry>(),
+        .. Made(context).Where(keyboard => keyboard.LanguageCode == language),
     ];
+
+    /// <summary>The keyboards saved, in every language.</summary>
+    public static IReadOnlyList<KeyboardEntry> Saved(Context context) => Made(context);
 
     /// <summary>Whether a preference changed is a screen's chosen keyboard.</summary>
     public static bool IsSelection(string? key) => key?.StartsWith(SelectedKey, StringComparison.Ordinal) == true;
 
-    /// <summary>The keyboard a screen shows docked or floating: the one chosen for it there, at first that screen's own.</summary>
-    public static KeyboardEntry Selected(Context context, ISharedPreferences screen, KeyPlusPreferences.Screen kind, bool floating)
+    /// <summary>Whether a preference changed is the keyboards saved: one designed, renamed or deleted.</summary>
+    public static bool IsList(string? key) => key == MadeKey;
+
+    /// <summary>The keyboard a screen shows in a language, docked and floating: the one chosen for it there, at first that screen's own.</summary>
+    public static KeyboardEntry Selected(Context context, ISharedPreferences screen, KeyPlusPreferences.Screen kind, string language)
     {
-        var id = screen.GetString(KeyOf(floating), null) ?? FirstOf(kind);
-        var all = All(context);
-        return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == FirstOf(kind));
+        var id = screen.GetString(KeyOf(language), null)
+            ?? (language == StandardKeys.Spanish.Code ? screen.GetString(DockedBeforeKey, null) : null)
+            ?? FirstOf(context, kind);
+        var all = All(context, language);
+        return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == FirstOf(context, kind));
     }
 
-    /// <summary>A keyboard chosen for a screen, docked or floating: the keyboard open there made again with it.</summary>
-    public static void Select(ISharedPreferences screen, bool floating, string id) => screen.Edit()!.PutString(KeyOf(floating), id)!.Apply();
-
-    /// <summary>A keyboard saved, with its base and its design, under a name.</summary>
-    public static KeyboardEntry SaveAs(Context context, string name, string from, string? design)
+    /// <summary>
+    /// A language come to keeps the kind of keyboard in sight (Estándar, Estándar PC, Estándar XR): the screen's keyboard
+    /// in it where it is of that kind, a saved one too; else the one of that kind the keyboard comes with chosen there.
+    /// </summary>
+    public static void Carry(Context context, ISharedPreferences screen, KeyPlusPreferences.Screen kind, string language, KeyboardEntry shown)
     {
-        var made = new KeyboardEntry(Guid.NewGuid().ToString("N")[..8], name, from, design);
+        if (SameKind(Selected(context, screen, kind, language)) != SameKind(shown))
+        {
+            Select(screen, language, SameKind(shown));
+        }
+    }
+
+    /// <summary>A keyboard's kind as a keyboard the keyboard comes with: itself, or the one a saved one was made from.</summary>
+    private static string SameKind(KeyboardEntry keyboard) => keyboard.BuiltIn ? keyboard.Id : keyboard.Base switch
+    {
+        StandardBase => StandardId,
+        StandardXrBase => StandardXrId,
+        _ => StandardPcId,
+    };
+
+    /// <summary>A keyboard chosen for a screen in a language: the keyboard open there made again with it.</summary>
+    public static void Select(ISharedPreferences screen, string language, string id) => screen.Edit()!.PutString(KeyOf(language), id)!.Apply();
+
+    /// <summary>A keyboard saved in a language, with its base, its design and its floating one, under a name.</summary>
+    public static KeyboardEntry SaveAs(Context context, string name, string from, string? design, string language, string? floatingDesign = null)
+    {
+        var made = new KeyboardEntry(Guid.NewGuid().ToString("N")[..8], name, from, design, language, FloatingDesign: floatingDesign);
         Keep(context, [.. Made(context), made]);
         return made;
     }
@@ -78,34 +102,31 @@ public static class Keyboards
     public static string NewName(Context context, KeyboardEntry from) =>
         context.GetString(Resource.String.saved_as, new Java.Lang.String(from.Name), new Java.Lang.String(DateTime.Now.ToString("dd-MM HH:mm", System.Globalization.CultureInfo.InvariantCulture)));
 
-    public static void Rename(Context context, string id, string name) =>
-        Keep(context, [.. Made(context).Select(keyboard => keyboard.Id == id ? keyboard with { Name = name } : keyboard)]);
-
-    /// <summary>A saved keyboard deleted: the screens that showed it, docked or floating, show their first one again there.</summary>
+    /// <summary>A saved keyboard deleted: the screens that showed it, in any language, show their first one again there.</summary>
     public static void Delete(Context context, string id)
     {
         Keep(context, [.. Made(context).Where(keyboard => keyboard.Id != id)]);
         foreach (var kind in Enum.GetValues<KeyPlusPreferences.Screen>())
         {
             var screen = KeyPlusPreferences.ForScreen(context, kind);
-            foreach (var floating in new[] { false, true })
+            foreach (var key in StandardKeys.Languages.Select(language => KeyOf(language.Code)).Append(DockedBeforeKey))
             {
-                if (screen.GetString(KeyOf(floating), null) == id)
+                if (screen.GetString(key, null) == id)
                 {
-                    screen.Edit()!.Remove(KeyOf(floating))!.Apply();
+                    screen.Edit()!.Remove(key)!.Apply();
                 }
             }
         }
     }
 
-    /// <summary>A saved keyboard's design, kept with it; none, as its base is.</summary>
-    public static void SetDesign(Context context, string id, string? design) =>
-        Keep(context, [.. Made(context).Select(keyboard => keyboard.Id == id ? keyboard with { Design = design } : keyboard)]);
+    /// <summary>A saved keyboard's design, kept with it: docked, its design; floating, its floating one.</summary>
+    public static void SetDesign(Context context, string id, string? design, bool floating) =>
+        Keep(context, [.. Made(context).Select(keyboard => keyboard.Id != id ? keyboard : floating ? keyboard with { FloatingDesign = design } : keyboard with { Design = design })]);
 
     /// <summary>
     /// Once, the PC designs each screen kept before the list made keyboards
-    /// of it, named "My design – phone" and so on, none lost; a screen that
-    /// showed PC shows its own, docked and floating.
+    /// of it, in Spanish, named "My design – phone" and so on, none lost; a
+    /// screen that showed PC shows its own.
     /// </summary>
     public static void MoveDesignsOnce(Context context)
     {
@@ -123,11 +144,10 @@ public static class Keyboards
                 continue;
             }
 
-            var made = SaveAs(context, context.GetString(Resource.String.my_design, new Java.Lang.String(ScreenName(context, kind))), PcBase, design);
+            var made = SaveAs(context, context.GetString(Resource.String.my_design, new Java.Lang.String(ScreenName(context, kind))), PcBase, design, StandardKeys.Spanish.Code);
             if (!screen.GetBoolean(StandardShownKey, true))
             {
-                Select(screen, floating: false, made.Id);
-                Select(screen, floating: true, made.Id);
+                Select(screen, StandardKeys.Spanish.Code, made.Id);
             }
         }
 
@@ -143,11 +163,13 @@ public static class Keyboards
         _ => Resource.String.screen_phone,
     });
 
-    private static string KeyOf(bool floating) => SelectedKey + (floating ? ".floating" : ".docked");
+    private static string KeyOf(string language) => SelectedKey + "." + language;
 
-    /// <summary>A screen's keyboard until one is chosen: a PC's keys where the screen is wide, Gboard's elsewhere.</summary>
-    private static string FirstOf(KeyPlusPreferences.Screen kind) =>
-        kind is KeyPlusPreferences.Screen.TabletLandscape or KeyPlusPreferences.Screen.Dex ? StandardPcId : StandardId;
+    /// <summary>A screen's keyboard until one is chosen: on a headset Gboard's there (Estándar XR); else a PC's keys where the screen is wide, Gboard's elsewhere.</summary>
+    private static string FirstOf(Context context, KeyPlusPreferences.Screen kind) =>
+        KeyPlusPreferences.IsHeadset(context) ? StandardXrId
+        : kind is KeyPlusPreferences.Screen.TabletLandscape or KeyPlusPreferences.Screen.Dex ? StandardPcId
+        : StandardId;
 
     private static List<KeyboardEntry> Made(Context context)
     {

@@ -56,6 +56,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Where the keyboard stood and how large it was when a drag on the frame or the title bar started.</summary>
     private (int X, int Y, int Width, int Lift, float Scale, int Height) adjustStart;
 
+    /// <summary>The keyboard's place and size as Mover or Redimensionar found it, for Cancelar.</summary>
+    private (int X, int Y, int Width, float Scale, int Lift, int DockedX, int DockedWidth) frameStart;
+
     /// <summary>The texts copied lately, which 📋 lists.</summary>
     private ClipboardHistory? clipboard;
     private ClipboardManager? clipboardManager;
@@ -181,6 +184,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
+        InAppColors(info?.PackageName);
         panel?.FitLabels();
         if (panel is not null && !OnHeadset)
         {
@@ -423,6 +427,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override View? OnCreateInputView()
     {
         panel?.StopRepeat();
+        shownColors = StandardColors.Chosen(this, StandardColors.App);
         var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
         Watch(preferences);
@@ -495,7 +500,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 dx,
                 dy);
             frame = new KeyboardFrame(this);
-            panel.ResizeRequested += () => frame.Show(resizing: true, sides: true);
+            panel.ResizeRequested += () => ShowFrame(resizing: true);
             panel.HideRequested += () =>
             {
                 hideAsked = true;
@@ -504,6 +509,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.ResetSizeRequested += ResetSize;
             frame.Dragged += Adjust;
             frame.ResetRequested += ResetSize;
+            frame.CancelRequested += CancelFrame;
             frame.DoneRequested += frame.Hide;
             box = new FrameLayout(this);
             box.AddView(panel.Root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
@@ -524,6 +530,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             ground.SetBackgroundColor(panel.GroundColor);
             container.AddView(ground);
             container.AddView(box);
+            if (KeyPlusPreferences.IsHeadset(this))
+            {
+                AsHeadsetCard(box, ground);
+            }
 
             // Editar's card above the keys, over the app, as Gboard's.
             panel.EditorOutside = true;
@@ -547,8 +557,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var windowed = placed?.Floating == true;
         return
         [
-            new("Mover", () => frame?.Show(resizing: false, sides: false), "✥"),
-            new("Redimensionar", () => frame?.Show(resizing: true, sides: true), "⇲"),
+            new("Mover", () => ShowFrame(resizing: false), "✥"),
+            new("Redimensionar", () => ShowFrame(resizing: true), "⇲"),
             new("Diseñar", () => panel?.Design(), "✎"),
             new("Modo normal", () => SetWindowed(false), "⬓", InUse: !windowed),
             new("Modo ventana", () => SetWindowed(true), "❐", InUse: windowed),
@@ -579,7 +589,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             new("undo", GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
             new("nextLanguage", GetString(Resource.String.next_language), Resource.Drawable.ic_key_language, () => NotMade(Resource.String.next_language)),
             new("textEditing", GetString(Resource.String.text_editing), Resource.Drawable.ic_grid_text_editing, () => NotMade(Resource.String.text_editing), More: true),
-            new("move", GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => frame?.Show(resizing: false, sides: false)),
+            new("move", GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => ShowFrame(resizing: false)),
             new("switchKeyboard", GetString(Resource.String.switch_keyboard), Resource.Drawable.ic_grid_keyboard, ShowKeyboardPicker),
         ];
     }
@@ -780,9 +790,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
         placed.Floating = windowed;
         placed.Save();
 
-        // The screen shows another keyboard floating than docked: the keyboard made again with it.
-        var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
-        if (!OnHeadset && Keyboards.Selected(this, KeyPlusPreferences.ForScreen(this, screen), screen, windowed).Id != panel.KeyboardId)
+        // The same keyboard in the other mode; designed in it, with that mode's own design: the keyboard made again with it.
+        panel.ShowsFloating = windowed;
+        if (panel.Keyboard is { } shown && shown.DesignFor(docked: windowed) != shown.DesignFor(docked: !windowed))
         {
             panel.Root.Post(() => SetInputView(OnCreateInputView()));
             return;
@@ -872,6 +882,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // and the app gives way to all of it, as to any keyboard.
             var raised = placed.Lift + room.Below;
             var width = placed.DockedWidth > 0 ? Math.Clamp(placed.DockedWidth, Dp(PanelPlacement.MinWidthDp), room.Width) : room.Width;
+            if (KeyPlusPreferences.IsHeadset(this))
+            {
+                FillHeadsetWindow(width, room.Height - raised);
+            }
             keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom | GravityFlags.Left)
             {
                 LeftMargin = Math.Clamp(placed.DockedX, 0, room.Width - width),
@@ -1124,6 +1138,33 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
     }
 
+    /// <summary>Mover (<paramref name="resizing"/> false) or Redimensionar: the frame over the keyboard, with the side bars to size it; the keyboard as it is kept for Cancelar.</summary>
+    private void ShowFrame(bool resizing)
+    {
+        if (frame is null || placed is null)
+        {
+            return;
+        }
+
+        frameStart = (placed.X, placed.Y, placed.Width, placed.Scale, placed.Lift, placed.DockedX, placed.DockedWidth);
+        frame.Show(resizing, sides: resizing);
+    }
+
+    /// <summary>Cancelar: the keyboard as the frame found it, Restablecer undone too, the frame gone.</summary>
+    private void CancelFrame()
+    {
+        frame?.Hide();
+        if (panel is null || placed is null)
+        {
+            return;
+        }
+
+        (placed.X, placed.Y, placed.Width, placed.Scale, placed.Lift, placed.DockedX, placed.DockedWidth) = frameStart;
+        panel.Scale = placed.Scale;
+        placed.Save();
+        Place();
+    }
+
     /// <summary>Restablecer: the keys at their usual size and, in a window, three quarters of the screen wide; docked, as wide as the screen and on the bottom again.</summary>
     private void ResetSize()
     {
@@ -1160,23 +1201,63 @@ public sealed class KeyPlusKeyboard : InputMethodService
         watched?.UnregisterOnSharedPreferenceChangeListener(watch);
         watched = preferences;
         preferences.RegisterOnSharedPreferenceChangeListener(watch);
+        // The language and the keyboards saved are kept for every screen; the phone's preferences are those, registered once all the same.
+        KeyPlusPreferences.Global(this).RegisterOnSharedPreferenceChangeListener(watch);
     }
 
     /// <summary>
-    /// The app's Pop-up turned on or off, its Reset or designs imported: the keyboard made
-    /// again from what is kept now, at once. Its own changes, already in
-    /// sight, are left alone.
+    /// The app's Pop-up turned on or off, its Reset or designs imported, a
+    /// keyboard chosen for the screen, or the language or the keyboards
+    /// saved changed so that the screen shows another keyboard, or the same
+    /// one otherwise designed (Tema), or its colours (Tema): the keyboard made again from what is
+    /// kept now, at once. Its own changes, already in sight, are left alone.
     /// </summary>
     private void OnPreferenceChanged(ISharedPreferences preferences, string? key)
     {
-        var reset = key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key);
-        var popupChanged = key == PanelPlacement.FloatingPreference && placed is not null
+        var screens = watched is not null && preferences.Equals(watched);
+        var reset = screens && (key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key));
+        var popupChanged = screens && key == PanelPlacement.FloatingPreference && placed is not null
             && new PanelPlacement(preferences).Floating != placed.Floating;
-        if (reset || popupChanged)
+        var keyboardChanged = ((key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother())
+            || (KeyPlusPreferences.IsColors(key) && StandardColors.Chosen(this, StandardColors.App) != shownColors);
+        if (reset || popupChanged || keyboardChanged)
         {
             panel?.Root.Post(() => SetInputView(OnCreateInputView()));
         }
     }
+
+    /// <summary>The colours the keyboard in sight was made in (<see cref="StandardColors.Chosen"/>).</summary>
+    private (bool Dark, Rgb? Key, Rgb? Accent) shownColors;
+
+    /// <summary>
+    /// A field of an application to type in: the application noted (Tema's Por app lists it, with its theme's background),
+    /// and the keyboard made again at once where its colours there are not those in sight.
+    /// </summary>
+    private void InAppColors(string? package)
+    {
+        var cameTo = package != StandardColors.App;
+        StandardColors.App = package is not null && package != PackageName ? package : null;
+        if (StandardColors.App is { } app)
+        {
+            AppThemes.Seen(this, app);
+
+            // Its colour as it shows, seen once as the application is come to (each look a screenshot), the keyboard made
+            // again in it if it differs, through the preference written.
+            if (cameTo && AppThemes.For(this, app).Look == AppLook.Own && KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.PerAppKey, false))
+            {
+                MenuWatchService.Running?.SeeFieldColor(seen => AppThemes.SeenOnScreen(this, app, seen));
+            }
+        }
+
+        if (panel is not null && !OnHeadset && StandardColors.Chosen(this, StandardColors.App) != shownColors)
+        {
+            SetInputView(OnCreateInputView());
+        }
+    }
+
+    /// <summary>Whether the screen shows another keyboard in the keyboard's language than the one in sight, or the same one otherwise designed.</summary>
+    private bool ShowsAnother() => !OnHeadset && panel?.Keyboard is { } shown && watched is not null
+        && Keyboards.Selected(this, watched, KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay), KeyPlusPreferences.Language(this).Code) != shown;
 
     /// <summary>Tells the keyboard of its screen's preferences changing (kept as a field: Android holds its listeners weakly).</summary>
     private sealed class PreferencesWatch(KeyPlusKeyboard keyboard) : Java.Lang.Object, ISharedPreferencesOnSharedPreferenceChangeListener
@@ -1238,6 +1319,56 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Scale = scale;
             panel.ClipboardAbove = above;
         });
+    }
+
+    /// <summary>
+    /// On a headset, not in its own box (<see cref="FillBox"/>), the keyboard's window is a box all the same (1166 × 656 px on
+    /// the Galaxy XR), whose bottom Estándar XR left empty: its keys made as tall as fill it, as Gboard's there, the bar and
+    /// the band as they are. Again at each layout, until it does.
+    /// </summary>
+    private void FillHeadsetWindow(int width, int room)
+    {
+        if (panel is not { ShowsXr: true } || room <= 0)
+        {
+            return;
+        }
+
+        var tall = Tall(width);
+        var keys = panel.StandardHeight;
+        if (keys <= 0 || Math.Abs(room - tall) <= 1)
+        {
+            return;
+        }
+
+        var scale = Math.Clamp(panel.Scale * (keys + room - tall) / keys, PanelPlacement.MinScale, PanelPlacement.MaxScale);
+        if (Math.Abs(scale - panel.Scale) < 0.003f)
+        {
+            return;
+        }
+
+        Android.Util.Log.Info("KeyPlus", $"Headset's window {room}px: Estándar XR's keys {keys}px of {tall}px, scale {panel.Scale:0.###} to {scale:0.###}");
+
+        // Not in the middle of the layout pass that told the sizes.
+        panel.Root.Post(() => panel.Scale = scale);
+    }
+
+    /// <summary>
+    /// On a headset, Gboard's card there (docs/tODO/photos/gboard/xr-letters.png): the keys' box rounded, 55 px on its band of
+    /// 84 (our band the bar's height), and the room around it see-through, the window's ground and the keyboard's taken away.
+    /// </summary>
+    private void AsHeadsetCard(View keys, View under)
+    {
+        var radius = Dp(KeyPanel.ToolbarDp * 55f / 84);
+        keys.OutlineProvider = new RoundCard(radius);
+        keys.ClipToOutline = true;
+        under.Visibility = ViewStates.Invisible;
+        Window?.Window?.SetBackgroundDrawable(new Android.Graphics.Drawables.ColorDrawable(Android.Graphics.Color.Transparent));
+    }
+
+    /// <summary>A view's outline, a rectangle with round corners of a radius.</summary>
+    private sealed class RoundCard(float radius) : ViewOutlineProvider
+    {
+        public override void GetOutline(View? view, Android.Graphics.Outline? outline) => outline?.SetRoundRect(0, 0, view!.Width, view.Height, radius);
     }
 
     /// <summary>Never the whole screen with an editor of its own, as a keyboard is by default with the phone on its side.</summary>

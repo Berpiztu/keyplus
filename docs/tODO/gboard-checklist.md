@@ -13,7 +13,7 @@ d duda
 - [ x] Mayúsculas (⇧, twice for caps lock; the number row turns into symbols)
 - [ x] ?123 (symbols)
 - [ x] =\< (more symbols)
-- [ ] 1234 (number pad)
+- [x] 1234 (number pad): `StandardKeys.NumbersPage`, on Android and Windows, Gboard's strip of + − * / as + − * a row each, / held on *; the glasses' Estándar XR its own, Gboard's there (`XrNumbersPage`)
 - [ x] Emojis (the emoji keyboard)
 - [ x] PC: the owner's designs, and the Keys strip inside it
 

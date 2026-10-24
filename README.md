@@ -55,7 +55,8 @@ normal**, **Dos filas** (in Keys), **Minimizar**, **Ajustes de la app**,
 ventana** and **Cambiar de teclado** ([KeyboardFrame.cs](KeyboardFrame.cs)). Mover and Redimensionar lay a frame
 over the keyboard until **Hecho**: moving, it follows a finger held anywhere
 on it; resizing, the top and bottom bars size the keys and the side ones
-their width, and **Restablecer** takes it back to its usual size. Modo
+their width, **Restablecer** takes it back to its usual size and
+**Cancelar** to what it was when the frame opened. Modo
 normal docks it at the bottom on a ground as wide as the screen, which the
 app gives way to as to any keyboard: the keys as wide as it, or narrower,
 for a finger to reach them, where Mover left them, across and up; Modo ventana makes it a window of its own over the app, which
@@ -104,14 +105,19 @@ a window that does.
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
 | [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
 | [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Escribir por voz's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
-| [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where |
+| [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Tema's Por app, the colour beside the field typed in, on a screenshot |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
-| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema): Estándar, Estándar PC and those saved; each screen's docked and floating one |
+| [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Ajustes › Tema), by language: Estándar, Estándar PC and those saved; each screen's one in each language |
+| [ColorsRow.cs](ColorsRow.cs) | Tema's Colores row: Sistema, Claro, Oscuro, Personalizado, Por app with De la app, the two colours on hue, saturation and brightness bars, ↶ |
+| [AppThemes.cs](AppThemes.cs) | Por app's applications typed in, by package, with their colours: their theme's background made light or dark as the device is, or the colour seen on the screen |
+| [ThemeView.cs](ThemeView.cs) | Ajustes › Tema: the language and the keyboard, Guardar como and Borrar, and the keyboard drawn as the screen shows it, designed there |
+| [StandardDesigner.cs](StandardDesigner.cs) | Diseñar's pills, + Tecla's list and Hecho's saving, the keyboard's and Tema's alike |
+| [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji, Gboard's: tabs, the list by group, ABC, GIF, stickers, :-), ⌫ |
-| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design: its letters' rows as places of the keyboard it was made from and keys added, with their widths |
-| [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
+| [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design, on Android and Windows: its letters' rows as places of the keyboard it was made from, keys added and holes, with their widths |
+| [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys and the designer, [Keyboards.cs](windows/Keyboards.cs) the keyboards saved, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
@@ -121,24 +127,44 @@ a window that does.
 
 ## Using it
 
+- **On a headset (Galaxy XR), a third: Estándar XR**, Gboard's there
+  (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
+  keys, the digits over the letters, Tab, Bloq Mayús, ⇧ at both ends, ◀ and
+  ▶ by the space bar; the headset's first keyboard, with Gboard's band over
+  the bar and, in the dark, the keys darker than the ground, as there.
 - **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
   and the device's colours: **Estándar**, Gboard's keys, and **Estándar
-  PC**, a PC's (Spanish ISO, or US in English): F1–F12, Alt Gr's symbol in
-  each key's corner and on the keys while Alt Gr is on, ´ and ` as dead
+  PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
+  keycap, its Shift's symbol in its top corner and its Alt Gr's in its
+  bottom one (a letter's capital going without saying), and with Shift or
+  Alt Gr on only what the keys type then (Alt Gr's, the others blank), ´ and ` as dead
   keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key, the arrows
-  repeating. Each screen (phone, tablet upright or on its side, DeX) shows
-  one docked and one floating, chosen in **Ajustes › Tema**; at first
-  Estándar on a phone, Estándar PC on a tablet on its side and on DeX. The
-  PC designs made before are saved keyboards there, renamed or deleted
-  under Guardados. On the keyboard, one button (a phone or a computer
-  reading PC) switches between the two, and Flotante (a screen with keys,
-  crossed while floating) docks or floats it.
+  repeating; Estándar PC in Spanish and English as the owner designed it (Insert, ISO's
+  Enter, Inicio, Fin, RePág and AvPág). The keyboards go by language, a
+  PC's keys differing between them: each screen (phone, tablet upright or
+  on its side, DeX) shows one in each language, docked and floating alike,
+  chosen in **Ajustes › Tema**, 🌐 changing it with the language; at first
+  Estándar on a phone, Estándar PC on a tablet on its side and on DeX.
+  Tema shows the keyboard chosen as the screen does, in a box of one size,
+  copies it under a new name with Guardar como, deletes a saved one with
+  Borrar, and designs it there with Diseñar, the screen to itself. The PC
+  designs made before are saved keyboards in Spanish. On the keyboard, one
+  button (a phone or a computer reading PC) switches between the two, and
+  Flotante (a screen with keys, crossed while floating) docks or floats it.
 - **⊞ › Diseñar** designs a standard keyboard: a tap marks a key in blue,
-  − and + make it narrower or wider, a drag moves it; + Tecla adds Esc,
-  Tab, Supr, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞, Alt Gr, F1–F12,
-  ImpPnt or an arrow after it, + Fila adds a row, Quitar takes one out.
-  Hecho saves Estándar or Estándar PC as a new keyboard, this screen's
-  docked or floating as it was designed.
+  − and + make it narrower or wider, a drag moves it; + Tecla lists those
+  of Esc, Tab, Supr, Insert, Inicio, Fin, RePág, AvPág, Ctrl, Alt, ⊞,
+  Alt Gr, Bloq Mayús, F1–F12, ImpPnt and the arrows the keyboard lacks, and
+  the one tapped comes loose over the keys, to be dragged to its place; a
+  marked Enter tapped again takes its next shape, one row, ISO's L, the old
+  ANSI L or square, the shaped ones growing up into the row above as one
+  key, − and + making both parts wider or narrower alike;
+  + Fila adds a row at the top; + Columna adds a column at the right, a
+  hole a key wide at the end of every row, which a key let go on fills and
+  which, left empty, is room with nothing in it; Quitar takes one out.
+  Hecho saves Estándar or Estándar PC as a new keyboard of the language,
+  this screen's in it; designed floating, the design is the keyboard's
+  floating one, docked it stays as it was.
 - **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
   is dragged between them, its name in sight; the toolbar's buttons show
   their names as the mouse rests on them.
@@ -331,11 +357,21 @@ too small for it.
 ### Windows
 
 Berpiztu AI Keyboard for Windows (`windows/`, WPF, .NET 10) is the
-standard keyboards, Estándar and Estándar PC, with the Android one's
-layouts and signs, in a card that floats over every window and never takes
+standard keyboards, Estándar and Estándar PC, and those designed, with
+the Android one's layouts and signs, in a card that floats over every window and never takes
 the focus from the one typed in: its keys go to that window as Windows'
-own. Over the keys, the keyboard in sight (a phone or a computer), a click
-the other, and ✕; the toolbar and the handle under the keys move it, and
+own. Over the keys, the keyboard in sight (a phone for Estándar, a
+computer for the others), a click Estándar PC or Estándar, Diseñar and ✕.
+Diseñar is Android's designer: a click marks a key in blue, − and + make
+it narrower or wider, a drag moves it, + Tecla adds a PC's key the
+keyboard lacks, loose over the keys until dragged to its place; a marked
+Enter clicked again takes its next shape, one row, ISO's L, the old ANSI L
+or square, the shaped ones growing up into the row above, right-aligned over
+it, as one key; + Fila an
+empty row above, + Columna a column at the right (a hole at the end of
+every row, filled by a key let go on it), Quitar takes the marked one out; Hecho saves Estándar or
+Estándar PC as a new keyboard, a saved one in its place, and Cancelar
+leaves it as it was. The toolbar and the handle under the keys move it, and
 its edges and corners make it larger or smaller as any window's, the rows
 growing with it; its place, size, keyboard and language are kept. A drag
 over the letters is read by FUTO Swipe, built for Windows
@@ -347,8 +383,11 @@ ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
 the settings, an app of their own as on Android: Idiomas, Preferencias,
-Tema, Escritura deslizando el dedo, Escribir por voz and Información. The
-grid and the designer are not on Windows yet.
+Tema (Colores: Sistema, Claro, Oscuro, or Personalizado with the keyboard's and the accent's colour picked; by language, a PC's keys differing between them: the keyboard each
+language shows, copied under a new name with Guardar como or deleted, drawn
+as on screen and designed there one to one, the window to itself), Escritura
+deslizando el dedo, Escribir por voz, Solución de problemas and
+Información. The grid is not on Windows yet.
 
 ```powershell
 dotnet run --project windows\Berpiztu.KeyPlus.Windows.csproj

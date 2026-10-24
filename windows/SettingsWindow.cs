@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace Berpiztu.KeyPlus;
 
@@ -21,12 +23,22 @@ public sealed class SettingsWindow : Window
     private const double ListWidthDp = 220;
     private const double MarginDp = 20;
     private const double FieldGapDp = 16;
+
+    /// <summary>The room between the parts of Tema's Colores row, which holds many: the least that keeps them apart.</summary>
+    private const double RowGapDp = 4;
     private const double Step = 0.5;
+
+    /// <summary>Tema's choices' type and their hint's, smaller than the other pages', the room left to the keyboard drawn under them.</summary>
+    private const double CompactSize = 12;
+    private const double CompactHintSize = 11;
 
     /// <summary>The argument that starts the program as the settings.</summary>
     public const string Argument = "--settings";
 
     private readonly ContentControl page = new();
+
+    /// <summary>The pages' list, at the left, which Tema's designer takes the window from.</summary>
+    private readonly DockPanel side = new() { Width = ListWidthDp };
 
     public SettingsWindow()
     {
@@ -52,17 +64,17 @@ public sealed class SettingsWindow : Window
             list.Items.Add(name);
         }
 
-        list.SelectionChanged += (_, _) => page.Content = new ScrollViewer
+        list.SelectionChanged += (_, _) =>
         {
-            Content = pages[Math.Max(0, list.SelectedIndex)].Page(),
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            appsWatch?.Dispose();
+            appsWatch = null;
+            ShowPage(pages[Math.Max(0, list.SelectedIndex)].Page());
         };
         list.SelectedIndex = 0;
 
         // Under the pages, the keyboard opened: started, or shown where it runs hidden.
         var open = new Button { Content = Texts.Get(Resource.String.open_keyboard), Margin = new Thickness(MarginDp / 2), HorizontalAlignment = HorizontalAlignment.Stretch };
         open.Click += (_, _) => System.Diagnostics.Process.Start(Environment.ProcessPath!);
-        var side = new DockPanel { Width = ListWidthDp };
         DockPanel.SetDock(open, Dock.Bottom);
         side.Children.Add(open);
         side.Children.Add(list);
@@ -73,6 +85,9 @@ public sealed class SettingsWindow : Window
         panes.Children.Add(page);
         Content = panes;
     }
+
+    /// <summary>A page in the window's right, scrolling where it is taller.</summary>
+    private void ShowPage(FrameworkElement shown) => page.Content = new ScrollViewer { Content = shown, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
     /// <summary>The settings started as a program of their own; where they run already, that one comes to the front.</summary>
     public static void Start() => System.Diagnostics.Process.Start(Environment.ProcessPath!, Argument);
@@ -92,20 +107,410 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
-    /// <summary>Tema: the keyboard the card shows, Estándar or Estándar PC, as the toolbar's switch changes it.</summary>
-    private static FrameworkElement ThemePage()
+    /// <summary>
+    /// Tema, as Android's, by language (a PC's keys differ between them), its
+    /// parts each of one size whatever they hold, so nothing on the page moves:
+    /// the language looked at (the one typed in at first, left as it is);
+    /// the keyboard shown in it, chosen from that language's list (as the
+    /// toolbar's switch changes it); its colours (Sistema, Claro, Oscuro), the
+    /// page made again in them; a name with Guardar como, which copies the
+    /// keyboard chosen under it (to duplicate it, or design a copy), and
+    /// Borrar, for one saved; and the keyboard drawn as the card shows it,
+    /// zoomed whole to the page, its proportions kept, only to be seen, with
+    /// Diseñar in its bar's place, which designs it there one to one, as it
+    /// will be seen, the window to itself (made larger where it is smaller
+    /// than the keyboard), Hecho changing the keyboard on screen at once.
+    /// </summary>
+    private FrameworkElement ThemePage()
     {
-        var preferences = KeyboardPreferences.Read();
-        var pc = preferences.Pc ?? true;
-        var form = Form(Resource.String.theme);
-        foreach (var (name, isPc) in new[] { (Resource.String.keyboard_standard, false), (Resource.String.keyboard_standard_pc, true) })
+        // Docked, the preview last, so designing it fills the window.
+        var form = new DockPanel { Margin = new Thickness(MarginDp) };
+        var title = Heading(Resource.String.theme);
+        DockPanel.SetDock(title, Dock.Top);
+        form.Children.Add(title);
+        var language = KeyboardPreferences.Read().TypingLanguage;
+        var languages = new ComboBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp, 0) };
+        var keyboards = new ComboBox();
+        var name = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
+        var saveAs = new Button { Content = Texts.Get(Resource.String.save_as), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var delete = new Button { Content = Texts.Get(Resource.String.delete), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var naming = new DockPanel();
+        DockPanel.SetDock(delete, Dock.Right);
+        DockPanel.SetDock(saveAs, Dock.Right);
+        naming.Children.Add(delete);
+        naming.Children.Add(saveAs);
+        naming.Children.Add(name);
+
+        // The preview in the colours of the application looked at, with Por app on, its window's as the keyboard last saw it
+        // there; else Tema's.
+        var lookedAt = AppLookedAt();
+        var colors = Palette.Read(KeyboardPreferences.Read().ColorsIn(lookedAt, lookedAt is null ? null : Palette.Parse(AppColors.For(lookedAt).WindowColor)));
+        // The row smaller as a whole where the page is narrower than it, never cut.
+        var coloring = new Viewbox { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, HorizontalAlignment = HorizontalAlignment.Left, Child = ColorsRow() };
+        var preview = new KeyboardSurface(colors) { Types = false };
+        // The keyboard as it shows now, docked or floating, designed so.
+        var docked = KeyboardPreferences.Read().Docked;
+        var designer = new KeyboardDesigner(colors, preview) { Docked = docked };
+        // Diseñar in the bar's place, a pill as the bar's: designing, the bar stands there and the preview keeps its size.
+        var design = KeyboardDesigner.Pill(colors, Texts.Get(Resource.String.design), done: false);
+        design.HorizontalAlignment = HorizontalAlignment.Left;
+        var bar = new Grid { Height = KeyboardWindow.BarDp };
+        bar.Children.Add(design);
+        bar.Children.Add(designer.Bar);
+        var keysPlace = new Grid();
+        keysPlace.Children.Add(preview);
+        keysPlace.Children.Add(designer.ExtraKeys);
+        var card = new StackPanel();
+        card.Children.Add(bar);
+        card.Children.Add(keysPlace);
+        // The card as it is on screen: a box of one size whatever the keyboard chosen, the card's width and Estándar PC's rows
+        // at its rows' height, zoomed whole to the page, so only the settings' size changes it, and one to one while designed.
+        // The keyboard chosen at its own size at its top, a shorter one leaving room under it, a taller one (a design's more
+        // rows) made smaller to fit.
+        var (keysWidth, rowScale) = KeyboardWindow.KeptKeys();
+        var rows = StandardKeys.Page(StandardPage.Pc, StandardKeys.Spanish).Count;
+        card.Width = keysWidth;
+        var box = new Border
         {
-            var option = new RadioButton { Content = Texts.Get(name), IsChecked = pc == isPc, GroupName = "keyboard" };
-            option.Checked += (_, _) => KeyboardPreferences.Read().With(isPc).Keep();
-            form.Children.Add(option);
+            Width = keysWidth,
+            Height = KeyboardWindow.BarDp + KeyboardSurface.HeightOf(rows, rowScale),
+            Background = new SolidColorBrush(colors.Ground),
+            CornerRadius = new CornerRadius(KeyboardWindow.CardCornerDp),
+            ClipToBounds = true,
+            Child = new Viewbox { Stretch = Stretch.Uniform, StretchDirection = StretchDirection.DownOnly, VerticalAlignment = VerticalAlignment.Top, Child = card },
+        };
+
+        // The language, the keyboard and its name in two rows of small type, each label beside its control, the room left to the keyboard drawn under them.
+        TextBlock Caption(int text) => new() { Text = Texts.Get(text), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) };
+        var languageLabel = Caption(Resource.String.languages);
+        var keyboardLabel = Caption(Resource.String.keyboard);
+        var choosing = new DockPanel { Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
+        foreach (var part in new FrameworkElement[] { languageLabel, languages, keyboardLabel })
+        {
+            DockPanel.SetDock(part, Dock.Left);
+            choosing.Children.Add(part);
         }
 
+        choosing.Children.Add(keyboards);
+        var controls = new StackPanel();
+        TextElement.SetFontSize(controls, CompactSize);
+        controls.Children.Add(choosing);
+        controls.Children.Add(coloring);
+        controls.Children.Add(naming);
+        controls.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, FontSize = CompactHintSize, Margin = new Thickness(0, 2, 0, FieldGapDp / 2) });
+        DockPanel.SetDock(controls, Dock.Top);
+        form.Children.Add(controls);
+        var zoom = new Viewbox { Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Child = box };
+        form.Children.Add(zoom);
+
+        // Designing, the keyboard alone in the window and one to one, the window made larger where it is smaller than the
+        // keyboard; then the page as it was, the keyboard zoomed again.
+        void Designing(bool on)
+        {
+            themeDesigning = on;
+            side.Visibility = title.Visibility = controls.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+            zoom.Stretch = on ? Stretch.None : Stretch.Uniform;
+            if (on && form.ActualWidth < box.Width)
+            {
+                Width += box.Width - form.ActualWidth;
+            }
+        }
+
+        var shown = Keyboards.Selected(KeyboardPreferences.Read(), language.Code);
+        var filling = false;
+
+        // The keyboard chosen as the card shows it: its keys, its design and the language looked at, its rows as tall as the card's; its name to copy it under, Borrar for one saved.
+        void Show(KeyboardEntry keyboard)
+        {
+            shown = keyboard;
+            name.Text = keyboard.Name;
+            delete.IsEnabled = !keyboard.BuiltIn;
+            preview.KeyLanguage = language;
+            preview.Pc = keyboard.Base == Keyboards.StandardPcBase;
+            preview.Design = StandardDesign.FromText(keyboard.DesignFor(docked));
+            preview.Height = preview.HeightAt(rowScale);
+        }
+
+        // The language's keyboards in the list, the one it shows chosen.
+        void Fill()
+        {
+            filling = true;
+            keyboards.Items.Clear();
+            var chosen = Keyboards.Selected(KeyboardPreferences.Read(), language.Code);
+            foreach (var keyboard in Keyboards.All(language.Code))
+            {
+                keyboards.Items.Add(new ComboBoxItem { Content = keyboard.Name, Tag = keyboard });
+                if (keyboard.Id == chosen.Id)
+                {
+                    keyboards.SelectedIndex = keyboards.Items.Count - 1;
+                }
+            }
+
+            filling = false;
+            Show(chosen);
+        }
+
+        foreach (var known in StandardKeys.Languages)
+        {
+            languages.Items.Add(new ComboBoxItem { Content = known.Name, Tag = known });
+        }
+
+        languages.SelectedIndex = StandardKeys.Languages.ToList().IndexOf(language);
+        languages.SelectionChanged += (_, _) =>
+        {
+            if (languages.SelectedItem is ComboBoxItem { Tag: StandardLanguage known })
+            {
+                language = known;
+                Fill();
+            }
+        };
+
+        keyboards.SelectionChanged += (_, _) =>
+        {
+            if (!filling && keyboards.SelectedItem is ComboBoxItem { Tag: KeyboardEntry keyboard })
+            {
+                Keyboards.Select(language.Code, keyboard.Id);
+                Show(keyboard);
+            }
+        };
+        saveAs.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(name.Text))
+            {
+                return;
+            }
+
+            // A copy under the name written, chosen to be designed; the keyboard it was made from stays as it is.
+            var copy = Keyboards.SaveAs(name.Text.Trim(), shown.Base, shown.Design, language.Code, shown.DockedDesign);
+            Keyboards.Select(language.Code, copy.Id);
+            Fill();
+        };
+        delete.Click += (_, _) =>
+        {
+            var asked = MessageBox.Show(Texts.Get(Resource.String.windows_delete_ask, shown.Name), shown.Name, MessageBoxButton.OKCancel, MessageBoxImage.Question);
+            if (asked == MessageBoxResult.OK)
+            {
+                Keyboards.Delete(shown.Id);
+                Fill();
+            }
+        };
+        preview.RowsChanged += () => preview.Height = preview.HeightAt(rowScale);
+        design.Clicked += () =>
+        {
+            design.Visibility = Visibility.Hidden;
+            Designing(true);
+            designer.Start(shown);
+        };
+        designer.Ended += (_, _, _) =>
+        {
+            design.Visibility = Visibility.Visible;
+            Designing(false);
+            Fill();
+        };
+
+        Fill();
+
+        // The applications' colours changed by the keyboard (an application typed in, its window's colour seen): the page drawn
+        // again in them, not while the keyboard is designed here.
+        appsWatch?.Dispose();
+        appsWatch = AppColors.Watch(() =>
+        {
+            if (!themeDesigning)
+            {
+                ShowPage(ThemePage());
+            }
+        });
         return form;
+    }
+
+    /// <summary>The applications' colours watched while Tema is shown; whether its keyboard is being designed.</summary>
+    private IDisposable? appsWatch;
+    private bool themeDesigning;
+
+    /// <summary>One of Personalizado's colours chosen: the two as they were kept for Deshacer, the page drawn again in the new ones, the keyboard taking them at once.</summary>
+    private void KeepColors(Func<KeyboardPreferences, KeyboardColors> change)
+    {
+        var kept = KeyboardPreferences.Read();
+        (kept.With(change(kept)) with { Before = kept.Colors }).Keep();
+        ShowPage(ThemePage());
+    }
+
+    /// <summary>The application looked at in Por aplicación, kept while the page is drawn again.</summary>
+    private string? lookedAtApp;
+
+    /// <summary>The application looked at, with Por aplicación on: the one chosen, or the first typed in; none, Tema's colours.</summary>
+    private string? AppLookedAt()
+    {
+        var apps = AppColors.All();
+        lookedAtApp = lookedAtApp is not null && apps.ContainsKey(lookedAtApp) ? lookedAtApp : apps.Keys.FirstOrDefault();
+        return KeyboardPreferences.Read().PerApp ? lookedAtApp : null;
+    }
+
+    /// <summary>
+    /// Colores in one row of one size whatever it holds: Tema's choice (Sistema, Claro, Oscuro, Personalizado), and, under
+    /// Personalizado alone, Por app, then, with it on, the applications typed in and, for the one chosen, De la app (its
+    /// window's colour), then the two colours (that application's, with one chosen) and Deshacer. A part that does not apply is
+    /// hidden in its place, the list as wide as its longest choice; each change kept at once, the page drawn again in it,
+    /// the keyboard taking it.
+    /// </summary>
+    private StackPanel ColorsRow()
+    {
+        var kept = KeyboardPreferences.Read();
+        var general = Palette.Read(kept);
+        var custom = general.Look == KeyboardLook.Custom;
+        var app = custom ? AppLookedAt() : null;
+        var appColor = app is not null ? AppColors.For(app) : null;
+        Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Hidden;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
+        row.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.look), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, RowGapDp, 0) });
+
+        var looks = new ComboBox { VerticalAlignment = VerticalAlignment.Center };
+        foreach (var look in KeyboardLooks.All)
+        {
+            looks.Items.Add(new ComboBoxItem { Content = Texts.Get(KeyboardLooks.Name(look)), Tag = look });
+        }
+
+        looks.SelectedIndex = Array.IndexOf(KeyboardLooks.All, general.Look);
+        WidestOf(looks, [.. KeyboardLooks.All.Select(look => Texts.Get(KeyboardLooks.Name(look)))]);
+        looks.SelectionChanged += (_, _) =>
+        {
+            if (looks.SelectedItem is ComboBoxItem { Tag: KeyboardLook look } && look != general.Look)
+            {
+                (KeyboardPreferences.Read() with { Look = look }).Keep();
+                ShowPage(ThemePage());
+            }
+        };
+        row.Children.Add(looks);
+
+        // The two colours: the application's chosen, else Tema's Personalizado's; hidden for an application taking its window's.
+        void Choose(Func<AppColor, AppColor> forApp, Func<KeyboardColors, KeyboardColors> forTema)
+        {
+            if (app is not null && appColor is not null)
+            {
+                AppColors.Set(app, forApp(appColor) with { Look = AppLook.Custom });
+                ShowPage(ThemePage());
+            }
+            else
+            {
+                KeepColors(keptNow => forTema(keptNow.Colors));
+            }
+        }
+
+        // Each colour as the keyboard shows it: the application's, or Tema's.
+        var showing = app is not null && appColor is not null ? Palette.Read(kept.ColorsIn(app, Palette.Parse(appColor.WindowColor))) : general;
+        var keyShown = showing.KeyColor ?? showing.Ground;
+        var accentShown = showing.AccentColor ?? showing.Primary;
+        var colorsShown = Shown(custom && appColor?.Look != AppLook.Own);
+        var keyColor = ColorButton(Resource.String.look_keyboard, keyShown, colorsShown, chosen => Choose(color => color with { KeyColor = chosen }, colors => colors with { KeyColor = chosen }));
+        var accentColor = ColorButton(Resource.String.look_accent, accentShown, colorsShown, chosen => Choose(color => color with { AccentColor = chosen }, colors => colors with { AccentColor = chosen }));
+
+        // Deshacer, Tema's Personalizado's: its two colours as they were before the last one was chosen, one step back, hidden in
+        // its place once used, with none, for the other choices, or while an application's colours are shown.
+        var undo = new Button { Content = "↶", Padding = new Thickness(RowGapDp, 0, RowGapDp, 0), Margin = new Thickness(RowGapDp, 0, 0, 0) };
+        undo.Visibility = Shown(custom && app is null && kept.Before is not null);
+        undo.Click += (_, _) =>
+        {
+            if (KeyboardPreferences.Read() is { Before: { } before } keptNow)
+            {
+                (keptNow.With(before) with { Before = null }).Keep();
+                ShowPage(ThemePage());
+            }
+        };
+
+        // Por app and the applications typed in, the list filled again as it opens: the keyboard adds to it.
+        var on = new CheckBox { Content = Texts.Get(Resource.String.per_app), IsChecked = kept.PerApp, Visibility = Shown(custom), VerticalAlignment = VerticalAlignment.Center, MinWidth = 0, Margin = new Thickness(RowGapDp * 2, 0, 0, 0) };
+        on.Click += (_, _) =>
+        {
+            (KeyboardPreferences.Read() with { PerApp = on.IsChecked == true }).Keep();
+            ShowPage(ThemePage());
+        };
+        var apps = new ComboBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(RowGapDp, 0, 0, 0), Visibility = Shown(custom && kept.PerApp) };
+        void FillApps()
+        {
+            apps.Items.Clear();
+            foreach (var name in AppColors.All().Keys)
+            {
+                apps.Items.Add(name);
+            }
+
+            apps.SelectedItem = app;
+        }
+
+        FillApps();
+        apps.DropDownOpened += (_, _) => FillApps();
+        apps.SelectionChanged += (_, _) =>
+        {
+            if (apps.SelectedItem is string picked && picked != app)
+            {
+                lookedAtApp = picked;
+                ShowPage(ThemePage());
+            }
+        };
+
+        // De la app: the application chosen takes its window's colour.
+        var own = new CheckBox { Content = Texts.Get(Resource.String.app_own), IsChecked = appColor?.Look == AppLook.Own, Visibility = Shown(appColor is not null), VerticalAlignment = VerticalAlignment.Center, MinWidth = 0, Margin = new Thickness(RowGapDp, 0, 0, 0) };
+        own.Click += (_, _) =>
+        {
+            if (app is null || appColor is null)
+            {
+                return;
+            }
+
+            if (own.IsChecked == true)
+            {
+                AppColors.Set(app, appColor with { Look = AppLook.Own });
+            }
+            else
+            {
+                // Its own colours exactly as it showed them, to be changed from there: its window's, and Windows' accent with
+                // Windows' own tones.
+                AppColors.Set(app, appColor with { Look = AppLook.Custom, KeyColor = appColor.WindowColor ?? appColor.KeyColor, AccentColor = null });
+            }
+
+            ShowPage(ThemePage());
+        };
+
+        // In the owner's order: Por app, the application, De la app, then the colours and Deshacer.
+        foreach (var part in new FrameworkElement[] { on, apps, own, keyColor, accentColor, undo })
+        {
+            row.Children.Add(part);
+        }
+
+        return row;
+    }
+
+    /// <summary>
+    /// A list as wide as the longest of the words it may hold, whatever it holds, so its choices change and the row does
+    /// not move: as drawn, its width less its word's is its own frame and arrow, to which the longest word is added.
+    /// </summary>
+    private static void WidestOf(ComboBox list, IReadOnlyList<string> words) => list.Loaded += (_, _) =>
+    {
+        double WidthOf(string word) => new FormattedText(word, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            new Typeface(list.FontFamily, list.FontStyle, list.FontWeight, list.FontStretch), list.FontSize, Brushes.Black,
+            VisualTreeHelper.GetDpi(list).PixelsPerDip).WidthIncludingTrailingWhitespace;
+        var shown = list.SelectedItem is ComboBoxItem { Content: string word } ? word : "";
+        list.Width = list.ActualWidth - WidthOf(shown) + words.Max(WidthOf);
+    };
+
+    /// <summary>
+    /// A colour of Personalizado's: a button with the colour shown and its name, which opens Windows' own colour picker on
+    /// it; one chosen is told as it is kept, #RRGGBB.
+    /// </summary>
+    private Button ColorButton(int name, Color shown, Visibility visibility, Action<string> chosen)
+    {
+        var face = new StackPanel { Orientation = Orientation.Horizontal };
+        face.Children.Add(new Border { Width = 14, Height = 14, Background = new SolidColorBrush(shown), BorderBrush = SystemColors.ControlTextBrush, BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, RowGapDp, 0), VerticalAlignment = VerticalAlignment.Center });
+        face.Children.Add(new TextBlock { Text = Texts.Get(name), VerticalAlignment = VerticalAlignment.Center });
+        var button = new Button { Content = face, Visibility = visibility, Padding = new Thickness(RowGapDp, 0, RowGapDp, 0), Margin = new Thickness(RowGapDp, 0, 0, 0) };
+        button.Click += (_, _) =>
+        {
+            using var picker = new System.Windows.Forms.ColorDialog { FullOpen = true, AnyColor = true, Color = System.Drawing.Color.FromArgb(shown.R, shown.G, shown.B) };
+            if (picker.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                chosen(Palette.Text(Color.FromRgb(picker.Color.R, picker.Color.G, picker.Color.B)));
+            }
+        };
+        return button;
     }
 
     /// <summary>Escritura deslizando el dedo, as Android's: swiping over the letters and its trail; FUTO Swipe's notice in sight, as its licence asks.</summary>
@@ -294,9 +699,13 @@ public sealed class SettingsWindow : Window
     private static StackPanel Form(int name)
     {
         var form = new StackPanel { Margin = new Thickness(MarginDp) };
-        form.Children.Add(new TextBlock { Text = Texts.Get(name), FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, FieldGapDp) });
+        form.Children.Add(Heading(name));
         return form;
     }
+
+    /// <summary>A page's name, on its top.</summary>
+    private static TextBlock Heading(int name) =>
+        new() { Text = Texts.Get(name), FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, FieldGapDp) };
 
     private static Slider Stepped(double least, double most, double value) =>
         new() { Minimum = least, Maximum = most, Value = value, TickFrequency = Step, IsSnapToTickEnabled = true, SmallChange = Step, LargeChange = 1, VerticalAlignment = VerticalAlignment.Center };

@@ -45,11 +45,14 @@
 
   <ItemGroup>
     <Compile Include="..\StandardKeys.cs" Link="Shared\StandardKeys.cs" />
+    <Compile Include="..\StandardDesign.cs" Link="Shared\StandardDesign.cs" />
+    <Compile Include="..\KeyboardEntry.cs" Link="Shared\KeyboardEntry.cs" />
+    <Compile Include="..\KeyboardLook.cs" Link="Shared\KeyboardLook.cs" />
     <Compile Include="..\SwipeWords.cs" Link="Shared\SwipeWords.cs" />
     <Compile Include="..\EmojiList.cs" Link="Shared\EmojiList.cs" />
     <Compile Include="..\VoiceTyping.cs" Link="Shared\VoiceTyping.cs" />
     <Compile Include="..\WordSuggestions.cs" Link="Shared\WordSuggestions.cs" />
-    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_keyplus.xml"
+    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_keyplus.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
     <!-- The words, the Android keyboard's, in English and Spanish (Texts.cs). -->
     <Content Include="..\Resources\values\strings.xml" Link="strings\values\strings.xml" CopyToOutputDirectory="PreserveNewest" />
