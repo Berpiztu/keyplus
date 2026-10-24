@@ -441,7 +441,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             Enter = PerformEnter,
             Dockable = false,
             PasteImage = PasteImage,
-            Settings = [new("Cambiar de teclado", ShowKeyboardPicker)],
+            Settings = [new(GetString(Resource.String.switch_keyboard)!, ShowKeyboardPicker)],
         };
         placed.Mode = panel.Mode;
         panel.Scale = placed.Scale;
@@ -559,12 +559,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var windowed = placed?.Floating == true;
         return
         [
-            new("Mover", () => ShowFrame(resizing: false), "✥"),
-            new("Redimensionar", () => ShowFrame(resizing: true), "⇲"),
-            new("Diseñar", () => panel?.Design(), "✎"),
-            new("Modo normal", () => SetWindowed(false), "⬓", InUse: !windowed),
-            new("Modo ventana", () => SetWindowed(true), "❐", InUse: windowed),
-            new("Cambiar de teclado", ShowKeyboardPicker, "🌐"),
+            new(GetString(Resource.String.move)!, () => ShowFrame(resizing: false), "✥"),
+            new(GetString(Resource.String.resize)!, () => ShowFrame(resizing: true), "⇲"),
+            new(GetString(Resource.String.design)!, () => panel?.Design(), "✎"),
+            new(GetString(Resource.String.mode_normal)!, () => SetWindowed(false), "⬓", InUse: !windowed),
+            new(GetString(Resource.String.mode_window)!, () => SetWindowed(true), "❐", InUse: windowed),
+            new(GetString(Resource.String.switch_keyboard)!, ShowKeyboardPicker, "🌐"),
         ];
     }
 

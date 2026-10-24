@@ -88,7 +88,7 @@ Default section order:
 - Android app (.NET 10, `net10.0-android`, API 33 and later, arm64 only) that sends the keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, arrows, Home, End, pages) to the focused editor
 - Two products from one code base, chosen by `-p:KeyPlusProduct`:
   - `Popup` (default): KeyPlus, `ai.berpiztu.keyplus`, an accessibility service whose key strip sits above the keyboard in use
-  - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR), with an optional accessibility service of its own (`MenuWatchService.cs`) that only sees menus open and close, for Apartarse también de los menús, and the colour just inside the field typed in on a screenshot, for Tema's Por app (De la app); the user turns it on, and a debug install may turn it off again
+  - `Keyboard`: Berpiztu AI Keyboard, `ai.berpiztu.keyboard`, an input method of its own, for phones and headsets (Galaxy XR), with an optional accessibility service of its own (`MenuWatchService.cs`) that only sees menus open and close, for Also move out of the way of menus, and the colour just inside the field typed in on a screenshot, for Theme's Per app (App's); the user turns it on, and a debug install may turn it off again
 - `README.md` is the user and build guide and holds the file-by-file map of the sources
 - `windows/`: Berpiztu AI Keyboard for Windows, the standard keyboards in a floating card, a project of its own; its installer is `build-windows-installer.ps1` with `packaging/windows-install` (WiX 5, per-user MSI), built by the Release workflow beside the APKs
 
@@ -142,12 +142,13 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
-- Galaxy XR support stays as it is: phone changes go through the non-headset path; never remove or alter the headset path (`OnHeadset`, `KeyWindowActivity.cs`, `KeyPlusKeyboard.FillBox`, `KeyPlusService.AttachKeys`); on the headset Berpiztu AI Keyboard is the phone's keyboard by default, the headset's own (its box) where Preferencias asks for it (`KeyPlusPreferences.HeadsetBoxKey`)
+- Galaxy XR support stays as it is: phone changes go through the non-headset path; never remove or alter the headset path (`OnHeadset`, `KeyWindowActivity.cs`, `KeyPlusKeyboard.FillBox`, `KeyPlusService.AttachKeys`); on the headset Berpiztu AI Keyboard is the phone's keyboard by default, the headset's own (its box) where Preferences asks for it (`KeyPlusPreferences.HeadsetBoxKey`)
 - Install on the owner's phone or headset only when the owner says "install" for that build
 - The owner's keyboard designs are never lost: before any install, any change to an emulator (wipe, new image) and every commit, run `.\backup-designs.ps1`; it copies each design that changed since its last copy to `docs/tODO/designs/` as a new file, never over an old one, and those copies are committed
 - The owner's rule number one: what a screen holds never moves what is on it; a choice made, a list longer or shorter, a language, a mode or a longer text changes no part's size or place (lists that vary are drop-downs or boxes of one size, a button out of use is hidden in its place, a preview is a box of one size)
 - Space is never wasted: margins, padding and fixed widths are the least a finger and the text need, horizontal and vertical; a control is as wide as its content (a sign's button its sign and a finger's margin), and the room left goes to what holds text
 - Every feature or fix is made for the Android and the Windows keyboard alike; the settings are an app of their own on both, independent of the keyboard
+- Everything written is in English, release notes and docs included: a setting, a button or a key is named by its English label (`Resources/values/strings.xml`: Theme, Design, Standard PC, Check now), never the Spanish one; a label the code has only in Spanish is translated
 
 ## Child DOX Index
 
@@ -162,7 +163,7 @@ Root-owned paths without their own AGENTS.md:
 |------|--------|
 | `*.cs` | The app's sources, mapped file by file in `README.md` |
 | `Berpiztu.KeyPlus.csproj`, `AndroidManifest.xml` | Build, products, versions, signing, shared manifest |
-| `Resources/` | Icons (`drawable/`: the app's, and the standard keyboard's and the settings' Material Symbols `ic_key_*`, `ic_tool_*`, `ic_grid_*`, `ic_settings_*`), strings in English and Spanish (`values/`, `values-es/`), the accessibility service and keyboard descriptors (`xml/`) |
+| `Resources/` | Icons (`drawable/`: the app's, and the standard keyboard's and the settings' Material Symbols `ic_key_*`, `ic_tool_*`, `ic_grid_*`, `ic_settings_*`, and `ic_menu_*`, a thing copied's menu), strings in English and Spanish (`values/`, `values-es/`), the accessibility service and keyboard descriptors (`xml/`) |
 | `*.ps1`, `packaging/` | Build, deploy, enable and release scripts |
 | `.github/workflows/release.yml` | Release build and publishing |
 | `docs/release-notes/` | Each release's notes, required by `deploy-release.ps1` |
