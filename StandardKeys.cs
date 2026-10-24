@@ -87,6 +87,10 @@ public enum StandardPage
     /// <summary>Estándar XR's letters and symbols, Gboard's on the Galaxy XR: a tablet's keys.</summary>
     XrLetters,
     XrSymbols,
+
+    /// <summary>1234: the number pad, Gboard's; Estándar XR's, Gboard's on the Galaxy XR.</summary>
+    Numbers,
+    XrNumbers,
 }
 
 /// <summary>
@@ -156,6 +160,8 @@ public static class StandardKeys
                 StandardPage.Pc => language == English ? UsPcPage() : SpanishPcPage(),
                 StandardPage.XrLetters => XrLettersPage(language),
                 StandardPage.XrSymbols => XrSymbolsPage(),
+                StandardPage.Numbers => NumbersPage(),
+                StandardPage.XrNumbers => XrNumbersPage(),
                 _ => LettersPage(language),
             };
         }
@@ -271,6 +277,54 @@ public static class StandardKeys
         [new("=\\<", StandardAction.MoreSymbols, Width: 2f, Look: StandardLook.Function), .. Characters("*\"':;!?,./"), Gap],
         [.. XrBottomRow(new("ABC", StandardAction.Letters, Look: StandardLook.Function), 1.5f, 6.5f)],
     ];
+
+    /// <summary>
+    /// 1234, Gboard's number pad (docs/tODO/photos/gboard/fold-numbers.png), as measured there: the digits in three rows
+    /// 1.7 keys wide each, a column of the operations at their left and %, a space and ⌫ at their right, a key wide each;
+    /// under them ABC, the comma, !?# (the symbols), 0, =, the full stop and Enter. Gboard's left column is a strip of
+    /// four, + − * /, scrolled in three rows' room: here + − and * a row each, / held on *.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> NumbersPage()
+    {
+        const float digit = 1.7f;
+        StandardKey Digit(char text) => new(text.ToString(), Text: text.ToString(), Width: digit);
+        StandardKey Side(string text, string? held = null) => new(text, Text: text, Hint: held, Look: StandardLook.Function);
+        return
+        [
+            [Side("+"), Digit('1'), Digit('2'), Digit('3'), Side("%")],
+            [Side("-"), Digit('4'), Digit('5'), Digit('6'), new("␣", Text: " ", Look: StandardLook.Function)],
+            [Side("*", held: "/"), Digit('7'), Digit('8'), Digit('9'), Delete() with { Width = 1f }],
+            [
+                new("ABC", StandardAction.Letters, Look: StandardLook.Pill),
+                Side(",") with { Width = 0.65f },
+                new("!?#", StandardAction.Symbols, Width: 0.95f),
+                new("0", Text: "0", Width: 1.75f),
+                new("=", Text: "=", Width: 0.95f),
+                Side(".") with { Width = 0.65f },
+                Enter() with { Width = 1.15f },
+            ],
+        ];
+    }
+
+    /// <summary>
+    /// Estándar XR's 1234, Gboard's number pad on the Galaxy XR (captured there, 2026-10-23): three columns of signs, the
+    /// digits 2.5 keys wide in three rows, two columns of operations, and a column of ⌫, Enter and a space; under them ABC
+    /// and !?# (the symbols), the comma, 0 and the full stop under the digits, ◀ ▶ under the operations, and ABC again.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> XrNumbersPage()
+    {
+        const float digit = 2.5f;
+        const float right = 1.25f;
+        StandardKey Wide(char text) => new(text.ToString(), Text: text.ToString(), Width: digit);
+        StandardKey Letters(float width) => new("ABC", StandardAction.Letters, Width: width, Look: StandardLook.Function);
+        return
+        [
+            [.. Characters("():"), Wide('1'), Wide('2'), Wide('3'), .. Characters("+-"), Delete() with { Width = right }],
+            [.. Characters("!?;"), Wide('4'), Wide('5'), Wide('6'), .. Characters("*/"), Enter() with { Width = right }],
+            [.. Characters("#$%"), Wide('7'), Wide('8'), Wide('9'), .. Characters("=&"), new("␣", Text: " ", Width: right, Look: StandardLook.Function)],
+            [Letters(1.5f), new("!?#", StandardAction.Symbols, Width: 1.5f, Look: StandardLook.Function), Wide(','), Wide('0'), Wide('.'), PcKey("◀", Keycode.DpadLeft), PcKey("▶", Keycode.DpadRight), Letters(right)],
+        ];
+    }
 
     /// <summary>Tab's, Bloq Mayús's and the keys after p's width on Estándar XR.</summary>
     private const float XrSideWidth = 1.5f;

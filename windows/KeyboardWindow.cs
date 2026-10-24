@@ -192,7 +192,6 @@ public sealed class KeyboardWindow : Window
 
         keys = new KeyboardSurface(colors);
         keys.NextLanguage += NextLanguage;
-        keys.NotMade += what => Notice($"{what}: todavía no está hecho");
         keys.Swiped += async (path, capital, capitals) => keys.TypeSwiped(await swipe.Words(path), capital, capitals);
         keys.Suggestions += ShowSuggestions;
         keys.Offered += words => ShowSuggestions(words, null);

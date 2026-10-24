@@ -1201,7 +1201,7 @@ public sealed class StandardKeyboard : View
                 ShowPage(BasePage);
                 break;
             case StandardAction.Numbers:
-                NotMade?.Invoke("1234");
+                ShowPage(xr ? StandardPage.XrNumbers : StandardPage.Numbers);
                 break;
             case StandardAction.Language:
                 NextLanguage?.Invoke();

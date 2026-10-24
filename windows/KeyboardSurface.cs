@@ -161,9 +161,6 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>🌐, or the language changed: the language to show next.</summary>
     public event Action? NextLanguage;
 
-    /// <summary>A key whose part is not made on Windows yet: what it is, to say so.</summary>
-    public event Action<string>? NotMade;
-
     /// <summary>The comma held, Estándar's ☺: the emoji, as Gboard opens them.</summary>
     public event Action? EmojisAsked;
 
@@ -1046,7 +1043,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 ShowPage(StandardPage.Letters);
                 break;
             case StandardAction.Numbers:
-                NotMade?.Invoke("1234");
+                ShowPage(StandardPage.Numbers);
                 break;
             case StandardAction.Language:
                 NextLanguage?.Invoke();
