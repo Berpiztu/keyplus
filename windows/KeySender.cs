@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Android.Views;
 
@@ -6,7 +7,8 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// Keys and text sent to the window in the foreground, as Windows' own
 /// (SendInput): text as Unicode characters, whatever the keyboard layout;
-/// a key by its virtual key code, with Ctrl, Alt, ⊞ and Shift held around it.
+/// a key by its virtual key code, with Ctrl, Alt, ⊞ and Shift held around it;
+/// a character in a shortcut by the key of the keyboard language's layout.
 /// </summary>
 public static class KeySender
 {
@@ -30,6 +32,10 @@ public static class KeySender
     private const ushort LeftWindowsKey = 0x5B;
     private const ushort ShiftKey = 0x10;
 
+    /// <summary>VkKeyScanEx's high byte: Shift, and Ctrl and Alt together (Alt Gr).</summary>
+    private const short ShiftBit = 0x100;
+    private const short AltGrBits = 0x600;
+
     /// <summary>Text typed, each of its characters.</summary>
     public static void Type(string text)
     {
@@ -46,18 +52,54 @@ public static class KeySender
     /// <summary>A key pressed and let go, the modifiers held around it.</summary>
     public static void Press(Keycode code, Held held)
     {
-        if (VirtualKey(code) is not { } key)
+        if (VirtualKey(code) is { } key)
         {
-            return;
+            Press(key, held, IsExtended(code) ? ExtendedKey : 0);
+        }
+    }
+
+    /// <summary>
+    /// A character pressed as the key that types it in the Windows layout of
+    /// the keyboard's language, the modifiers held around it, as a physical
+    /// keyboard of that language sends it (Spanish's ç is VK_OEM_2, so Ctrl+ç
+    /// is VS Code's Ctrl+/); false when that layout has no key for it, or only
+    /// with Alt Gr.
+    /// </summary>
+    public static bool PressCharacter(char character, string locale, Held held)
+    {
+        var scan = VkKeyScanEx(character, LayoutOf(locale));
+        if (scan == -1 || (scan & AltGrBits) != 0)
+        {
+            return false;
         }
 
+        Press((ushort)(scan & 0xFF), (scan & ShiftBit) != 0 ? held | Held.Shift : held, 0);
+        return true;
+    }
+
+    /// <summary>
+    /// The language's layout among those Windows has installed, never one
+    /// loaded here (Windows may add it to the user's list); without it, the
+    /// foreground window's.
+    /// </summary>
+    private static IntPtr LayoutOf(string locale)
+    {
+        var language = CultureInfo.GetCultureInfo(locale).LCID;
+        var layouts = new IntPtr[GetKeyboardLayoutList(0, null)];
+        GetKeyboardLayoutList(layouts.Length, layouts);
+        return layouts.FirstOrDefault(layout => (layout.ToInt64() & 0xFFFF) == language) is var found && found != IntPtr.Zero
+            ? found
+            : GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero));
+    }
+
+    private static void Press(ushort key, Held held, uint extended)
+    {
         List<Input> inputs = [];
         foreach (var modifier in Modifiers(held))
         {
             inputs.Add(Keyboard(modifier, 0, 0));
         }
 
-        var extended = IsExtended(code) ? ExtendedKey : 0;
         inputs.Add(Keyboard(key, 0, extended));
         inputs.Add(Keyboard(key, 0, extended | KeyUp));
         foreach (var modifier in Modifiers(held).Reverse())
@@ -141,6 +183,21 @@ public static class KeySender
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint SendInput(uint count, Input[] inputs, int size);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern short VkKeyScanEx(char character, IntPtr layout);
+
+    [DllImport("user32.dll")]
+    private static extern int GetKeyboardLayoutList(int count, IntPtr[]? layouts);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetKeyboardLayout(uint thread);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, IntPtr process);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Input

@@ -116,6 +116,7 @@ public sealed class MainActivity : Activity
             StartActivity(new Intent(Settings.ActionAccessibilitySettings))));
         content.AddView(Button("Open app info", () =>
             StartActivity(new Intent(Settings.ActionApplicationDetailsSettings, Android.Net.Uri.Parse($"package:{PackageName}")))));
+        content.AddView(Button(GetString(Resource.String.updates_check), () => _ = AndroidUpdates.CheckAsync(this, asked: true)));
         if (KeyPlusService.Current?.OnHeadset ?? PackageManager!.HasSystemFeature("android.software.xr.api.spatial"))
         {
             content.AddView(Text("On a headset the keys have a window of their own: place it beside the keyboard."));
@@ -145,6 +146,7 @@ public sealed class MainActivity : Activity
         KeyPlusPreferences.SetHidden(this, false);
 #endif
         ShowStatus();
+        HandleUpdates();
 #if KEYBOARD
         if (Intent?.GetBooleanExtra(AskMicrophoneExtra, false) == true)
         {
@@ -159,6 +161,25 @@ public sealed class MainActivity : Activity
     {
         base.OnNewIntent(intent);
         Intent = intent;
+    }
+
+    /// <summary>
+    /// The app opened by Android's installer (how the update went), by the
+    /// update's notification (whether to update), or by hand, when the day's
+    /// check is due (<see cref="AndroidUpdates"/>).
+    /// </summary>
+    private void HandleUpdates()
+    {
+        if (Intent?.GetBooleanExtra(AndroidUpdates.InstallExtra, false) == true)
+        {
+            Intent.RemoveExtra(AndroidUpdates.InstallExtra);
+            AndroidUpdates.Installed(this, Intent);
+        }
+        else if (Intent?.GetBooleanExtra(AndroidUpdates.AskExtra, false) == true || AndroidUpdates.Due(this))
+        {
+            Intent?.RemoveExtra(AndroidUpdates.AskExtra);
+            _ = AndroidUpdates.CheckAsync(this, asked: false);
+        }
     }
 
     /// <summary>
@@ -502,6 +523,7 @@ public sealed class MainActivity : Activity
                     .Show()),
             ],
             [
+                Switch(Resource.String.key_sound, null, KeyPlusPreferences.SoundKey, byDefault: false),
                 Switch(Resource.String.vibration, null, KeyPlusPreferences.VibrateKey),
                 new(GetString(Resource.String.long_press), GetString(Resource.String.milliseconds, longPress), Tapped: ChooseLongPress),
             ],
@@ -641,7 +663,11 @@ public sealed class MainActivity : Activity
 
     private SettingsPage AboutPage() => new(GetString(Resource.String.about),
     [
-        [new(GetString(Resource.String.version), PackageManager!.GetPackageInfo(PackageName!, 0)!.VersionName)],
+        [
+            new(GetString(Resource.String.version), AndroidUpdates.Running(this)),
+            Switch(Resource.String.updates_automatic, Resource.String.updates_automatic_summary, KeyPlusPreferences.UpdatesAutomaticKey),
+            new(GetString(Resource.String.updates_check), Tapped: () => _ = AndroidUpdates.CheckAsync(this, asked: true)),
+        ],
         [new(GetString(Resource.String.futo))],
         [new(GetString(Resource.String.licences), GetString(Resource.String.licences_summary))],
     ]);

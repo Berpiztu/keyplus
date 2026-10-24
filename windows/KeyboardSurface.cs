@@ -1152,11 +1152,13 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void TypeKey(StandardKey key)
     {
-        if (Combining && CodeOf(key.Text) is { } code)
+        if (Combining && PressShortcut(key.Text))
         {
-            Press(code);
+            ModifiersUsed();
+            return;
         }
-        else if (altGr && key.Hint is not null)
+
+        if (altGr && key.Hint is not null)
         {
             Type(key.Hint);
         }
@@ -1239,6 +1241,18 @@ public sealed class KeyboardSurface : FrameworkElement
     }
 
     private void Press(Keycode code) => KeySender.Press(code, Held());
+
+    /// <summary>A character's key with Ctrl, Alt or ⊞: its key code where it has one, else the key of the language's layout that types it (Spanish's ç); false when neither.</summary>
+    private bool PressShortcut(string? text)
+    {
+        if (CodeOf(text) is { } code)
+        {
+            Press(code);
+            return true;
+        }
+
+        return text is { Length: 1 } one && KeySender.PressCharacter(one[0], language.Locale, Held());
+    }
 
     private bool Combining => ctrl || alt || meta;
 

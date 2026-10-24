@@ -2475,17 +2475,20 @@ public sealed class KeyPanel
     {
         var kept = KeyPlusPreferences.Global(context);
         vibrates = kept.GetBoolean(KeyPlusPreferences.VibrateKey, true);
+        sounds = kept.GetBoolean(KeyPlusPreferences.SoundKey, false);
         showsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
         if (standard is not null)
         {
             standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
             standard.Vibrates = vibrates;
+            standard.Sounds = sounds;
             standard.ShowsTrail = showsTrail;
         }
     }
 
-    /// <summary>The app's settings PC follows too: a key's touch felt, a swipe's trail drawn.</summary>
+    /// <summary>The app's settings PC follows too: a key's touch felt and heard, a swipe's trail drawn.</summary>
     private bool vibrates = true;
+    private bool sounds;
     private bool showsTrail = true;
 
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen, the kind of keyboard in sight kept in it (Estándar, Estándar PC); where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
@@ -3732,6 +3735,11 @@ public sealed class KeyPanel
                     view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
                 }
 
+                if (sounds)
+                {
+                    StandardKeyboard.PlayKeySound(context, key.Code);
+                }
+
                 swipeTrace = new SwipeTrace(key, motion.EventTime);
                 Track(swipeTrace, at[0] + motion.GetX(), at[1] + motion.GetY(), motion.EventTime);
                 break;
@@ -4100,6 +4108,11 @@ public sealed class KeyPanel
                     if (vibrates)
                     {
                         view.PerformHapticFeedback(FeedbackConstants.KeyboardTap);
+                    }
+
+                    if (sounds)
+                    {
+                        StandardKeyboard.PlayKeySound(context, key.Code);
                     }
 
                     if (key.OpensFull)

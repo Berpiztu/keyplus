@@ -347,6 +347,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         locking.AddAction(Android.Content.Intent.ActionUserPresent);
         RegisterReceiver(lockReceiver, locking, Android.Content.ReceiverFlags.NotExported);
         Current = this;
+        AndroidUpdates.CheckInBackground(this);
         if (OnHeadset)
         {
             OpenKeyWindow();

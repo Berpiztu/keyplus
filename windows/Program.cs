@@ -41,8 +41,11 @@ public static class Program
         if (settings)
         {
             app.Run(new SettingsWindow());
+            return;
         }
-        else if (hidden)
+
+        UpdateCheck.Start();
+        if (hidden)
         {
             // Its window made but not shown: it watches the focus and shows itself for a text field.
             new System.Windows.Interop.WindowInteropHelper(new KeyboardWindow()).EnsureHandle();

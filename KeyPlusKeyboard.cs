@@ -184,6 +184,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
+        // Once a day at most: the keyboard's process lives for days.
+        AndroidUpdates.CheckInBackground(this);
         InAppColors(info?.PackageName);
         panel?.FitLabels();
         if (panel is not null && !OnHeadset)

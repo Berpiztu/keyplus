@@ -53,6 +53,7 @@
   <string name="reset_ask">Reset the keyboard as just installed? It goes back to the bottom, as wide as the screen, at its usual size.</string>
   <string name="yes">Yes</string>
   <string name="no">No</string>
+  <string name="key_sound">Sound on keypress</string>
   <string name="vibration">Haptic feedback on keypress</string>
   <string name="long_press">Key long press delay</string>
   <string name="milliseconds">%1$d ms</string>
@@ -68,6 +69,15 @@
   <string name="import_designs">Import designs</string>
   <string name="import_summary">The designs a file holds, added to Tema as keyboards; nothing replaced</string>
   <string name="version">Version</string>
+  <string name="updates_automatic">Check for updates automatically</string>
+  <string name="updates_automatic_summary">Once a day, asks GitHub whether a new version is out and, if so, whether to update</string>
+  <string name="updates_check">Check now</string>
+  <string name="update_title">New version</string>
+  <string name="update_ask">Version %1$s is out; you have %2$s. Update?</string>
+  <string name="update_yes">Update</string>
+  <string name="update_no">Not now</string>
+  <string name="update_current">You have the latest version, %1$s.</string>
+  <string name="update_failed">The new version could not be checked or installed: %1$s</string>
   <string name="licences">Open-source licences</string>
   <string name="licences_summary">FUTO swipe-library (GPL-3.0), FUTO Swipe models (FUTO Model Weights License 1.0), ExecuTorch (BSD), AOSP LatinIME word lists, libadb-android, Bouncy Castle, Conscrypt, Material Symbols (Apache-2.0)</string>
   <string name="dock_by_drag">Dock and undock by dragging</string>

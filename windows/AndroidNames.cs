@@ -188,6 +188,15 @@ namespace Berpiztu.KeyPlus
             public const int undo = 104;
             public const int per_app = 105;
             public const int app_own = 107;
+            public const int updates_automatic = 108;
+            public const int updates_automatic_summary = 109;
+            public const int updates_check = 110;
+            public const int update_title = 111;
+            public const int update_ask = 112;
+            public const int update_yes = 113;
+            public const int update_no = 114;
+            public const int update_current = 115;
+            public const int update_failed = 116;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>
