@@ -53,6 +53,9 @@ public static class KeyPlusPreferences
     /// Gboard's defaults.
     /// </summary>
     public const string VibrateKey = "vibrate";
+    public const string SoundKey = "keySound";
+    public const string UpdatesAutomaticKey = "updatesAutomatic";
+    public const string UpdatesCheckedKey = "updatesChecked";
     public const string LongPressKey = "longPressMs";
     public const int LongPressDefault = 300;
     public const string SwipeTypingKey = "swipeTyping";

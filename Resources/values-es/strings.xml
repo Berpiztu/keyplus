@@ -47,6 +47,7 @@
   <string name="reset_ask">¿Teclado como recién instalado? Vuelve abajo, a todo lo ancho, con su tamaño normal.</string>
   <string name="yes">Sí</string>
   <string name="no">No</string>
+  <string name="key_sound">Sonido al pulsar las teclas</string>
   <string name="vibration">Vibración al pulsar las teclas</string>
   <string name="long_press">Duración de la pulsación</string>
   <string name="milliseconds">%1$d ms</string>
@@ -62,6 +63,15 @@
   <string name="import_designs">Importar diseños</string>
   <string name="import_summary">Los diseños de un fichero, añadidos a Tema como teclados; no se sustituye nada</string>
   <string name="version">Versión</string>
+  <string name="updates_automatic">Buscar actualizaciones automáticamente</string>
+  <string name="updates_automatic_summary">Una vez al día pregunta a GitHub si hay una versión nueva y, si la hay, si quieres actualizar</string>
+  <string name="updates_check">Buscar ahora</string>
+  <string name="update_title">Versión nueva</string>
+  <string name="update_ask">Hay una versión nueva, la %1$s; tienes la %2$s. ¿Actualizar?</string>
+  <string name="update_yes">Actualizar</string>
+  <string name="update_no">Ahora no</string>
+  <string name="update_current">Tienes la última versión, la %1$s.</string>
+  <string name="update_failed">No se pudo buscar o instalar la versión nueva: %1$s</string>
   <string name="licences">Licencias de código abierto</string>
   <string name="licences_summary">FUTO swipe-library (GPL-3.0), modelos FUTO Swipe (FUTO Model Weights License 1.0), ExecuTorch (BSD), listas de palabras de AOSP LatinIME, libadb-android, Bouncy Castle, Conscrypt, Material Symbols (Apache-2.0)</string>
   <string name="dock_by_drag">Acoplar y desacoplar arrastrando</string>

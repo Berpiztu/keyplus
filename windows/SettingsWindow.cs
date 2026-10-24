@@ -551,12 +551,22 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
-    /// <summary>Información, as Android's: the version, FUTO Swipe's notice and the open source licences the Windows app carries.</summary>
+    /// <summary>Información, as Android's: the version, its updates (<see cref="UpdateCheck"/>), FUTO Swipe's notice and the open source licences the Windows app carries.</summary>
     private static FrameworkElement AboutPage()
     {
         var form = Form(Resource.String.about);
-        var version = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "";
-        form.Children.Add(Field(Resource.String.version, new TextBlock { Text = version }, null));
+        form.Children.Add(Field(Resource.String.version, new TextBlock { Text = UpdateCheck.Running }, null));
+        var automatic = new CheckBox { Content = Texts.Get(Resource.String.updates_automatic), IsChecked = UpdateSettings.Read().Automatic };
+        automatic.Click += (_, _) => (UpdateSettings.Read() with { Automatic = automatic.IsChecked == true }).Keep();
+        form.Children.Add(Field(null, automatic, Resource.String.updates_automatic_summary));
+        var check = new Button { Content = Texts.Get(Resource.String.updates_check), HorizontalAlignment = HorizontalAlignment.Left };
+        check.Click += async (_, _) =>
+        {
+            check.IsEnabled = false;
+            await UpdateCheck.CheckAsync(asked: true);
+            check.IsEnabled = true;
+        };
+        form.Children.Add(Field(null, check, null));
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
         form.Children.Add(Field(Resource.String.licences, new TextBlock { Text = Texts.Get(Resource.String.windows_licences_summary), TextWrapping = TextWrapping.Wrap }, null));
         return form;

@@ -104,6 +104,8 @@ a window that does.
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
 | [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
+| [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
+| [AndroidUpdates.cs](AndroidUpdates.cs) | Updates on Android: the day's check from the keyboard or the service, its notification, the app's question, Android's installer |
 | [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Escribir por voz's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
 | [MenuWatchService.cs](MenuWatchService.cs) | Apartarse también de los menús on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Tema's Por app, the colour beside the field typed in, on a screenshot |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Estándar PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
@@ -127,6 +129,17 @@ a window that does.
 
 ## Using it
 
+- **Ajustes › Preferencias**: **Sonido al pulsar las teclas** (off, as
+  Gboard's) plays Android's keypress sounds, the space's, the delete's and
+  Enter's their own, at the system's volume; **Vibración al pulsar las
+  teclas** (on) makes each touch felt. Android only: Windows has neither.
+- **Ajustes › Información**: **Buscar actualizaciones automáticamente** (on)
+  asks GitHub once a day whether a new version is out, and **Buscar ahora**
+  at once; a new one asks whether to update (on Android a notification
+  first, which opens the app), and a yes downloads it and opens its
+  installer: Windows' MSI, or Android's own installer, which asks too (and,
+  the first time, to allow installing from the app). The popup has Buscar
+  ahora on its screen. On Windows and Android alike.
 - **On a headset (Galaxy XR), a third: Estándar XR**, Gboard's there
   (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
   keys, the digits over the letters, Tab, Bloq Mayús, ⇧ at both ends, ◀ and
@@ -138,7 +151,9 @@ a window that does.
   keycap, its Shift's symbol in its top corner and its Alt Gr's in its
   bottom one (a letter's capital going without saying), and with Shift or
   Alt Gr on only what the keys type then (Alt Gr's, the others blank), ´ and ` as dead
-  keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key, the arrows
+  keys, Bloq Mayús, Ctrl, Alt and ⊞ on until the next key (a character
+  then goes out as the key a physical keyboard of the language has for it:
+  Ctrl+ç is Spanish's, VS Code's comment), the arrows
   repeating; Estándar PC in Spanish and English as the owner designed it (Insert, ISO's
   Enter, Inicio, Fin, RePág and AvPág). The keyboards go by language, a
   PC's keys differing between them: each screen (phone, tablet upright or

@@ -165,6 +165,12 @@ public sealed class KeyboardWindow : Window
     /// <summary>Opened by hand (started, the clock's icon, ⌨, the settings) rather than by a text field: it stays until a text field takes the focus.</summary>
     private bool openedByHand = true;
 
+    /// <summary>Hidden by ✕: the presses watched until it shows again, for a tap on the text to bring it back (<see cref="ShowIfTapped"/>).</summary>
+    private PointerWatch? tapWatch;
+
+    /// <summary>How soon after a press the caret moves for the press to be taken for a tap on the text.</summary>
+    private static readonly TimeSpan TapToCaret = TimeSpan.FromMilliseconds(600);
+
     /// <summary>The keyboard started: in the colours of the application in front, its window's as seen there last.</summary>
     public KeyboardWindow()
         : this(FocusWatch.FrontApp(), null)
@@ -227,7 +233,11 @@ public sealed class KeyboardWindow : Window
         voice.Silence += EndListening;
         var settings = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_settings, ToolTip = Texts.Get(Resource.String.keyboard_settings) };
         settings.Clicked += SettingsWindow.Start;
-        focus.CaretMoved += AvoidText;
+        focus.CaretMoved += at =>
+        {
+            ShowIfTapped();
+            AvoidText(at);
+        };
         focus.MenuOpened += at => Avoid(Dips(at), menu: true);
         focus.MenuClosed += () => movedForMenu = false;
         focus.TextFocused += () =>
@@ -372,6 +382,7 @@ public sealed class KeyboardWindow : Window
         {
             voice.Dispose();
             focus.Dispose();
+            tapWatch?.Dispose();
             preferencesWatch.Dispose();
             keyboardsWatch.Dispose();
             appsWatch.Dispose();
@@ -436,6 +447,8 @@ public sealed class KeyboardWindow : Window
     /// <summary>The keyboard in sight, its icon gone; never activated, the focus stays where it is.</summary>
     private void ShowKeyboard()
     {
+        tapWatch?.Dispose();
+        tapWatch = null;
         icon.Hide();
         if (!IsVisible)
         {
@@ -465,6 +478,28 @@ public sealed class KeyboardWindow : Window
     {
         Log.Write("Keyboard: ✕");
         HideKeyboard(asIcon);
+        if (preferences.ShowKeyboard)
+        {
+            tapWatch?.Dispose();
+            tapWatch = new PointerWatch();
+        }
+    }
+
+    /// <summary>
+    /// After ✕, the text tapped or clicked again: the focus stays where it
+    /// was, so Windows tells only the caret moving; moved just after a press,
+    /// the keyboard shows, as Android's does when its field is tapped. Typing
+    /// on the computer's keyboard moves the caret with no press and leaves it
+    /// hidden.
+    /// </summary>
+    private void ShowIfTapped()
+    {
+        if (tapWatch is { } watch && !IsVisible && watch.PressedWithin(TapToCaret))
+        {
+            Log.Write("Keyboard: shown, the text tapped again");
+            openedByHand = false;
+            ShowKeyboard();
+        }
     }
 
     /// <summary>The focus gone from where text is typed: the keyboard hides, becomes its icon or stays, as the preferences say; never while it is dragged, listening or being designed, nor while it was opened by hand.</summary>

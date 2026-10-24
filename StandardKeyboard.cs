@@ -1,6 +1,7 @@
 using Android.Content;
 using Android.Graphics;
 using Android.Graphics.Drawables;
+using Android.Media;
 using Android.OS;
 using Android.Views;
 using System.Text;
@@ -419,6 +420,23 @@ public sealed class StandardKeyboard : View
 
     /// <summary>Whether a key's touch is felt (Preferencias › Vibración al pulsar las teclas).</summary>
     public bool Vibrates { get; set; } = true;
+
+    /// <summary>Whether a key's touch is heard (Preferencias › Sonido al pulsar las teclas, off as Gboard's).</summary>
+    public bool Sounds { get; set; }
+
+    /// <summary>
+    /// The system's keypress sound for a key, as Android's own keyboard plays
+    /// it: the space's, the delete's, Enter's or the standard one, at the
+    /// system's volume for them.
+    /// </summary>
+    public static void PlayKeySound(Context context, Keycode code) =>
+        (context.GetSystemService(Context.AudioService) as AudioManager)?.PlaySoundEffect(code switch
+        {
+            Keycode.Space => SoundEffect.Spacebar,
+            Keycode.Del => SoundEffect.Delete,
+            Keycode.Enter => SoundEffect.Return,
+            _ => SoundEffect.Standard,
+        });
 
     /// <summary>Whether a swipe draws its trail (Escritura deslizando el dedo › Recorrido del deslizamiento).</summary>
     public bool ShowsTrail { get; set; } = true;
@@ -976,6 +994,17 @@ public sealed class StandardKeyboard : View
             PerformHapticFeedback(FeedbackConstants.KeyboardTap);
         }
 
+        if (Sounds)
+        {
+            PlayKeySound(Context!, hit.Key.Action switch
+            {
+                StandardAction.Space => Keycode.Space,
+                StandardAction.Delete => Keycode.Del,
+                StandardAction.Enter => Keycode.Enter,
+                _ => hit.Key.Code,
+            });
+        }
+
         if (hit.Key.Action == StandardAction.Delete)
         {
             DeleteOnce();
@@ -1333,7 +1362,11 @@ public sealed class StandardKeyboard : View
         ShiftUsed();
     }
 
-    /// <summary>The key code of a character a shortcut is made with: a letter's, a digit's, a few signs'.</summary>
+    /// <summary>
+    /// The key code of a character a shortcut is made with: a letter's, a
+    /// digit's, a few signs'; the ç Android's Spanish physical layout's
+    /// (keyboard_layout_spanish.kcm types it on BACKSLASH).
+    /// </summary>
     private static Keycode? CodeOf(string? text) => text is { Length: 1 } one
         ? one[0] switch
         {
@@ -1345,6 +1378,7 @@ public sealed class StandardKeyboard : View
             '+' => Keycode.Plus,
             '=' => Keycode.Equals,
             '/' => Keycode.Slash,
+            'ç' => Keycode.Backslash,
             _ => null,
         }
         : null;
