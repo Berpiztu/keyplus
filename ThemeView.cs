@@ -49,6 +49,9 @@ public sealed class ThemeView : LinearLayout
     private readonly StandardKeyboard preview;
     private readonly ScrollView extras;
     private readonly StandardDesigner designer;
+
+    /// <summary>Kept as a field: Android holds its listeners weakly.</summary>
+    private readonly PreferenceWatch appsWatch;
     private (int Width, int Height) room;
 
     private StandardLanguage language;
@@ -174,6 +177,17 @@ public sealed class ThemeView : LinearLayout
             .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
             .Show();
         design.Click += (_, _) => StartDesign();
+
+        // The applications' colours noted by the keyboard (one typed in, its colour seen): the page made again in them, not
+        // while designing.
+        appsWatch = new PreferenceWatch((_, key) =>
+        {
+            if (AppThemes.IsList(key) && controls.Visibility == ViewStates.Visible)
+            {
+                Post(remade);
+            }
+        });
+        KeyPlusPreferences.Global(context).RegisterOnSharedPreferenceChangeListener(appsWatch);
         preview.DesignChanged = Fit;
         Fill();
     }
@@ -299,6 +313,18 @@ public sealed class ThemeView : LinearLayout
     }
 
     private int Dp(float value) => (int)((value * Resources!.DisplayMetrics!.Density) + 0.5f);
+
+    protected override void OnDetachedFromWindow()
+    {
+        base.OnDetachedFromWindow();
+        KeyPlusPreferences.Global(Context!).UnregisterOnSharedPreferenceChangeListener(appsWatch);
+    }
+
+    /// <summary>A preference changed, told.</summary>
+    private sealed class PreferenceWatch(Action<ISharedPreferences?, string?> changed) : Java.Lang.Object, ISharedPreferencesOnSharedPreferenceChangeListener
+    {
+        public void OnSharedPreferenceChanged(ISharedPreferences? preferences, string? key) => changed(preferences, key);
+    }
 
     /// <summary>The preview's room, told each time its size changes (the page's, or the screen to itself while designing).</summary>
     private sealed class Box(Context context, Action<int, int> sized) : FrameLayout(context)

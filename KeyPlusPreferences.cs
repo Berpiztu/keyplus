@@ -105,6 +105,14 @@ public static class KeyPlusPreferences
 
     public static StandardLanguage Language(Context context) => StandardKeys.LanguageOf(Global(context).GetString(LanguageKey, null));
 
+    /// <summary>
+    /// Whether the device is dark, as its setting has it (Android's dark theme), or as a context's own configuration says:
+    /// on the Galaxy XR, with the setting dark, an application's light theme was not seen as on a dark device.
+    /// </summary>
+    public static bool DeviceDark(Context context) =>
+        context.GetSystemService(Context.UiModeService) is Android.App.UiModeManager modes && modes.NightMode == Android.App.UiNightMode.Yes
+        || (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
+
     /// <summary>The keyboard's colours, Tema's choice, kept for every screen by its name: the system's at first.</summary>
     public const string LookKey = "look";
 

@@ -116,8 +116,10 @@ public static class AppThemes
 
             var color = new Android.Graphics.Color(read.GetColor(0, 0));
             var declared = new Rgb(color.R, color.G, color.B);
-            var deviceDark = (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
-            return (declared.Readable == Rgb.Black) == deviceDark ? declared.Mirrored : declared;
+            var deviceDark = KeyPlusPreferences.DeviceDark(context);
+            var made = (declared.Readable == Rgb.Black) == deviceDark ? declared.Mirrored : declared;
+            Android.Util.Log.Info("KeyPlus", $"Colours: {app}'s theme declares {declared.Text}, the device {(deviceDark ? "dark" : "light")}: {made.Text}");
+            return made;
         }
         catch (Exception unread) when (unread is PackageManager.NameNotFoundException or Java.Lang.SecurityException or Android.Content.Res.Resources.NotFoundException)
         {

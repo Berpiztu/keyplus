@@ -67,8 +67,7 @@ public sealed class StandardColors(Context context, bool dark)
             }
         }
 
-        var systemDark = (context.Resources!.Configuration!.UiMode & Android.Content.Res.UiMode.NightMask) == Android.Content.Res.UiMode.NightYes;
-        return (key is { } chosen ? chosen.Readable == Rgb.White : KeyboardLooks.IsDark(look, systemDark), key, accent);
+        return (key is { } chosen ? chosen.Readable == Rgb.White : KeyboardLooks.IsDark(look, KeyPlusPreferences.DeviceDark(context)), key, accent);
     }
 
     /// <summary>
