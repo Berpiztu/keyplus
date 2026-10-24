@@ -33,7 +33,7 @@ public sealed class StandardDesigner(Context context, StandardColors colors, Sta
     {
         keyboard = shown;
         this.floating = floating;
-        var made = StandardKeys.Page(keys.Pc ? StandardPage.Pc : StandardPage.Letters, keys.Language);
+        var made = StandardKeys.Page(keys.BasePage, keys.Language);
         keys.Design = StandardDesign.FromText(shown.DesignFor(docked: !floating)) ?? StandardDesign.From(made);
         keys.Designing = true;
     }

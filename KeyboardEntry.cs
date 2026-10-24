@@ -21,8 +21,8 @@ public sealed record KeyboardEntry(string Id, string Name, string Base, string? 
     public string LanguageCode => Language ?? StandardKeys.Spanish.Code;
 
     /// <summary>Whether it is one the keyboard comes with (Estándar, Estándar PC): never changed, never deleted.</summary>
-    public bool BuiltIn => Id is Keyboards.StandardId or Keyboards.StandardPcId;
+    public bool BuiltIn => Id is Keyboards.StandardId or Keyboards.StandardPcId or Keyboards.StandardXrId;
 
     /// <summary>Whether it is drawn as Gboard draws its keys, in the device's colours.</summary>
-    public bool Standard => Base is Keyboards.StandardBase or Keyboards.StandardPcBase;
+    public bool Standard => Base is Keyboards.StandardBase or Keyboards.StandardPcBase or Keyboards.StandardXrBase;
 }

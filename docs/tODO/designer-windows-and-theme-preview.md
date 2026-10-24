@@ -74,6 +74,22 @@ device is (Chrome declares a light one and turns dark by itself), or, with
 the keyboard's accessibility service on, the colour seen on the screen
 beside the field (`MenuWatchService.SeeFieldColor`), as on Windows.
 
+## The glasses: Estándar XR
+
+Asked by the owner on 2026-10-23, for the glasses alone: Gboard's look on
+the Galaxy XR, captured there (docs/tODO/photos/gboard/xr-letters.png,
+xr-symbols.png) and measured: the ground #1D2024, the letters' keys and the
+space bar #101418 (darker than the ground), the function keys #3F4753,
+Enter a #8CB4E5 pill, a band of the keys' colour as tall as the bar over
+it; a tablet's keys, 13 across, each 84 by 78 px, 26 px apart, its corners
+20 px round, the card's 55. Tried by the owner, alike: Estándar XR
+(`StandardPage.XrLetters`, `XrSymbols`, `Keyboards.StandardXrId`), listed and
+first on a headset alone, made as tall as the headset's window
+(`KeyPlusKeyboard.FillHeadsetWindow`), the band (`KeyPanel.headsetBand`), the
+round card on a see-through window (`AsHeadsetCard`), the dark keys and
+Personalizado as Gboard's there (`StandardColors.Read`). Still to do: the
+.com key Gboard adds in a web address's field, once captured where it goes.
+
 ## Later: more keyboards the keyboard comes with
 
 Asked by the owner on 2026-10-23, once the designer is done: keyboards

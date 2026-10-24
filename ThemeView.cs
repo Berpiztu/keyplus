@@ -214,6 +214,7 @@ public sealed class ThemeView : LinearLayout
         preview.Visibility = design.Visibility = drawn;
         preview.Language = language;
         preview.Pc = keyboard.Base == Keyboards.StandardPcBase;
+        preview.Xr = keyboard.Base == Keyboards.StandardXrBase;
         preview.Design = StandardDesign.FromText(keyboard.DesignFor(docked: !floating));
         Fit();
     }
@@ -234,10 +235,10 @@ public sealed class ThemeView : LinearLayout
     /// </summary>
     private void Fit()
     {
-        var rows = preview.Design?.Rows.Count ?? StandardKeys.Page(preview.Pc ? StandardPage.Pc : StandardPage.Letters, language).Count;
+        var rows = preview.Design?.Rows.Count ?? StandardKeys.Page(preview.BasePage, language).Count;
         var keysRoom = CardHeight - Dp(KeyPanel.ToolbarDp);
-        preview.Scale = Math.Min(keysScale, keysRoom / (StandardKeyboard.HeightDp(Math.Max(1, rows)) * Density));
-        var width = (int)(StandardKeyboard.WidthDp(StandardKeyboard.Across(preview.Pc ? StandardPage.Pc : StandardPage.Letters, language)) * Density * preview.Scale);
+        preview.Scale = Math.Min(keysScale, keysRoom / (StandardKeyboard.HeightDp(Math.Max(1, rows), preview.Xr) * Density));
+        var width = (int)(StandardKeyboard.WidthDp(StandardKeyboard.Across(preview.BasePage, language)) * Density * preview.Scale);
         if (preview.LayoutParameters is { } place && place.Width != width)
         {
             place.Width = width;

@@ -37,7 +37,16 @@ public sealed class StandardColors(Context context, bool dark)
     {
         var (dark, key, accent) = Chosen(context, app);
         var colors = new StandardColors(context, dark);
-        colors.Personalize(key, accent);
+
+        // On a headset in the dark, Gboard's keys there: darker than the ground, the lowest container's tone (#101418 to its
+        // #1D2024 on the Galaxy XR), as its light keys are the lowest one's white.
+        if (dark && KeyPlusPreferences.IsHeadset(context))
+        {
+            colors.Key = Of(context, dark: true, 0,
+                OperatingSystem.IsAndroidVersionAtLeast(34) ? Android.Resource.Color.SystemSurfaceContainerLowestDark : Android.Resource.Color.SystemNeutral11000);
+        }
+
+        colors.Personalize(key, accent, headset: KeyPlusPreferences.IsHeadset(context));
         return colors;
     }
 
@@ -72,10 +81,11 @@ public sealed class StandardColors(Context context, bool dark)
 
     /// <summary>
     /// Personalizado over the device's colours: its keyboard colour in the ground's place, its letters white or black,
-    /// whichever reads, the keys, lines and greys made from the two as the Windows app makes its own; its accent in the
-    /// accent's, its tones a quarter of the way to white or black a step (<see cref="Rgb.Tone"/>).
+    /// whichever reads, the keys, lines and greys made from the two as the Windows app makes its own (on a headset in the
+    /// dark, as Gboard's there, the keys in it and the ground a little lighter); its accent in the accent's, its tones a
+    /// quarter of the way to white or black a step (<see cref="Rgb.Tone"/>).
     /// </summary>
-    private void Personalize(Rgb? key, Rgb? accent)
+    private void Personalize(Rgb? key, Rgb? accent, bool headset)
     {
         if (key is { } ground)
         {
@@ -83,6 +93,15 @@ public sealed class StandardColors(Context context, bool dark)
             Glyph = Of(letters);
             Key = Of(dark ? ground.Mix(letters, 0.16) : ground);
             Ground = Of(ground.Mix(letters, dark ? 0.06 : 0.08));
+
+            // On a headset in the dark, Gboard's there: the keys the colour chosen, the ground as much lighter as its #1D2024
+            // is than its keys' #101418 (13 of the 239 steps to white).
+            if (headset && dark)
+            {
+                Key = Of(ground);
+                Ground = Of(ground.Mix(letters, 13.0 / 239));
+            }
+
             Low = Ground;
             Dim = Of(ground.Mix(letters, 0.12));
             ResetGround = Dim;
@@ -201,6 +220,13 @@ public sealed class StandardKeyboard : View
     private const float TopDp = 11 / PixelsPerDp;
     private const float BottomDp = 32 / PixelsPerDp;
     private const float CornerDp = 15.5f / PixelsPerDp;
+
+    /// <summary>
+    /// Estándar XR's keys, Gboard's on the Galaxy XR as measured on its capture (docs/tODO/photos/gboard/xr-letters.png):
+    /// a key 78 px tall, its corners 20 px round, 26 px between keys across and down; every row as tall, the digits' too.
+    /// </summary>
+    private const float XrCornerShare = 20f / 78;
+    private const float XrGapShare = 26f / 78;
 
     /// <summary>Roboto's cap height, of its size: what a glyph's measured height is turned into a size by.</summary>
     private const float CapHeight = 0.711f;
@@ -339,11 +365,29 @@ public sealed class StandardKeyboard : View
         set
         {
             pc = value;
-            page = value ? StandardPage.Pc : StandardPage.Letters;
+            page = BasePage;
             RequestLayout();
             Lay();
         }
     }
+
+    /// <summary>Whether the keys are Gboard's on the Galaxy XR (Estándar XR): a tablet's letters and symbols.</summary>
+    public bool Xr
+    {
+        get => xr;
+        set
+        {
+            xr = value;
+            page = BasePage;
+            RequestLayout();
+            Lay();
+        }
+    }
+
+    private bool xr;
+
+    /// <summary>The keyboard's own page, the one a design is of and its height made for: a PC's, Estándar XR's letters, or Gboard's.</summary>
+    public StandardPage BasePage => pc ? StandardPage.Pc : xr ? StandardPage.XrLetters : StandardPage.Letters;
 
     /// <summary>🌐, or a swipe along the space bar: the next language.</summary>
     public Action? NextLanguage { get; set; }
@@ -424,13 +468,15 @@ public sealed class StandardKeyboard : View
         Math.Max(1, StandardKeys.Page(page, language).Max(row => row.Sum(key => key.Width)));
 
     /// <summary>The keys' height for a number of rows at Gboard's size, in dp: the keys at a size are as many times as tall.</summary>
-    public static float HeightDp(int rows) => TopDp + NumberRowDp + ((rows - 1) * (LetterRowDp + RowGapDp)) + BottomDp;
+    public static float HeightDp(int rows, bool xr = false) => xr
+        ? TopDp + (rows * LetterRowDp) + ((rows - 1) * LetterRowDp * XrGapShare) + BottomDp
+        : TopDp + NumberRowDp + ((rows - 1) * (LetterRowDp + RowGapDp)) + BottomDp;
 
     protected override void OnMeasure(int widthMeasureSpec, int heightMeasureSpec)
     {
         var width = MeasureSpec.GetSize(widthMeasureSpec);
-        var rows = Math.Max(1, Rows(pc ? StandardPage.Pc : StandardPage.Letters).Count);
-        SetMeasuredDimension(width, (int)Math.Ceiling(Dp(HeightDp(rows))));
+        var rows = Math.Max(1, Rows(BasePage).Count);
+        SetMeasuredDimension(width, (int)Math.Ceiling(Dp(HeightDp(rows, xr))));
     }
 
     protected override void OnSizeChanged(int w, int h, int oldw, int oldh)
@@ -455,15 +501,16 @@ public sealed class StandardKeyboard : View
         wordSizes.Clear();
         var rows = Rows(page);
         var side = Dp(SideDp);
-        var gap = Dp(KeyGapDp);
+        var gap = xr ? LetterRow * XrGapShare : Dp(KeyGapDp);
         // As wide as the keyboard as made is, a design or not: a row made wider than that squeezes its own keys
         // alone, so a key widened takes its room from its row, the others keep theirs.
         var across = Across(page, language);
         var unit = (Width - (2 * side) - ((across - 1) * gap)) / across;
         keyUnit = unit;
         glyphScale = Math.Min(1f, unit / (LetterRow * GboardKeyAspect));
-        var rowGap = Dp(RowGapDp);
-        float[] heights = page is StandardPage.Letters or StandardPage.Pc
+        var rowGap = xr ? gap : Dp(RowGapDp);
+        float[] heights = page is StandardPage.XrLetters ? [.. Enumerable.Repeat(LetterRow, rows.Count)]
+            : page is StandardPage.Letters or StandardPage.Pc
             ? [Dp(NumberRowDp), .. Enumerable.Repeat(LetterRow, rows.Count - 1)]
             : Enumerable.Repeat((Height - Dp(TopDp) - Dp(BottomDp) - ((rows.Count - 1) * rowGap)) / rows.Count, rows.Count).ToArray();
         var top = Dp(TopDp);
@@ -550,7 +597,7 @@ public sealed class StandardKeyboard : View
 
     /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made.</summary>
     private IReadOnlyList<IReadOnlyList<StandardKey>> Rows(StandardPage shown) =>
-        design is not null && shown is StandardPage.Letters or StandardPage.Pc
+        design is not null && shown is StandardPage.Letters or StandardPage.Pc or StandardPage.XrLetters
             ? design.Page(StandardKeys.Page(shown, language), language)
             : StandardKeys.Page(shown, language);
 
@@ -590,10 +637,17 @@ public sealed class StandardKeyboard : View
     }
 
     /// <summary>A key's ground: marked blue while designing, a modifier on, a function key's tint or a letter's, darker while pressed.</summary>
+    /// <summary>A key's corners: Gboard's, Estándar XR's a quarter of its height.</summary>
+    private float Corner(RectF box) => xr ? box.Height() * XrCornerShare : Dp(CornerDp);
+
+    /// <summary>Whether a key is Estándar XR's Enter, in the primary colour as Gboard's there, its sign on it.</summary>
+    private bool PrimaryEnter(StandardKey key) => xr && key.Action == StandardAction.Enter;
+
     private Color KeyGround(StandardKey key, bool marked)
     {
         var pressed = !designing && finger is { Swiping: false } now && now.Key == key;
         return marked ? colors.Primary
+            : PrimaryEnter(key) ? (pressed ? colors.Accent : colors.Primary)
             : IsOn(key) ? colors.GridCircle
             : key.Look != StandardLook.Letter ? (pressed ? colors.FunctionPressed : colors.Function)
             : (pressed ? colors.Function : colors.Key);
@@ -611,7 +665,7 @@ public sealed class StandardKeyboard : View
             return;
         }
 
-        var corner = Dp(CornerDp);
+        var corner = Corner(top);
         fill.Color = KeyGround(laid[upper].Key, Marked(upper));
         canvas.DrawRect(left, top.Bottom - corner, right, bottom.Top + corner, fill);
     }
@@ -643,7 +697,7 @@ public sealed class StandardKeyboard : View
                 fill.Color = marked ? colors.Primary : colors.FaintOutline;
                 fill.SetStyle(Paint.Style.Stroke);
                 fill.StrokeWidth = Dp(2);
-                canvas.DrawRoundRect(box, Dp(CornerDp), Dp(CornerDp), fill);
+                canvas.DrawRoundRect(box, Corner(box), Corner(box), fill);
                 fill.SetStyle(Paint.Style.Fill);
             }
 
@@ -652,7 +706,7 @@ public sealed class StandardKeyboard : View
 
         var function = key.Look != StandardLook.Letter;
         fill.Color = KeyGround(key, marked);
-        var corner = key.Look == StandardLook.Pill ? box.Height() / 2 : Dp(CornerDp);
+        var corner = key.Look == StandardLook.Pill ? box.Height() / 2 : Corner(box);
         canvas.DrawRoundRect(box, corner, corner, fill);
         if (key.Lower)
         {
@@ -665,7 +719,7 @@ public sealed class StandardKeyboard : View
             box = new RectF(middle.X - (box.Width() / 2), middle.Y - (box.Height() / 2), middle.X + (box.Width() / 2), middle.Y + (box.Height() / 2));
         }
 
-        var glyph = marked ? colors.OnPrimary : function ? colors.FunctionGlyph : colors.Glyph;
+        var glyph = marked || PrimaryEnter(key) ? colors.OnPrimary : function ? colors.FunctionGlyph : colors.Glyph;
         var h = LetterRow * glyphScale;
 
         if (key.Action == StandardAction.Shift)
@@ -1008,7 +1062,7 @@ public sealed class StandardKeyboard : View
         }
 
         var far = Math.Max(Math.Abs(x - now.X), Math.Abs(y - now.Y)) > Math.Min(now.Box.Width(), now.Box.Height()) * 0.6f;
-        if (far && page is StandardPage.Letters or StandardPage.Pc && Swiped is not null && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
+        if (far && page is StandardPage.Letters or StandardPage.Pc or StandardPage.XrLetters && Swiped is not null && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
         {
             now.Swiping = true;
             StopHolding();
@@ -1138,13 +1192,13 @@ public sealed class StandardKeyboard : View
                 ToggleShift();
                 break;
             case StandardAction.Symbols:
-                ShowPage(StandardPage.Symbols);
+                ShowPage(xr ? StandardPage.XrSymbols : StandardPage.Symbols);
                 break;
             case StandardAction.MoreSymbols:
                 ShowPage(StandardPage.MoreSymbols);
                 break;
             case StandardAction.Letters:
-                ShowPage(StandardPage.Letters);
+                ShowPage(BasePage);
                 break;
             case StandardAction.Numbers:
                 NotMade?.Invoke("1234");
@@ -1394,7 +1448,7 @@ public sealed class StandardKeyboard : View
             added = null;
             if (value)
             {
-                ShowPage(pc ? StandardPage.Pc : StandardPage.Letters);
+                ShowPage(BasePage);
             }
 
             Invalidate();
@@ -1444,7 +1498,7 @@ public sealed class StandardKeyboard : View
     }
 
     /// <summary>Whether the keyboard as designed has a key of + Tecla's list already, which the list then leaves out.</summary>
-    public bool HasKey(string id) => StandardKeys.HasExtra(Rows(pc ? StandardPage.Pc : StandardPage.Letters), id, language);
+    public bool HasKey(string id) => StandardKeys.HasExtra(Rows(BasePage), id, language);
 
     /// <summary>A loose key's box: as wide as it is in keys, a letter row tall, centred where it is.</summary>
     private RectF LooseBox(LooseKey loose)
@@ -1464,7 +1518,7 @@ public sealed class StandardKeyboard : View
             return false;
         }
 
-        var made = StandardKeys.Page(pc ? StandardPage.Pc : StandardPage.Letters, language);
+        var made = StandardKeys.Page(BasePage, language);
         var own = design.LowerOf(at.Row, at.Index) ?? at;
         if (places.IndexOf(own) is not (var laidAt and >= 0))
         {

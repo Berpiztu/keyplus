@@ -83,6 +83,10 @@ public enum StandardPage
     MoreSymbols,
     /// <summary>Estándar PC's only page: a PC's keys, every symbol with Shift or Alt Gr.</summary>
     Pc,
+
+    /// <summary>Estándar XR's letters and symbols, Gboard's on the Galaxy XR: a tablet's keys.</summary>
+    XrLetters,
+    XrSymbols,
 }
 
 /// <summary>
@@ -150,6 +154,8 @@ public static class StandardKeys
                 StandardPage.Symbols => SymbolsPage(language),
                 StandardPage.MoreSymbols => MoreSymbolsPage(language),
                 StandardPage.Pc => language == English ? UsPcPage() : SpanishPcPage(),
+                StandardPage.XrLetters => XrLettersPage(language),
+                StandardPage.XrSymbols => XrSymbolsPage(),
                 _ => LettersPage(language),
             };
         }
@@ -230,6 +236,56 @@ public static class StandardKeys
             new(".", Text: ".", Look: StandardLook.Function),
             Enter(),
         ],
+    ];
+
+    /// <summary>
+    /// Estándar XR's letters, Gboard's on the Galaxy XR (docs/tODO/photos/gboard/xr-letters.png), 13 keys across as
+    /// measured there: the digits over the letters, Spanish's º before them, ⌫ at their end; Tab before q and Spanish's ´
+    /// after p; Bloq Mayús before a and Enter after the row; ⇧ at both ends of z's row, with the comma and the full stop;
+    /// ?123, 🌐, the space bar, ◀, ▶ and ?123 again at the bottom. No symbols in the letters' corners, as there.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> XrLettersPage(StandardLanguage language)
+    {
+        const float across = 13;
+        var spanish = language == Spanish;
+        IEnumerable<StandardKey> Plain(string letters) =>
+            letters.Select(letter => new StandardKey(letter.ToString(), Text: letter.ToString(), Shifted: char.ToUpperInvariant(letter).ToString()));
+        StandardKey[] digits = [.. spanish ? PcKeys("º", "ª", "") : [], .. "1234567890".Zip("!@#$%^&*()", (digit, shifted) => new StandardKey(digit.ToString(), Text: digit.ToString(), Shifted: shifted.ToString()))];
+        var homeRow = Plain(language.LetterRows[1]).ToArray();
+        return
+        [
+            [.. digits, Delete() with { Width = across - digits.Length }],
+            [PcKey("⇥", Keycode.Tab, XrSideWidth), .. Plain(language.LetterRows[0]), .. spanish ? PcKeys("´", "¨", "").Select(key => key with { Width = XrSideWidth }) : []],
+            [CapsLock("⇪") with { Width = XrSideWidth }, .. homeRow, Enter() with { Width = across - XrSideWidth - homeRow.Length }],
+            [Shift(2f), .. Plain(language.LetterRows[2]), .. Characters(",."), Shift(across - 2f - language.LetterRows[2].Length - 2)],
+            [.. XrBottomRow(new("?123", StandardAction.Symbols, Look: StandardLook.Function), 1, 7)],
+        ];
+    }
+
+    /// <summary>Estándar XR's symbols, Gboard's on the Galaxy XR (docs/tODO/photos/gboard/xr-symbols.png), 13 keys across, the =\&lt; row a key short at its end, as there.</summary>
+    private static IReadOnlyList<IReadOnlyList<StandardKey>> XrSymbolsPage() =>
+    [
+        [.. Characters("¡1234567890"), Delete() with { Width = 2f }],
+        [PcKey("⇥", Keycode.Tab, XrSideWidth), .. Characters("%\\|=[]<>{}"), .. Characters("°").Select(key => key with { Width = XrSideWidth })],
+        [CapsLock("⇪") with { Width = XrSideWidth }, .. Characters("@#€_&-+()"), Enter() with { Width = 2.5f }],
+        [new("=\\<", StandardAction.MoreSymbols, Width: 2f, Look: StandardLook.Function), .. Characters("*\"':;!?,./"), Gap],
+        [.. XrBottomRow(new("ABC", StandardAction.Letters, Look: StandardLook.Function), 1.5f, 6.5f)],
+    ];
+
+    /// <summary>Tab's, Bloq Mayús's and the keys after p's width on Estándar XR.</summary>
+    private const float XrSideWidth = 1.5f;
+
+    /// <summary>Estándar XR's bottom row: the page's switch two keys wide, 🌐 (letters) or 1234 (symbols), the space bar, ◀ and ▶, and the switch again.</summary>
+    private static IEnumerable<StandardKey> XrBottomRow(StandardKey other, float secondWidth, float spaceWidth) =>
+    [
+        other with { Width = 2f },
+        other.Action == StandardAction.Symbols
+            ? new("🌐", StandardAction.Language, Width: secondWidth, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_language)
+            : new("1234", StandardAction.Numbers, Width: secondWidth, Look: StandardLook.Function),
+        Space() with { Width = spaceWidth },
+        PcKey("◀", Keycode.DpadLeft),
+        PcKey("▶", Keycode.DpadRight),
+        other,
     ];
 
     private static IReadOnlyList<IReadOnlyList<StandardKey>> MoreSymbolsPage(StandardLanguage language) =>

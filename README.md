@@ -127,6 +127,11 @@ a window that does.
 
 ## Using it
 
+- **On a headset (Galaxy XR), a third: Estándar XR**, Gboard's there
+  (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
+  keys, the digits over the letters, Tab, Bloq Mayús, ⇧ at both ends, ◀ and
+  ▶ by the space bar; the headset's first keyboard, with Gboard's band over
+  the bar and, in the dark, the keys darker than the ground, as there.
 - **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
   and the device's colours: **Estándar**, Gboard's keys, and **Estándar
   PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's

@@ -20,6 +20,10 @@ public static class Keyboards
     public const string StandardPcId = "standardPc";
     public const string StandardBase = "standard";
     public const string StandardPcBase = "standardPc";
+
+    /// <summary>Estándar XR, Gboard's on the Galaxy XR (a tablet's keys), listed on a headset alone.</summary>
+    public const string StandardXrId = "standardXr";
+    public const string StandardXrBase = "standardXr";
     public const string PcBase = "pc";
 
     /// <summary>What a screen's chosen keyboards are kept under: this, then "." and the language's code.</summary>
@@ -40,6 +44,7 @@ public static class Keyboards
     [
         new(StandardId, context.GetString(Resource.String.keyboard_standard), StandardBase),
         new(StandardPcId, context.GetString(Resource.String.keyboard_standard_pc), StandardPcBase, StandardKeys.PcDesign(language)),
+        .. KeyPlusPreferences.IsHeadset(context) ? [new KeyboardEntry(StandardXrId, context.GetString(Resource.String.keyboard_standard_xr), StandardXrBase)] : Array.Empty<KeyboardEntry>(),
         .. Made(context).Where(keyboard => keyboard.LanguageCode == language),
     ];
 
@@ -57,9 +62,9 @@ public static class Keyboards
     {
         var id = screen.GetString(KeyOf(language), null)
             ?? (language == StandardKeys.Spanish.Code ? screen.GetString(DockedBeforeKey, null) : null)
-            ?? FirstOf(kind);
+            ?? FirstOf(context, kind);
         var all = All(context, language);
-        return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == FirstOf(kind));
+        return all.FirstOrDefault(keyboard => keyboard.Id == id) ?? all.First(keyboard => keyboard.Id == FirstOf(context, kind));
     }
 
     /// <summary>A keyboard chosen for a screen in a language: the keyboard open there made again with it.</summary>
@@ -140,9 +145,11 @@ public static class Keyboards
 
     private static string KeyOf(string language) => SelectedKey + "." + language;
 
-    /// <summary>A screen's keyboard until one is chosen: a PC's keys where the screen is wide, Gboard's elsewhere.</summary>
-    private static string FirstOf(KeyPlusPreferences.Screen kind) =>
-        kind is KeyPlusPreferences.Screen.TabletLandscape or KeyPlusPreferences.Screen.Dex ? StandardPcId : StandardId;
+    /// <summary>A screen's keyboard until one is chosen: on a headset Gboard's there (Estándar XR); else a PC's keys where the screen is wide, Gboard's elsewhere.</summary>
+    private static string FirstOf(Context context, KeyPlusPreferences.Screen kind) =>
+        KeyPlusPreferences.IsHeadset(context) ? StandardXrId
+        : kind is KeyPlusPreferences.Screen.TabletLandscape or KeyPlusPreferences.Screen.Dex ? StandardPcId
+        : StandardId;
 
     private static List<KeyboardEntry> Made(Context context)
     {

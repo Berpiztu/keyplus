@@ -348,6 +348,9 @@ public sealed class KeyPanel
     /// between them 3 px wide and 63 px tall.
     /// </summary>
     private readonly LinearLayout standardBar;
+
+    /// <summary>Gboard's band over the bar on a headset, in sight with the bar; none elsewhere.</summary>
+    private readonly View? headsetBand;
     private readonly StandardColors? standardColors;
 
     /// <summary>
@@ -710,6 +713,14 @@ public sealed class KeyPanel
         if (standardColors is not null)
         {
             emojiRow.AddView(new View(context) { Background = new ColorDrawable(standardColors.Divider) }, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 1));
+        }
+
+        // On a headset, Gboard's band over the bar there (docs/tODO/photos/gboard/xr-letters.png): as tall as the bar, the keys' colour.
+        if (standardKeys && KeyPlusPreferences.IsHeadset(context))
+        {
+            headsetBand = new View(context);
+            headsetBand.SetBackgroundColor(standardColors!.Key);
+            strip.AddView(headsetBand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         }
 
         strip.AddView(emojiRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(EmojiRowDp)));
@@ -1888,6 +1899,11 @@ public sealed class KeyPanel
             menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             toolbar.Visibility = asking is null && !small && covered is null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             standardBar.Visibility = asking is null && standardShown && (emojiPanel is null || covered?.Cover != emojiPanel) ? ViewStates.Visible : ViewStates.Gone;
+            if (headsetBand is not null)
+            {
+                headsetBand.Visibility = standardBar.Visibility;
+            }
+
             ShowEmojiRow();
             if (toolbar.Visibility == ViewStates.Visible)
             {
@@ -2137,11 +2153,17 @@ public sealed class KeyPanel
         ApplyLook();
     }
 
-    /// <summary>The standard keyboard ⊞ switches to: Estándar PC from Estándar, Estándar from any other.</summary>
-    private string OtherStandard => keyboard?.Id == Keyboards.StandardId ? Keyboards.StandardPcId : Keyboards.StandardId;
+    /// <summary>The standard keyboard ⊞ switches to: Estándar PC from Estándar (on a headset, Estándar XR), the other from any other.</summary>
+    private string OtherStandard => keyboard?.Id is Keyboards.StandardId or Keyboards.StandardXrId
+        ? Keyboards.StandardPcId
+        : KeyPlusPreferences.IsHeadset(context) ? Keyboards.StandardXrId : Keyboards.StandardId;
 
-    private string OtherStandardName =>
-        context.GetString(OtherStandard == Keyboards.StandardPcId ? Resource.String.keyboard_standard_pc : Resource.String.keyboard_standard);
+    private string OtherStandardName => context.GetString(OtherStandard switch
+    {
+        Keyboards.StandardPcId => Resource.String.keyboard_standard_pc,
+        Keyboards.StandardXrId => Resource.String.keyboard_standard_xr,
+        _ => Resource.String.keyboard_standard,
+    });
 
     /// <summary>A keyboard of the list chosen for this screen in the keyboard's language: the keyboard made again with it.</summary>
     private void Choose(string id) => Keyboards.Select(preferences, standard?.Language.Code ?? KeyPlusPreferences.Language(context).Code, id);
@@ -2162,6 +2184,11 @@ public sealed class KeyPanel
 
     /// <summary>The ground under the keys: the device's, Gboard's, under the standard keyboard; the panel's own under PC.</summary>
     public Color GroundColor => standard is { Visibility: ViewStates.Visible } ? standardColors!.Ground : PanelColor;
+
+    /// <summary>Whether Estándar XR is in sight, and its keys' height as last measured.</summary>
+    public bool ShowsXr => standard is { Visibility: ViewStates.Visible, Xr: true };
+
+    public int StandardHeight => standard?.MeasuredHeight ?? 0;
 
     /// <summary>The toolbar's words and signs: the device's, on the standard keyboard; white on PC.</summary>
     private Color ToolGlyph => standard is { Visibility: ViewStates.Visible } ? standardColors!.Glyph : Color.White;
@@ -2416,6 +2443,7 @@ public sealed class KeyPanel
             OfferWordsSoon();
         },
         Pc = keyboard?.Base == Keyboards.StandardPcBase,
+        Xr = keyboard?.Base == Keyboards.StandardXrBase,
         Design = keyboard is { Standard: true } ? StandardDesign.FromText(keyboard.DesignFor(docked: !ShowsFloating)) : null,
         EmojisAsked = ShowEmojis,
         Entered = () =>

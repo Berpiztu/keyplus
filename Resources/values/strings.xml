@@ -110,6 +110,7 @@
   <string name="screen_dex">DeX</string>
   <string name="keyboard_standard">Standard</string>
   <string name="keyboard_standard_pc">Standard PC</string>
+  <string name="keyboard_standard_xr">Standard XR</string>
   <string name="delete_ask">Delete %1$s? The screens that showed it go back to their own.</string>
   <string name="customize_hint">Hold and drag to customize</string>
   <string name="done">Done</string>

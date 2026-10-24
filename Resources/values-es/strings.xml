@@ -104,6 +104,7 @@
   <string name="screen_dex">DeX</string>
   <string name="keyboard_standard">Estándar</string>
   <string name="keyboard_standard_pc">Estándar PC</string>
+  <string name="keyboard_standard_xr">Estándar XR</string>
   <string name="delete_ask">¿Borrar %1$s? Las pantallas que lo mostraban vuelven al suyo.</string>
   <string name="customize_hint">Mantén pulsado y arrastra para personalizar</string>
   <string name="done">Hecho</string>

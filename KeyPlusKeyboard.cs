@@ -530,6 +530,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             ground.SetBackgroundColor(panel.GroundColor);
             container.AddView(ground);
             container.AddView(box);
+            if (KeyPlusPreferences.IsHeadset(this))
+            {
+                AsHeadsetCard(box, ground);
+            }
 
             // Editar's card above the keys, over the app, as Gboard's.
             panel.EditorOutside = true;
@@ -878,6 +882,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // and the app gives way to all of it, as to any keyboard.
             var raised = placed.Lift + room.Below;
             var width = placed.DockedWidth > 0 ? Math.Clamp(placed.DockedWidth, Dp(PanelPlacement.MinWidthDp), room.Width) : room.Width;
+            if (KeyPlusPreferences.IsHeadset(this))
+            {
+                FillHeadsetWindow(width, room.Height - raised);
+            }
             keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom | GravityFlags.Left)
             {
                 LeftMargin = Math.Clamp(placed.DockedX, 0, room.Width - width),
@@ -1311,6 +1319,56 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Scale = scale;
             panel.ClipboardAbove = above;
         });
+    }
+
+    /// <summary>
+    /// On a headset, not in its own box (<see cref="FillBox"/>), the keyboard's window is a box all the same (1166 × 656 px on
+    /// the Galaxy XR), whose bottom Estándar XR left empty: its keys made as tall as fill it, as Gboard's there, the bar and
+    /// the band as they are. Again at each layout, until it does.
+    /// </summary>
+    private void FillHeadsetWindow(int width, int room)
+    {
+        if (panel is not { ShowsXr: true } || room <= 0)
+        {
+            return;
+        }
+
+        var tall = Tall(width);
+        var keys = panel.StandardHeight;
+        if (keys <= 0 || Math.Abs(room - tall) <= 1)
+        {
+            return;
+        }
+
+        var scale = Math.Clamp(panel.Scale * (keys + room - tall) / keys, PanelPlacement.MinScale, PanelPlacement.MaxScale);
+        if (Math.Abs(scale - panel.Scale) < 0.003f)
+        {
+            return;
+        }
+
+        Android.Util.Log.Info("KeyPlus", $"Headset's window {room}px: Estándar XR's keys {keys}px of {tall}px, scale {panel.Scale:0.###} to {scale:0.###}");
+
+        // Not in the middle of the layout pass that told the sizes.
+        panel.Root.Post(() => panel.Scale = scale);
+    }
+
+    /// <summary>
+    /// On a headset, Gboard's card there (docs/tODO/photos/gboard/xr-letters.png): the keys' box rounded, 55 px on its band of
+    /// 84 (our band the bar's height), and the room around it see-through, the window's ground and the keyboard's taken away.
+    /// </summary>
+    private void AsHeadsetCard(View keys, View under)
+    {
+        var radius = Dp(KeyPanel.ToolbarDp * 55f / 84);
+        keys.OutlineProvider = new RoundCard(radius);
+        keys.ClipToOutline = true;
+        under.Visibility = ViewStates.Invisible;
+        Window?.Window?.SetBackgroundDrawable(new Android.Graphics.Drawables.ColorDrawable(Android.Graphics.Color.Transparent));
+    }
+
+    /// <summary>A view's outline, a rectangle with round corners of a radius.</summary>
+    private sealed class RoundCard(float radius) : ViewOutlineProvider
+    {
+        public override void GetOutline(View? view, Android.Graphics.Outline? outline) => outline?.SetRoundRect(0, 0, view!.Width, view.Height, radius);
     }
 
     /// <summary>Never the whole screen with an editor of its own, as a keyboard is by default with the phone on its side.</summary>

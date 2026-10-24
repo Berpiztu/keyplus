@@ -21,6 +21,10 @@ public static class Keyboards
     public const string StandardBase = "standard";
     public const string StandardPcBase = "standardPc";
 
+    /// <summary>Estándar XR, Gboard's on the Galaxy XR: the Android keyboard's on a headset, never listed here.</summary>
+    public const string StandardXrId = "standardXr";
+    public const string StandardXrBase = "standardXr";
+
     private static readonly string Kept = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", "keyboards.json");
 
