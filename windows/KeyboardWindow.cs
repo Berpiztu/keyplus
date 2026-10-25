@@ -117,6 +117,9 @@ public sealed class KeyboardWindow : Window
 
     /// <summary>The toolbar's Spelling on and off (<see cref="KeyboardPreferences.SpellingOn"/>), lit while on.</summary>
     private readonly SignButton spellingButton;
+
+    /// <summary>The toolbar's Glide typing on and off for the language typed in (<see cref="KeyboardPreferences.GlidesIn"/>), lit while on with its files.</summary>
+    private readonly SignButton glideButton;
     private readonly FocusWatch focus = new();
     private readonly IDisposable preferencesWatch;
     private readonly IDisposable keyboardsWatch;
@@ -218,13 +221,12 @@ public sealed class KeyboardWindow : Window
             var read = await swipe.Words(path);
             keys.TypeSwiped(personal.Ordered(path.Language.Code, read), read.FirstOrDefault() ?? "", capital, capitals);
         };
-        keys.SwipeChosen += (language, read, word) => personal.Chose(language.Code, read, word);
-        keys.WordTyped += (language, word) =>
+        // Nothing learnt while Autocorrect is off, in the language or from the toolbar: writing code, its names are no words.
+        keys.SwipeChosen += (language, read, word) =>
         {
-            if (personal.Typed(language.Code, word, typed => Knows(language, typed)))
+            if (Learns(language))
             {
-                Log.Detail($"Dictionary: a word learnt in {language.Code}");
-                swipe.Forget();
+                personal.Chose(language.Code, read, word);
             }
         };
         // The settings changed the dictionary: swiping reads it again; a choice noted changes no word, and no trie.
@@ -236,11 +238,11 @@ public sealed class KeyboardWindow : Window
             }
         });
         keys.Suggestions += ShowSuggestions;
-        keys.Offered += words => ShowSuggestions(words, null);
+        keys.Offered += ShowTyping;
         keys.Suggesting = Suggest;
         keys.PressedAt = () => input.PressedAt;
         keys.KeyedAt = () => input.KeyedAt;
-        commonErrors = new(() => (Wikipedia, Wikipedia && CommonErrors.Downloaded ? CommonErrors.Stamp : default), () => CommonErrors.Load(Wikipedia));
+        commonErrors = new(() => (Wikipedia, Wikipedia && CommonErrors.Downloaded ? CommonErrors.Stamp : default), () => CommonErrors.Load(Wikipedia, () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList))));
         keys.SpellingIn = language => preferences.Applied(language.Code);
         keys.Fixing = Fix;
         keys.WordFixed += ShowWordFix;
@@ -293,6 +295,7 @@ public sealed class KeyboardWindow : Window
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
         close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
         spellingButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_spellcheck };
+        glideButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_settings_gesture };
         mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
         mic.Clicked += Listen;
         voice = new VoiceTyping(microphone, Log.Write);
@@ -371,8 +374,37 @@ public sealed class KeyboardWindow : Window
         DockPanel.SetDock(smiley, Dock.Left);
 
         // Spelling on and off at once, lit while on: off to write code, on again for a message.
-        spellingButton.Clicked += () => (KeyboardPreferences.Read() with { SpellingOn = !spellingButton.Lit }).Keep();
+        spellingButton.Clicked += () =>
+        {
+            var kept = KeyboardPreferences.Read();
+
+            // Nothing downloaded to correct the language typed in with: said, with Download beside it; nothing turned on.
+            if (!kept.CanCorrect(keys.KeyLanguage.Code))
+            {
+                Log.Write($"Spelling: nothing downloaded to correct {keys.KeyLanguage.Code} with, so the toolbar's button stays off");
+                OfferDictionary(keys.KeyLanguage);
+                return;
+            }
+
+            (kept with { SpellingOn = !spellingButton.Lit }).Keep();
+        };
         DockPanel.SetDock(spellingButton, Dock.Left);
+
+        // The language typed in swiped or not, lit while on; without its files, said, with Download beside it for that language alone.
+        glideButton.Clicked += () =>
+        {
+            var language = keys.KeyLanguage;
+            if (!SwipeData.ReadyFor(language))
+            {
+                Log.Write($"Glide typing: {language.Code}'s word list or the model is not downloaded, so the toolbar's button stays off");
+                OfferDownload(Texts.Get(Resource.String.glide_not_downloaded, language.Name), $"glide typing for {language.Code}", progress => SwipeData.DownloadFor(language, progress),
+                    () => KeyboardPreferences.Read().WithGlide(language.Code, true).Keep(), Resource.String.glide_downloaded, Resource.String.glide_download_failed);
+                return;
+            }
+
+            KeyboardPreferences.Read().WithGlide(language.Code, !glideButton.Lit).Keep();
+        };
+        DockPanel.SetDock(glideButton, Dock.Left);
         DockPanel.SetDock(close, Dock.Right);
         DockPanel.SetDock(mic, Dock.Right);
         DockPanel.SetDock(settings, Dock.Right);
@@ -382,6 +414,7 @@ public sealed class KeyboardWindow : Window
         bar.Children.Add(switcher);
         bar.Children.Add(smiley);
         bar.Children.Add(spellingButton);
+        bar.Children.Add(glideButton);
         bar.Children.Add(close);
         bar.Children.Add(mic);
         bar.Children.Add(settings);
@@ -732,6 +765,8 @@ public sealed class KeyboardWindow : Window
         Keyboards.Carry(keys.KeyLanguage.Code, keyboard);
         (preferences = KeyboardPreferences.Read() with { Language = keys.KeyLanguage.Code }).Keep();
         ChooseKeyboard(Keyboards.Selected(preferences, keys.KeyLanguage.Code));
+        ShowSpellingButton(preferences);
+        TakeGlide(preferences);
         Keep();
     }
 
@@ -784,17 +819,103 @@ public sealed class KeyboardWindow : Window
             ChooseKeyboard(Keyboards.Selected(kept, keys.KeyLanguage.Code));
         }
 
-        keys.Glides = kept.Glide;
+        TakeGlide(kept);
         keys.ShowsTrail = kept.GlideTrail;
         keys.DeletesSwipedWord = kept.GlideDeleteWord;
         TakeSpelling(kept);
     }
 
+    /// <summary>
+    /// The language typed in without a dictionary, offered in the toolbar as
+    /// its Correct words would download (<see cref="OfferDownload"/>): its
+    /// dictionary and word list, its Correct words turned on once they are.
+    /// </summary>
+    private void OfferDictionary(StandardLanguage language)
+    {
+        if (!SpellingDictionary.Has(language.Code))
+        {
+            Notice(Texts.Get(Resource.String.spelling_no_dictionary, language.Name));
+            return;
+        }
+
+        OfferDownload(Texts.Get(Resource.String.spelling_no_dictionary, language.Name), $"the {language.Code} dictionary and word list",
+            progress => Downloads.FilesAsync([.. SpellingDictionary.FilesFor(language.Code), SwipeData.WordListFile(language)], progress),
+            () =>
+            {
+                var now = KeyboardPreferences.Read();
+                (now.WithSpelling(language.Code, now.SpellingIn(language.Code) with { Words = true }) with { SpellingOn = true }).Keep();
+            },
+            Resource.String.spelling_dictionary_downloaded, Resource.String.spelling_dictionary_download_failed);
+    }
+
+    /// <summary>
+    /// What a toolbar button needs and lacks, said in the toolbar's middle
+    /// with Download beside it: fetched there with a tap, how much shown as
+    /// it comes, and once it is, what it is for turned on (<paramref name="turnOn"/>),
+    /// its button lit; a failure said there and in the log. Nothing is
+    /// fetched but by that tap.
+    /// </summary>
+    private void OfferDownload(string missing, string named, Func<IProgress<(long Done, long Total)>, Task> download, Action turnOn, int done, int failed)
+    {
+        suggestions.Children.Clear();
+        suggestions.ColumnDefinitions.Clear();
+        suggestions.ColumnDefinitions.Add(new ColumnDefinition());
+        suggestions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        suggestions.Visibility = Visibility.Visible;
+        var said = SuggestionPlace(missing, bold: false, null);
+        var label = (TextBlock)said.Child;
+        Border? fetch = null;
+        fetch = SuggestionPlace(Texts.Get(Resource.String.download), bold: true, async () =>
+        {
+            fetch!.Visibility = Visibility.Collapsed;
+            try
+            {
+                await download(new Progress<(long Done, long Total)>(at => label.Text = Texts.Get(Resource.String.downloading_short,
+                    (at.Done / 1_000_000.0).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture), (Math.Max(at.Total, at.Done) / 1_000_000.0).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture))));
+                Log.Write($"Downloads: {named} downloaded from the toolbar");
+                turnOn();
+                ShowSuggestions([], null);
+                Notice(Texts.Get(done));
+            }
+            catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+            {
+                Log.Write($"Downloads: {named} could not be downloaded from the toolbar: {failure.Message}");
+                ShowSuggestions([], null);
+                Notice(Texts.Get(failed, failure.Message));
+            }
+        }, ends: false);
+        Grid.SetColumn(fetch, 1);
+        suggestions.Children.Add(said);
+        suggestions.Children.Add(fetch);
+    }
+
+    /// <summary>
+    /// Glide typing as the language typed in has it: swiped, and its toolbar
+    /// button lit, only while it is on in that language and its word list and
+    /// the model are downloaded; another language, its own.
+    /// </summary>
+    private void TakeGlide(KeyboardPreferences kept)
+    {
+        var on = kept.GlidesIn(keys.KeyLanguage.Code) && SwipeData.ReadyFor(keys.KeyLanguage);
+        keys.Glides = on;
+        glideButton.Lit = on;
+    }
+
+    /// <summary>
+    /// The toolbar's Spelling button lit only while Spelling is on and the
+    /// language typed in has something downloaded to correct with: off
+    /// without it, whatever was chosen, for nothing would be corrected.
+    /// </summary>
+    private void ShowSpellingButton(KeyboardPreferences kept) => spellingButton.Lit = kept.SpellingOn && kept.CanCorrect(keys.KeyLanguage.Code);
+
+    /// <summary>Whether the dictionary learns from what is typed in a language: only while its Autocorrect is on and Spelling is not off from the toolbar.</summary>
+    private bool Learns(StandardLanguage language) => preferences.Applied(language.Code).Autocorrect;
+
     /// <summary>Spelling's choices given to the keys, and what they turned on loaded at once, away from the window's thread.</summary>
     private void TakeSpelling(KeyboardPreferences kept)
     {
         // Off from the toolbar (writing code), nothing is corrected or offered (Applied); the choices stay as they are.
-        spellingButton.Lit = kept.SpellingOn;
+        ShowSpellingButton(kept);
 
         // What words were found to mean may change with what is now turned on.
         fixes.Clear();
@@ -811,30 +932,41 @@ public sealed class KeyboardWindow : Window
         }
     }
 
-    /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the window's thread.</summary>
-    private readonly Dictionary<StandardLanguage, Task<WordSuggestions?>> wordLists = [];
+    /// <summary>Each language's word list, downloaded with Glide typing (<see cref="SwipeData"/>): the words offered as a word is typed and how common a word is.</summary>
+    private readonly Dictionary<StandardLanguage, Loaded<WordSuggestions>> wordLists = [];
 
-    /// <summary>The words offered for a word being typed; none until the language's word list is read.</summary>
-    private IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
+    /// <summary>A language's word list, read away from the window's thread the first time it is asked for and again once it is downloaded again; none while it is not on this computer.</summary>
+    private Loaded<WordSuggestions> WordListOf(StandardLanguage language)
     {
-        if (!wordLists.TryGetValue(language, out var reading))
+        if (!wordLists.TryGetValue(language, out var list))
         {
-            wordLists[language] = reading = Task.Run(() =>
+            wordLists[language] = list = new(() => SwipeData.HasWordList(language) ? SwipeData.WordListStamp(language) : null, () =>
             {
+                if (!SwipeData.HasWordList(language))
+                {
+                    return null;
+                }
+
                 try
                 {
-                    using var wordList = File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, language.WordList));
+                    using var wordList = File.OpenRead(SwipeData.WordListPath(language));
                     return WordSuggestions.Read(wordList, language);
                 }
-                catch (IOException failure)
+                catch (Exception failure) when (failure is IOException or InvalidDataException)
                 {
-                    Log.Write($"The {language.Code} words to offer could not be read: {failure.Message}");
+                    Log.Write($"The {language.Code} word list could not be read: {failure.Message}");
                     return null;
                 }
             });
         }
 
-        IReadOnlyList<string> listed = reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+        return list;
+    }
+
+    /// <summary>The words offered for a word being typed; from the word list only once it is downloaded and read.</summary>
+    private IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
+    {
+        IReadOnlyList<string> listed = WordListOf(language).InUse() is { } ready ? ready.For(typed) : [];
 
         // The user's own words first, so one being typed stays in its place as what the word may have meant comes in
         // after it, once found; the word list's starting so only where room is left.
@@ -844,8 +976,16 @@ public sealed class KeyboardWindow : Window
             fixes.TryGetValue(typed, out found);
         }
 
-        return [.. personal.Starting(language, typed).Concat(found?.Words ?? []).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
+        // First, whether the word typed is a word: then it is what a space writes, in the centre, whatever is commoner ("hola" before "holandés").
+        IReadOnlyList<string> itself = IsWord(language, typed) ? [typed] : [];
+        return [.. itself.Concat(personal.Starting(language, typed)).Concat(found?.Words ?? []).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
     }
+
+    /// <summary>Whether a word is a word as it is written, its accents too: the language's word list's, the user's dictionary's or its spelling dictionary's (Hunspell's).</summary>
+    private bool IsWord(StandardLanguage language, string word) =>
+        WordListOf(language).InUse()?.HasSpelled(word) == true
+        || personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase)
+        || DictionaryFor(language)?.InUse()?.Knows(word) == true;
 
     /// <summary>Spelling's accent model, loaded the first time a sentence asks for it; the one loaded before let go once the new one is, a sentence may still be reading it.</summary>
     private readonly Loaded<AccentModel> accents = new(() => AccentModel.Downloaded ? AccentModel.Stamp : null, AccentModel.Load, old => old.Dispose());
@@ -880,7 +1020,7 @@ public sealed class KeyboardWindow : Window
     /// The words a word typed may have meant, at most as many as the toolbar
     /// shows, and whether it is misspelled; none for a word left as it is.
     /// </summary>
-    private KeyboardSurface.WordFixes? Fix(StandardLanguage language, string word)
+    private WordFixes? Fix(StandardLanguage language, string word)
     {
         if (Checking(language, word) is not { } checking)
         {
@@ -906,7 +1046,7 @@ public sealed class KeyboardWindow : Window
             return null;
         }
 
-        var listed = wordLists.TryGetValue(language, out var reading) && reading.IsCompletedSuccessfully ? reading.Result : null;
+        var listed = WordListOf(language).InUse();
         var own = personal.Words(language.Code);
         var known = Knows(language, word) || own.Contains(word, StringComparer.OrdinalIgnoreCase) || spelling.Knows(word);
         // The common misspellings are Spanish ones.
@@ -922,7 +1062,7 @@ public sealed class KeyboardWindow : Window
     /// common ones, never corrected alone. Nothing for a word Hunspell fails
     /// on, which is then not looked for again.
     /// </summary>
-    private static KeyboardSurface.WordFixes Corrections(string word, Check checking)
+    private static WordFixes Corrections(string word, Check checking)
     {
         IReadOnlyList<string> common = checking.Common?.For(word) ?? [];
         if (checking.Known)
@@ -946,7 +1086,7 @@ public sealed class KeyboardWindow : Window
     }
 
     /// <summary>What each word typed may have meant, found as it was typed, for its end; begun again past <see cref="FixesKept"/> words and as Spelling's choices change.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, KeyboardSurface.WordFixes> fixes = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, WordFixes> fixes = new();
 
     private const int FixesKept = 200;
 
@@ -977,7 +1117,7 @@ public sealed class KeyboardWindow : Window
         {
             if (keys.TypingWord == word)
             {
-                ShowSuggestions(Suggest(language, word), null);
+                ShowTyping(Suggest(language, word));
             }
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
@@ -1064,9 +1204,9 @@ public sealed class KeyboardWindow : Window
         suggestions.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Whether the language's word list has the word; until the list is read, taken as known, so nothing is learnt by mistake.</summary>
+    /// <summary>Whether the language's word list has the word; while the list is being read, taken as known, so nothing is offered by mistake; without one downloaded, not known by it.</summary>
     private bool Knows(StandardLanguage language, string word) =>
-        !wordLists.TryGetValue(language, out var reading) || !reading.IsCompletedSuccessfully || reading.Result is not { } ready || ready.Knows(word);
+        WordListOf(language).InUse() is { } ready ? ready.Knows(word) : SwipeData.HasWordList(language);
 
     /// <summary>
     /// Words in the toolbar's middle, as Gboard's: a swipe's, the typed one in
@@ -1105,6 +1245,54 @@ public sealed class KeyboardWindow : Window
             suggestions.Children.Add(place);
         }
     }
+
+    /// <summary>
+    /// The words offered for the word being typed (<see cref="ShowSuggestions"/>);
+    /// one no list, no dictionary of the user's and no Hunspell has, with
+    /// Learn new words as I type on and the language learning
+    /// (<see cref="Learns"/>), shown as typed at the left in quotes, as
+    /// Gboard's, the likeliest of the others in the centre: a tap on it writes
+    /// it with a space and learns it. Nothing is learnt but by that tap.
+    /// </summary>
+    private void ShowTyping(IReadOnlyList<string> words)
+    {
+        var language = keys.KeyLanguage;
+        var typed = keys.TypingWord;
+        if (typed.Length < 2 || !personal.LearnTyped || !Learns(language) || !Unknown(language, typed))
+        {
+            ShowSuggestions(words, null);
+            return;
+        }
+
+        suggestions.Children.Clear();
+        suggestions.ColumnDefinitions.Clear();
+        suggestions.Visibility = Visibility.Visible;
+        var others = words.Where(word => !word.Equals(typed, StringComparison.OrdinalIgnoreCase)).ToList();
+        string?[] shown = [typed, others.ElementAtOrDefault(0), others.ElementAtOrDefault(1)];
+        for (var i = 0; i < shown.Length; i++)
+        {
+            suggestions.ColumnDefinitions.Add(new ColumnDefinition());
+            if (shown[i] is not { } word)
+            {
+                continue;
+            }
+
+            var place = i == 0
+                ? SuggestionPlace($"\"{word}\"", bold: false, () =>
+                {
+                    keys.TakeSuggestion(word);
+                    personal.Learn(language.Code, word);
+                    Log.Detail($"Dictionary: a word learnt in {language.Code}, from the toolbar");
+                }, ends: false)
+                : SuggestionPlace(word, bold: i == 1, () => keys.TakeSuggestion(word), ends: false);
+            Grid.SetColumn(place, i);
+            suggestions.Children.Add(place);
+        }
+    }
+
+    /// <summary>Whether no word list, no dictionary of the user's and no Hunspell of the language has the word; while the list is read, known, so nothing is offered to learn by mistake.</summary>
+    private bool Unknown(StandardLanguage language, string word) =>
+        !Knows(language, word) && !personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase) && DictionaryFor(language)?.InUse()?.Knows(word) != true;
 
     /// <summary>
     /// 🎤: a tap starts listening, 🎤 lit and beating with the voice's level,
@@ -1711,7 +1899,7 @@ public sealed class KeyboardWindow : Window
         keyboard = Keyboards.Selected(preferences, keys.KeyLanguage.Code);
         keys.Pc = keyboard.Base == Keyboards.StandardPcBase;
         keys.Design = StandardDesign.FromText(keyboard.DesignFor(docked));
-        keys.Glides = preferences.Glide;
+        TakeGlide(preferences);
         keys.ShowsTrail = preferences.GlideTrail;
         keys.DeletesSwipedWord = preferences.GlideDeleteWord;
         Log.Detailed = preferences.DetailedLog;

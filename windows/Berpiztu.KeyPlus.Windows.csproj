@@ -60,19 +60,25 @@
     <Compile Include="..\PersonalWords.cs" Link="Shared\PersonalWords.cs" />
     <Compile Include="..\SpanishMarks.cs" Link="Shared\SpanishMarks.cs" />
     <Compile Include="..\SpanishSounds.cs" Link="Shared\SpanishSounds.cs" />
-    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_tool_spellcheck.xml;..\Resources\drawable\ic_keyplus.xml"
+    <Compile Include="..\LanguageSpelling.cs" Link="Shared\LanguageSpelling.cs" />
+    <Compile Include="..\Downloads.cs" Link="Shared\Downloads.cs" />
+    <Compile Include="..\Loaded.cs" Link="Shared\Loaded.cs" />
+    <Compile Include="..\SpellingDictionary.cs" Link="Shared\SpellingDictionary.cs" />
+    <Compile Include="..\CommonErrors.cs" Link="Shared\CommonErrors.cs" />
+    <Compile Include="..\AccentModel.cs" Link="Shared\AccentModel.cs" />
+    <Compile Include="..\SwipeData.cs" Link="Shared\SwipeData.cs" />
+    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_tool_spellcheck.xml;..\Resources\drawable\ic_settings_gesture.xml;..\Resources\drawable\ic_keyplus.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
     <!-- The words, the Android keyboard's, in English and Spanish (Texts.cs). -->
     <Content Include="..\Resources\values\strings.xml" Link="strings\values\strings.xml" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Resources\values-es\strings.xml" Link="strings\values-es\strings.xml" CopyToOutputDirectory="PreserveNewest" />
     <!-- Emoji: Unicode's list, drawn in colour by Direct2D (EmojiArt.cs). -->
     <Content Include="..\Assets\emoji\*.txt" LinkBase="emoji" CopyToOutputDirectory="PreserveNewest" />
-    <!-- Swipe typing: FUTO Swipe built for Windows (native\futo-swipe\windows\build.ps1),
-         its encoder and AOSP's word lists, the Android keyboard's. -->
+    <!-- Swipe typing: FUTO Swipe built for Windows (native\futo-swipe\windows\build.ps1) and its
+         licence; its encoder and AOSP's word lists are downloaded as Glide typing is turned on
+         (SwipeData.cs), never carried. -->
     <Content Include="..\native\futo-swipe\win-x64\keyplus_swipe.dll" Link="keyplus_swipe.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\native\futo-swipe\win-x64\keyplus_swipe.dll')" />
-    <Content Include="..\Assets\futo-swipe\honorable_sturgeon\*" LinkBase="futo-swipe\honorable_sturgeon" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Assets\futo-swipe\LICENSE.md" Link="futo-swipe\LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="..\Assets\dictionaries\*.gz" LinkBase="dictionaries" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Assets\spelling\*.txt" LinkBase="spelling" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

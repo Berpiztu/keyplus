@@ -116,8 +116,17 @@
     <AndroidJavaSource Update="SwipeDecoder.java" Bind="false" />
   </ItemGroup>
 
+  <!-- Spelling, Berpiztu AI Keyboard's, as Windows': Hunspell ported to .NET
+       (no native parts) for the words, and ONNX Runtime for the accent
+       model; their dictionaries and model are downloaded when turned on,
+       never carried. -->
+  <ItemGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
+    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
-    <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs" />
+    <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml;Resources\xml\keyboard_menus.xml" />
     <AndroidJavaSource Remove="SwipeDecoder.java" />
     <AndroidAsset Remove="Assets\**" />

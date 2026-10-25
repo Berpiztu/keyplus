@@ -145,8 +145,10 @@ a window that does.
   sent nowhere: your words, which swiping reads with the language's word
   list and the words offered as you type show first (a web domain, a name);
   each with ✏ to write it again and a red ✕ to delete it, a word added by
-  hand. **Learn new words as I type** (on): a word no word list has, typed
-  letter by letter twice, joins them. **Learn from the words I choose**
+  hand. **Offer new words to learn** (on): a word no word list has shows as
+  typed at the toolbar's left, in quotes, as Gboard's; a tap writes it and
+  learns it. Nothing is learnt by itself, nor while Autocorrect or Spelling
+  is off (writing code). **Learn from the words I choose**
   (on): a word taken from the toolbar in place of a swiped one is typed
   first the next time that swipe reads the same, so the keyboard follows
   how you swipe; **Forget the words chosen** undoes it. **Export the
@@ -178,6 +180,11 @@ a window that does.
   choices turned on downloaded again whole, for a file damaged. Windows
   tells the keyboard nothing of the field, so Spelling mends only what the
   keyboard typed whole, with no mouse or computer key since it began.
+- **Settings › Glide typing** on Windows is off until turned on, when it
+  downloads once what it reads with: FUTO Swipe's model (Hugging Face) and
+  the Spanish and English word lists (AOSP LatinIME), 4.7 MB, each file
+  checked by its SHA-256. The word lists also give the words offered as you
+  type and how common a correction is. The installer carries none of it.
 - **Settings › Glide typing › Delete a swiped word whole** (on, as Gboard's):
   ⌫ right after a swiped word deletes all the swipe typed, the word and the
   space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes

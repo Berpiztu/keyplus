@@ -504,14 +504,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Suggesting = Suggest;
             panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
             panel.SwipeChosen = (language, read, word) => personal.Chose(language.Code, read, word);
-            panel.WordTyped = (language, word) =>
-            {
-                if (personal.Typed(language.Code, word, typed => Knows(language, typed)))
-                {
-                    Android.Util.Log.Info("KeyPlus", $"Dictionary: \"{word}\" learnt in {language.Code}");
-                    swipeTyping?.Forget();
-                }
-            };
             panel.WordBeforeCaret = () =>
             {
                 var before = CurrentInputConnection?.GetTextBeforeCursor(WordReach, 0)?.ToString() ?? "";

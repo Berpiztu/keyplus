@@ -9,9 +9,10 @@ namespace Berpiztu.KeyPlus;
 /// nowhere (Settings › Dictionary):
 /// <list type="bullet">
 /// <item>The personal dictionary: words no word list has (a web domain, a
-/// name), added by hand, or learnt by themselves once typed letter by letter
-/// <see cref="LearnAfter"/> times; swiping reads them with the word list, and
-/// they are offered first as a word is typed.</item>
+/// name), added by hand, or learnt from the toolbar, where a word being typed
+/// that no list has is offered at the left and a tap learns it; nothing is
+/// learnt by itself. Swiping reads them with the word list, and they are
+/// offered first as a word is typed.</item>
 /// <item>The words chosen for a swipe: a word of the toolbar taken in place of
 /// the one a swipe typed is noted for the word read first; the next time a
 /// swipe reads that first, the word chosen most often for it is typed
@@ -26,16 +27,13 @@ public sealed class PersonalWords(string path)
     /// <summary>The file's name, in the app's own folder (Android's files, Windows' %APPDATA%\Berpiztu\Keyboard).</summary>
     public const string FileName = "personal-words.json";
 
-    /// <summary>How many times a word no word list has is typed before it is learnt.</summary>
-    public const int LearnAfter = 2;
-
     /// <summary>A personal word's frequency in the swipe's word list (AOSP's run 0 to 255): as common as "también".</summary>
     public const int Frequency = 180;
 
     /// <summary>The file's content.</summary>
     public sealed class Kept
     {
-        /// <summary>Settings › Dictionary › Learn new words as I type.</summary>
+        /// <summary>Settings › Dictionary › Learn new words as I type: a word being typed that no list has offered at the toolbar's left, a tap learning it.</summary>
         public bool LearnTyped { get; set; } = true;
 
         /// <summary>Settings › Dictionary › Learn from the words I choose.</summary>
@@ -46,9 +44,6 @@ public sealed class PersonalWords(string path)
 
         /// <summary>Each language's swipes: the word read first, lower case, and how often each word was taken for it.</summary>
         public Dictionary<string, Dictionary<string, Dictionary<string, int>>> Chosen { get; set; } = [];
-
-        /// <summary>Each language's words typed that no word list has, lower case, and how often, until learnt.</summary>
-        public Dictionary<string, Dictionary<string, int>> Typed { get; set; } = [];
     }
 
     private Kept kept = new();
@@ -86,7 +81,6 @@ public sealed class PersonalWords(string path)
                 words.Add(word);
             }
 
-            Of(file.Typed, language, () => []).Remove(word.ToLowerInvariant());
         });
     }
 
@@ -228,36 +222,12 @@ public sealed class PersonalWords(string path)
     }
 
     /// <summary>
-    /// A word typed letter by letter and ended: one no word list has
-    /// (<paramref name="known"/>) and the dictionary lacks counted, and learnt
-    /// once typed <see cref="LearnAfter"/> times, lower case unless its own
-    /// capitals are inside it ("mySaaS"). Whether it was learnt now.
+    /// A word typed letter by letter, taken from the toolbar's left to be
+    /// learnt: lower case unless its own capitals are inside it ("mySaaS"),
+    /// as a word with a capital only for starting a sentence is not one.
     /// </summary>
-    public bool Typed(string language, string word, Func<string, bool> known)
-    {
-        if (!kept.LearnTyped || word.Length < 2 || known(word) || Words(language).Contains(word, StringComparer.CurrentCultureIgnoreCase))
-        {
-            return false;
-        }
-
-        var spelled = word[1..].Any(char.IsUpper) && !word.All(char.IsUpper) ? word : word.ToLowerInvariant();
-        var learnt = false;
-        Change(file =>
-        {
-            var typed = Of(file.Typed, language, () => []);
-            var times = typed.GetValueOrDefault(spelled.ToLowerInvariant()) + 1;
-            if (times < LearnAfter)
-            {
-                typed[spelled.ToLowerInvariant()] = times;
-                return;
-            }
-
-            typed.Remove(spelled.ToLowerInvariant());
-            Of(file.Words, language, () => []).Add(spelled);
-            learnt = true;
-        });
-        return learnt;
-    }
+    public void Learn(string language, string word) =>
+        Add(language, word[1..].Any(char.IsUpper) && !word.All(char.IsUpper) ? word : word.ToLowerInvariant());
 
     /// <summary>The dictionary's words that start as the typed one does, accents aside, and in Spanish as it sounds too ("mis": mysaasplace, <see cref="SpanishSounds.Key"/>), cased as it is.</summary>
     public IReadOnlyList<string> Starting(StandardLanguage language, string typed)

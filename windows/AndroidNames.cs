@@ -83,6 +83,7 @@ namespace Berpiztu.KeyPlus
             public const int ic_grid_floating_off = 26;
             public const int ic_tool_resize = 27;
             public const int ic_tool_spellcheck = 28;
+            public const int ic_settings_gesture = 29;
         }
 
         public static class String
@@ -237,6 +238,18 @@ namespace Berpiztu.KeyPlus
             public const int spelling_dictionary_es = 175;
             public const int spelling_dictionary_en = 176;
             public const int dictionary_by_language = 177;
+            public const int more_options = 178;
+            public const int spelling_not_downloaded = 179;
+            public const int glide_summary_download = 180;
+            public const int glide_downloading = 181;
+            public const int glide_downloaded = 182;
+            public const int glide_download_failed = 183;
+            public const int spelling_nothing_downloaded = 184;
+            public const int download = 185;
+            public const int spelling_no_dictionary = 186;
+            public const int downloading_short = 187;
+            public const int glide_not_downloaded = 188;
+            public const int glide_by_language = 189;
             public const int troubleshooting_detailed_log = 152;
             public const int troubleshooting_detailed_log_summary = 153;
             public const int troubleshooting_log_view = 154;

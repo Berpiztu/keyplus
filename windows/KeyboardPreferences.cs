@@ -25,22 +25,6 @@ namespace Berpiztu.KeyPlus;
 /// <summary>Personalizado's keyboard and accent colours.</summary>
 public sealed record KeyboardColors(string? KeyColor, string? AccentColor);
 
-/// <summary>
-/// A language's Spelling, chosen on its page under Languages: its words
-/// corrected (its dictionary), what is corrected written at once
-/// (Autocorrect), and, where the language has them
-/// (<see cref="Offers"/>), its accents by the model, the Wikipedia's common
-/// misspellings and the opening marks.
-/// </summary>
-public sealed record LanguageSpelling(bool Words = false, bool Autocorrect = true, bool Accents = false, bool Wikipedia = false, bool OpenMark = false)
-{
-    /// <summary>Nothing corrected: Spelling off from the toolbar.</summary>
-    public static LanguageSpelling Off { get; } = new(Words: false, Autocorrect: false);
-
-    /// <summary>What Spelling has for a language beyond its words and Autocorrect: Spanish its accent model, the Wikipedia's list and ¿ ¡; another, nothing more.</summary>
-    public static bool Offers(string language) => language == StandardKeys.Spanish.Code;
-}
-
 public sealed record KeyboardPreferences(
     bool ShowKeyboard = true,
     string FocusLost = KeyboardPreferences.FocusLostHide,
@@ -49,7 +33,8 @@ public sealed record KeyboardPreferences(
     bool AvoidMenus = true,
     bool? Pc = null,
     string? Language = null,
-    bool Glide = true,
+    // Glide typing as an older file had it, one for every language: read for a language not chosen yet (GlidesIn).
+    bool Glide = false,
     bool GlideTrail = true,
     bool GlideDeleteWord = true,
     bool SpellingOn = true,
@@ -68,8 +53,16 @@ public sealed record KeyboardPreferences(
     string? AccentColor = null,
     KeyboardColors? Before = null,
     bool PerApp = false,
-    Dictionary<string, LanguageSpelling>? Spelling = null)
+    Dictionary<string, LanguageSpelling>? Spelling = null,
+    Dictionary<string, bool>? GlideBy = null)
 {
+    /// <summary>Whether a language is swiped in (its Glide typing, on its page under Languages, or the toolbar's button while typing in it).</summary>
+    public bool GlidesIn(string language) => GlideBy is { } chosen && chosen.TryGetValue(language, out var on) ? on : Glide;
+
+    /// <summary>The preferences with a language's Glide typing changed.</summary>
+    public KeyboardPreferences WithGlide(string language, bool on) =>
+        this with { GlideBy = new Dictionary<string, bool>(GlideBy ?? []) { [language] = on } };
+
     /// <summary>
     /// A language's Spelling (<see cref="LanguageSpelling"/>); one not chosen
     /// yet as an older file had them for every language, Spanish's whole and
@@ -84,6 +77,13 @@ public sealed record KeyboardPreferences(
     /// <summary>The preferences with a language's Spelling changed.</summary>
     public KeyboardPreferences WithSpelling(string language, LanguageSpelling changed) =>
         this with { Spelling = new Dictionary<string, LanguageSpelling>(Spelling ?? []) { [language] = changed } };
+
+    /// <summary>Whether a language has something Spelling corrects with: its dictionary downloaded with Correct words on, the accent model with its accents on, or ¿ and ¡ on, which need nothing.</summary>
+    public bool CanCorrect(string language)
+    {
+        var spelling = SpellingIn(language);
+        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded) || spelling.OpenMark;
+    }
 
     /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off from the toolbar.</summary>
     public LanguageSpelling Applied(string language) => SpellingOn ? SpellingIn(language) : LanguageSpelling.Off;

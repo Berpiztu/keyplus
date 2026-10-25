@@ -7,10 +7,13 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// A swipe over the letters read as words by FUTO Swipe on Windows
 /// (keyplus_swipe.dll, native/futo-swipe/windows), as the Android keyboard
-/// reads it (SwipeTyping.cs): its encoder loaded once beside the app, a trie
-/// of each language's AOSP word list made the first time a swipe is read in
-/// it (<see cref="SwipeWords"/>), all away from the window's thread; the
-/// letters read written back as the word list spells them.
+/// reads it (SwipeTyping.cs): its encoder loaded once, a trie of each
+/// language's AOSP word list made the first time a swipe is read in it
+/// (<see cref="SwipeWords"/>), all away from the window's thread; the
+/// letters read written back as the word list spells them. The encoder and
+/// the word lists are downloaded as Glide typing is turned on
+/// (<see cref="SwipeData"/>); until they are, a swipe reads nothing, and
+/// once they are, the next swipe loads them.
 /// </summary>
 public sealed class SwipeEngine
 {
@@ -23,7 +26,7 @@ public sealed class SwipeEngine
     private static readonly string Folder = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Berpiztu", "Keyboard", "futo-swipe");
 
-    private readonly Task<bool> loaded;
+    private Task<bool> loaded;
     private readonly Lock engineLock = new();
     private readonly Dictionary<StandardLanguage, (IntPtr Trie, Dictionary<string, string[]> Spellings)> languages = [];
 
@@ -59,6 +62,12 @@ public sealed class SwipeEngine
     /// <summary>The words a swipe reads as, the likeliest first; none where FUTO Swipe could not be loaded or read nothing.</summary>
     public async Task<IReadOnlyList<string>> Words(Swipe path)
     {
+        // Not loaded for want of its files, and they are here now: loaded again.
+        if (loaded.IsCompleted && !loaded.Result && SwipeData.ModelDownloaded)
+        {
+            loaded = Task.Run(Load);
+        }
+
         if (!await loaded)
         {
             return [];
@@ -98,17 +107,21 @@ public sealed class SwipeEngine
         });
     }
 
-    /// <summary>The engine made with the encoder beside the app; Spanish's trie made at once.</summary>
+    /// <summary>The engine made with the encoder downloaded; Spanish's trie made at once where its word list is here. False while they are not downloaded.</summary>
     private bool Load()
     {
+        if (!File.Exists(SwipeData.ModelPath))
+        {
+            return false;
+        }
+
         try
         {
             Directory.CreateDirectory(Folder);
-            var encoder = Path.Combine(AppContext.BaseDirectory, "futo-swipe", "honorable_sturgeon", "model_fp32.pte");
-            engine = keyplus_swipe_create(encoder, 2, BeamWidth, 4);
+            engine = keyplus_swipe_create(SwipeData.ModelPath, 2, BeamWidth, 4);
             lock (engineLock)
             {
-                return engine != IntPtr.Zero && Prepared(StandardKeys.Spanish) is not null;
+                return engine != IntPtr.Zero && (!SwipeData.HasWordList(StandardKeys.Spanish) || Prepared(StandardKeys.Spanish) is not null);
             }
         }
         catch (Exception failure)
@@ -118,7 +131,7 @@ public sealed class SwipeEngine
         }
     }
 
-    /// <summary>A language's trie and spellings, made from its word list the first time; none where it could not be made.</summary>
+    /// <summary>A language's trie and spellings, made from its word list the first time; none where it is not downloaded or could not be made.</summary>
     private (IntPtr Trie, Dictionary<string, string[]> Spellings)? Prepared(StandardLanguage language)
     {
         if (languages.TryGetValue(language, out var prepared))
@@ -126,9 +139,14 @@ public sealed class SwipeEngine
             return prepared;
         }
 
+        if (!SwipeData.HasWordList(language))
+        {
+            return null;
+        }
+
         var words = Path.Combine(Folder, $"{language.Code}.letters.combined");
         Dictionary<string, string[]> spellings;
-        using (var wordList = File.OpenRead(Path.Combine(AppContext.BaseDirectory, language.WordList)))
+        using (var wordList = File.OpenRead(SwipeData.WordListPath(language)))
         {
             spellings = SwipeWords.WriteLetterForms(wordList, language, words, personal(language));
         }

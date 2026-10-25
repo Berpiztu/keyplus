@@ -266,9 +266,6 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The words offered for the word being typed, for the toolbar, each to be taken with a tap (<see cref="TakeSuggestion"/>); none, the toolbar as it was.</summary>
     public event Action<IReadOnlyList<string>>? Offered;
 
-    /// <summary>A word typed letter by letter and ended, in its language (<see cref="PersonalWords.Typed"/>).</summary>
-    public event Action<StandardLanguage, string>? WordTyped;
-
     /// <summary>A word of the toolbar taken in place of a swiped one: the language, the word the swipe read first, the word taken (<see cref="PersonalWords.Chose"/>).</summary>
     public event Action<StandardLanguage, string, string>? SwipeChosen;
 
@@ -536,7 +533,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// begins: after a space or a sign they typed, or at the start of a
     /// field, a line or a sentence they began; not where a press put the
     /// caret, maybe in the middle of a word ("ka|sa"). Only then is it
-    /// offered words, corrected or learnt: they would take its part for it.
+    /// corrected by itself: it would take its part for the word. Words are offered all the same, written only with a tap.
     /// </summary>
     private bool wordStartKnown;
 
@@ -569,9 +566,6 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Spelling › Correct words: the words a word typed in a language may have meant, the likeliest first (<see cref="SpellingDictionary"/>, <see cref="CommonErrors"/>); none, it is left as it is.</summary>
     public Func<StandardLanguage, string, WordFixes?>? Fixing { get; set; }
 
-    /// <summary>The words a word typed may have meant, and whether it is misspelled, so the first may be written in its place; a word that is a word too ("as": has, haz) only has them offered.</summary>
-    public sealed record WordFixes(IReadOnlyList<string> Words, bool Misspelled);
-
     /// <summary>A misspelled word ended: the word as typed, the words it may have meant, and whether the first was written in its place (Autocorrect), for the toolbar to take it back or offer them (<see cref="ReplaceWord"/>).</summary>
     public event Action<string, IReadOnlyList<string>, bool>? WordFixed;
 
@@ -589,7 +583,13 @@ public sealed class KeyboardSurface : FrameworkElement
     /// </summary>
     private (string Typed, IReadOnlyList<string> Fixes, bool Applied)? FixWord()
     {
-        if (typingWord.Length < 2 || !WordKnown || Fixing?.Invoke(language, typingWord) is not { Words.Count: > 0 } fixes)
+        if (typingWord.Length >= 2 && !WordKnown)
+        {
+            Log.Detail("Spelling: a word left as it is: where it begins is not known (a click put the caret in the text, or a key of the computer's was pressed)");
+            return null;
+        }
+
+        if (typingWord.Length < 2 || Fixing?.Invoke(language, typingWord) is not { Words.Count: > 0 } fixes)
         {
             return null;
         }
@@ -631,11 +631,6 @@ public sealed class KeyboardSurface : FrameworkElement
         Retype(fix.Written.Length + fix.Ending.Length, word + fix.Ending);
         wordFix = null;
         boundaryAt = Environment.TickCount64;
-        if (word == fix.Typed)
-        {
-            WordTyped?.Invoke(language, word);
-        }
-
         Log.Detail(word == fix.Typed ? "Spelling: a word's correction taken back" : "Spelling: a word corrected from the toolbar");
     }
 
@@ -655,7 +650,8 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The word being typed changed: the words starting so offered, as Gboard's while a word is typed.</summary>
     private void OfferWords()
     {
-        IReadOnlyList<string> words = typingWord.Length > 0 && wordStartKnown && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
+        // Offered even where the word's start is not known: a word offered is only written with a tap.
+        IReadOnlyList<string> words = typingWord.Length > 0 && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
         Offered?.Invoke(words);
     }
 
@@ -1487,7 +1483,6 @@ public sealed class KeyboardSurface : FrameworkElement
                     FixWord();
                 }
 
-                EndWord();
                 ForgetTyping();
                 FlushDead();
                 CorrectBeforeEnter();
@@ -1618,22 +1613,12 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else
         {
-            EndWord();
             ForgetTyping();
             boundaryAt = typed.Length > 0 && !char.IsLetterOrDigit(typed[^1]) ? Environment.TickCount64 : 0;
             if (fixing is { } offered && typed.Length > 0)
             {
                 OfferFix(offered, typed);
             }
-        }
-    }
-
-    /// <summary>A word typed letter by letter ended by a space, a sign or Enter: told, for the personal dictionary to learn one no word list has.</summary>
-    private void EndWord()
-    {
-        if (typingWord.Length > 0 && wordStartKnown)
-        {
-            WordTyped?.Invoke(language, typingWord);
         }
     }
 

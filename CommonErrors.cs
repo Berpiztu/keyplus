@@ -26,8 +26,8 @@ public sealed class CommonErrors
             "listado.txt", "8f786c0046518012c11125cd3b96ecbebe43952de436567d18e3ab4a3a0db605"),
     ];
 
-    /// <summary>The keyboard's own list, beside the app.</summary>
-    private static readonly string Own = Path.Combine(AppContext.BaseDirectory, "spelling", "common-errors.txt");
+    /// <summary>The keyboard's own list, among the app's files: beside the Windows app, in the Android app's assets.</summary>
+    public const string OwnList = "spelling/common-errors.txt";
 
     /// <summary>Whether the Wikipedia's list is on this computer.</summary>
     public static bool Downloaded => Downloads.Present(Folder, Files);
@@ -39,21 +39,21 @@ public sealed class CommonErrors
     public static async Task DownloadAsync(IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
     {
         await Downloads.FilesAsync(Folder, Files, progress, cancel);
-        Log.Write("Spelling: the Wikipedia's common misspellings downloaded");
+        Android.Util.Log.Warn("KeyPlus", "Spelling: the Wikipedia's common misspellings downloaded");
     }
 
     /// <summary>Each word written, the words meant: those matched whatever their case, and those (cs) only as written.</summary>
     private readonly Dictionary<string, List<string>> anyCase = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> exactCase = new(StringComparer.Ordinal);
 
-    /// <summary>The keyboard's own list and, where asked for and downloaded, the Wikipedia's after it; a list that cannot be read is left out, in the log.</summary>
-    public static CommonErrors Load(bool wikipedia)
+    /// <summary>The keyboard's own list (<see cref="OwnList"/>, opened by the app) and, where asked for and downloaded, the Wikipedia's after it; a list that cannot be read is left out, in the log.</summary>
+    public static CommonErrors Load(bool wikipedia, Func<Stream> own)
     {
         var errors = new CommonErrors();
-        errors.Read(Own);
+        errors.Read(own);
         if (wikipedia && Downloaded)
         {
-            errors.Read(Path.Combine(Folder, Files[0].Name));
+            errors.Read(() => File.OpenRead(Path.Combine(Folder, Files[0].Name)));
         }
 
         return errors;
@@ -77,18 +77,20 @@ public sealed class CommonErrors
         return [.. meanings.Select(meant => WordSuggestions.Cased(meant, capital, capitals)).Where(meant => !meant.Equals(typed, StringComparison.OrdinalIgnoreCase)).Distinct()];
     }
 
-    private void Read(string file)
+    private void Read(Func<Stream> list)
     {
         try
         {
-            foreach (var line in File.ReadLines(file, Encoding.UTF8))
+            using var reader = new StreamReader(list(), Encoding.UTF8);
+            while (reader.ReadLine() is { } line)
             {
                 Add(line);
             }
         }
-        catch (IOException failure)
+        // Whatever the platform's failure (Android's assets throw Java's), a list not read leaves the others in use.
+        catch (Exception failure)
         {
-            Log.Write($"Spelling: a list of common misspellings could not be read: {failure.Message}");
+            Android.Util.Log.Warn("KeyPlus", $"Spelling: a list of common misspellings could not be read: {failure.Message}");
         }
     }
 

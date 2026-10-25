@@ -127,6 +127,11 @@ public sealed class WordSuggestions
         }
     }
 
+    /// <summary>Whether the list has the word spelled as it is written, its accents too ("canción", not "cancion"), whatever its case.</summary>
+    public bool HasSpelled(string word) =>
+        SwipeWords.Letters(word, language.SwipeLetters) is { } key && Array.BinarySearch(letters, key, StringComparer.Ordinal) is >= 0 and var at
+        && spellings[at].Any(spelled => spelled.Equals(word, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>How common the word is, by its letters alone; 0 for one the list lacks.</summary>
     public int Frequency(string word) =>
         SwipeWords.Letters(word, language.SwipeLetters) is { } key && Array.BinarySearch(letters, key, StringComparer.Ordinal) is >= 0 and var at ? frequencies[at] : 0;

@@ -3,6 +3,9 @@ using WeCantSpell.Hunspell;
 
 namespace Berpiztu.KeyPlus;
 
+/// <summary>The words a word typed may have meant, the likeliest first, and whether it is misspelled, so the first may be written in its place; a word that is a word too ("as": has, haz) only has them offered.</summary>
+public sealed record WordFixes(IReadOnlyList<string> Words, bool Misspelled);
+
 /// <summary>
 /// A language's words spelled right, and the words a misspelled one may have
 /// meant ("kasa": "casa", "helo": "hello"), as LibreOffice checks them:
@@ -51,12 +54,8 @@ public sealed class SpellingDictionary
     /// <summary>How large a language's dictionary is, in megabytes, for its choice to say what turning it on downloads.</summary>
     public static double MegabytesFor(string language) => Languages[language].Megabytes;
 
-    /// <summary>A language's dictionary fetched from LibreOffice's repository at its commit (<see cref="Downloads"/>); how much is done, told as it goes.</summary>
-    public static async Task DownloadAsync(string language, IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
-    {
-        await Downloads.FilesAsync(Folder, Languages[language].Files, progress, cancel);
-        Log.Write($"Spelling: the {language} dictionary downloaded");
-    }
+    /// <summary>A language's dictionary's files, each with the folder it goes to, from LibreOffice's repository at its commit (<see cref="Downloads"/>).</summary>
+    public static IEnumerable<(string Folder, Downloads.Item File)> FilesFor(string language) => Languages[language].Files.Select(file => (Folder, file));
 
     private readonly WordList words;
 
@@ -70,7 +69,7 @@ public sealed class SpellingDictionary
     {
         if (!DownloadedFor(language))
         {
-            Log.Write($"Spelling: no {language} dictionary in {Folder}");
+            Android.Util.Log.Warn("KeyPlus", $"Spelling: no {language} dictionary in {Folder}");
             return null;
         }
 
@@ -79,13 +78,13 @@ public sealed class SpellingDictionary
         {
             var dictionary = new SpellingDictionary(
                 WordList.CreateFromFiles(Path.Combine(Folder, name + ".dic"), Path.Combine(Folder, name + ".aff")), language == StandardKeys.Spanish.Code);
-            Log.Write($"Spelling: the {language} dictionary loaded");
+            Android.Util.Log.Warn("KeyPlus", $"Spelling: the {language} dictionary loaded");
             return dictionary;
         }
         // Any failure of a file Hunspell cannot read leaves the keyboard without a dictionary, never ended.
         catch (Exception failure)
         {
-            Log.Write($"Spelling: the {language} dictionary could not be loaded: {failure.Message}");
+            Android.Util.Log.Warn("KeyPlus", $"Spelling: the {language} dictionary could not be loaded: {failure.Message}");
             return null;
         }
     }
