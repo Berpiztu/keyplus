@@ -133,8 +133,9 @@ function Test-SecurityWatch {
             $here = Get-SecurityWatchInventory -Ref ([pscustomobject]@{ Name = $Ref; Type = "branch" })
             if (-not (Test-SecurityWatchSame (Get-SecurityWatchFile "inventories/$SecurityWatchProject/$Ref.json") $here)) {
                 $title = "inventory: $SecurityWatchProject@$Ref"
-                $pending = @(Invoke-RestMethod -Uri "https://api.github.com/repos/$SecurityWatchRepository/issues?state=open&per_page=100" -Headers (Get-SecurityWatchHeaders) -TimeoutSec 20) |
-                    Where-Object { $_.title -eq $title } | Select-Object -First 1
+                # The issues one by one: Invoke-RestMethod hands the list over whole, and with none open, strict mode stopped on the empty list's title.
+                $pending = Invoke-RestMethod -Uri "https://api.github.com/repos/$SecurityWatchRepository/issues?state=open&per_page=100" -Headers (Get-SecurityWatchHeaders) -TimeoutSec 20 |
+                    ForEach-Object { $_ } | Where-Object { $_.title -eq $title } | Select-Object -First 1
                 if (-not $pending) {
                     throw "security-watch has no list of $Ref as this checkout builds it: build first (the build sends it), then release."
                 }
