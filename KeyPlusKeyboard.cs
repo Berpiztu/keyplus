@@ -83,8 +83,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
         // The PC designs each screen kept before the list of keyboards, made keyboards of it once.
         Keyboards.MoveDesignsOnce(this);
 
-        // FUTO Swipe and its word list, loaded once, away from the main thread.
-        swipeTyping = new SwipeTyping(this);
+        // FUTO Swipe and its word list, loaded once, away from the main thread, with the personal dictionary.
+        personal = new PersonalWords(Path.Combine(FilesDir!.AbsolutePath, PersonalWords.FileName));
+        personal.Reload();
+        swipeTyping = new SwipeTyping(this, language => personal.Words(language.Code));
 
         MenuWatchService.MenuOpened += AvoidMenu;
         MenuWatchService.MenuClosed += MenuGone;
@@ -92,6 +94,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>Words swiped over the letters, on a phone.</summary>
     private SwipeTyping? swipeTyping;
+
+    /// <summary>The personal dictionary and the words chosen for swipes (<see cref="PersonalWords"/>), shared with the app's settings through their file.</summary>
+    private PersonalWords personal = null!;
 
     /// <summary>How far back the field is read for the word being typed.</summary>
     private const int WordReach = 48;
@@ -119,8 +124,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
             });
         }
 
-        return reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+        IReadOnlyList<string> listed = reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+        return [.. personal.Starting(language, typed).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
     }
+
+    /// <summary>Whether the language's word list has the word; until the list is read, taken as known, so nothing is learnt by mistake.</summary>
+    private bool Knows(StandardLanguage language, string word) =>
+        !suggestions.TryGetValue(language, out var reading) || !reading.IsCompletedSuccessfully || reading.Result is not { } ready || ready.Knows(word);
 
     /// <summary>Swipes read as words, where the app's settings have it on (Escritura deslizando el dedo); none, the letters only tapped.</summary>
     private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() =>
@@ -186,6 +196,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
         base.OnStartInputView(info, restarting);
         // Once a day at most: the keyboard's process lives for days.
         AndroidUpdates.CheckInBackground(this);
+        // The app's Dictionary may have changed the words: swiping reads them again.
+        if (personal.Reload())
+        {
+            swipeTyping?.Forget();
+        }
+
         InAppColors(info?.PackageName);
         panel?.FitLabels();
         if (panel is not null && !OnHeadset)
@@ -465,6 +481,16 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Swiping = SwipeOn();
             panel.VoiceTapped += Dictate;
             panel.Suggesting = Suggest;
+            panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
+            panel.SwipeChosen = (language, read, word) => personal.Chose(language.Code, read, word);
+            panel.WordTyped = (language, word) =>
+            {
+                if (personal.Typed(language.Code, word, typed => Knows(language, typed)))
+                {
+                    Android.Util.Log.Info("KeyPlus", $"Dictionary: \"{word}\" learnt in {language.Code}");
+                    swipeTyping?.Forget();
+                }
+            };
             panel.WordBeforeCaret = () =>
             {
                 var before = CurrentInputConnection?.GetTextBeforeCursor(WordReach, 0)?.ToString() ?? "";

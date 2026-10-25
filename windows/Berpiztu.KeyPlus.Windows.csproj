@@ -53,6 +53,7 @@
     <Compile Include="..\VoiceTyping.cs" Link="Shared\VoiceTyping.cs" />
     <Compile Include="..\WordSuggestions.cs" Link="Shared\WordSuggestions.cs" />
     <Compile Include="..\Updates.cs" Link="Shared\Updates.cs" />
+    <Compile Include="..\PersonalWords.cs" Link="Shared\PersonalWords.cs" />
     <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_keyplus.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
     <!-- The words, the Android keyboard's, in English and Spanish (Texts.cs). -->

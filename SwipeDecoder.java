@@ -65,6 +65,11 @@ public final class SwipeDecoder {
         return nativeLoadTrie(letters, vocabPath, "f");
     }
 
+    /** A trie made by loadDictionary let go: it is never used again. */
+    public static void freeDictionary(long trie) {
+        nativeDestroyTrie(trie);
+    }
+
     /** The letters' centres, from 0 to 1 over the letters, and the dictionary decoded against. */
     public static boolean setLayout(long engine, String letters, float[] cx, float[] cy, long dictionary) {
         return nativeSetMode(engine, letters, cx, cy, new long[] { nativeTrieHandle(dictionary) }, null, null, null);
@@ -97,4 +102,6 @@ public final class SwipeDecoder {
     private static native long nativeLoadTrie(String letters, String vocabPath, String freqKey);
 
     private static native long nativeTrieHandle(long trie);
+
+    private static native void nativeDestroyTrie(long trie);
 }

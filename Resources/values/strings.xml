@@ -223,4 +223,14 @@
   <string name="attach_keyboard">Attach to the keyboard</string>
   <string name="attach_app">Attach to the app</string>
   <string name="detach_keys">Take the attached keys away</string>
+  <string name="dictionary_language">Language</string>
+  <string name="dictionary_words">Your words</string>
+  <string name="dictionary_words_summary">Swiping and the words offered as you type use them as the language\'s own</string>
+  <string name="dictionary_add">Add</string>
+  <string name="dictionary_learn_typed">Learn new words as I type</string>
+  <string name="dictionary_learn_typed_summary">A word no word list has, typed letter by letter twice, joins your words</string>
+  <string name="dictionary_learn_chosen">Learn from the words I choose</string>
+  <string name="dictionary_learn_chosen_summary">A word taken from the toolbar in place of a swiped one is typed first the next time that swipe is read</string>
+  <string name="dictionary_forget_chosen">Forget the words chosen</string>
+  <string name="dictionary_edit">Edit the word</string>
 </resources>

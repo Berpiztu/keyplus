@@ -95,7 +95,11 @@ public sealed class WordSuggestions
         return [.. best.Select(at => Cased(spellings[at][0], capital, capitals)).Distinct()];
     }
 
-    private static string Cased(string word, bool capital, bool capitals) =>
+    /// <summary>Whether the word list has the word, by its letters alone ("cancion" is "canción"'s).</summary>
+    public bool Knows(string word) =>
+        SwipeWords.Letters(word, language.SwipeLetters) is { } key && Array.BinarySearch(letters, key, StringComparer.Ordinal) >= 0;
+
+    internal static string Cased(string word, bool capital, bool capitals) =>
         capitals ? word.ToUpperInvariant()
         : capital ? char.ToUpperInvariant(word[0]) + word[1..]
         : word;

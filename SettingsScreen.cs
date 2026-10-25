@@ -23,7 +23,9 @@ public sealed record SettingsRow(
     bool? On = null,
     Action<bool>? Switched = null,
     bool? Chosen = null,
-    bool Opens = false);
+    bool Opens = false,
+    Action? Removed = null,
+    Action? Edited = null);
 
 /// <summary>A page of settings: its title and its rows in groups, each group a card; or, in their place, a view of its own that takes the page's room (Tema).</summary>
 public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<SettingsRow>> Groups, View? Body = null);
@@ -48,6 +50,9 @@ public sealed class SettingsScreen
 
     /// <summary>A choice's rows, and the title over them, in dp: one line each, small, as the owner wants them; the mark at four fifths.</summary>
     private const float CompactRowDp = 36;
+
+    /// <summary>A row's ✕ that deletes: a finger's room at the row's end.</summary>
+    private const float RemoveDp = 48;
     private const float CompactMarkScale = 0.8f;
     private const float GroupGapDp = 72 / PixelsPerDp;
     private const float SideDp = 36 / PixelsPerDp;
@@ -320,7 +325,8 @@ public sealed class SettingsScreen
             texts.AddView(line);
         }
 
-        var right = row.On is not null ? Dp(72) : Dp(SignLeftDp);
+        var ends = (row.Removed is not null ? 1 : 0) + (row.Edited is not null ? 1 : 0);
+        var right = row.On is not null ? Dp(72) : ends > 0 ? Dp(RemoveDp * ends) : Dp(SignLeftDp);
         frame.AddView(texts, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.CenterVertical)
         {
             LeftMargin = row.Icon != 0 || row.Chosen is not null ? Dp(TextLeftDp) : Dp(SignLeftDp),
@@ -331,6 +337,30 @@ public sealed class SettingsScreen
         {
             var mark = new RadioButton(context) { Checked = chosen, Clickable = false, ScaleX = CompactMarkScale, ScaleY = CompactMarkScale };
             frame.AddView(mark, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Left | GravityFlags.CenterVertical) { LeftMargin = Dp(SignLeftDp) - Dp(8) });
+        }
+
+        if (row.Removed is { } removed)
+        {
+            // A red ✕ on the row's line, which deletes what it names.
+            var cross = new TextView(context) { Text = "✕", Gravity = GravityFlags.Center };
+            cross.SetTextColor(new Color(unchecked((int)KeyboardLooks.DeleteRed)));
+            cross.SetTextSize(ComplexUnitType.Sp, RowTitleSp);
+            cross.SetTypeface(null, TypefaceStyle.Bold);
+            cross.Click += (_, _) => removed();
+            frame.AddView(cross, new FrameLayout.LayoutParams(Dp(RemoveDp), ViewGroup.LayoutParams.MatchParent, GravityFlags.Right | GravityFlags.CenterVertical));
+        }
+
+        if (row.Edited is { } edited)
+        {
+            // ✏ beside it, in the words' colour, which writes what the row names again.
+            var pencil = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(words) };
+            pencil.SetImageResource(Resource.Drawable.ic_grid_edit);
+            pencil.SetScaleType(ImageView.ScaleType.Center);
+            pencil.Click += (_, _) => edited();
+            frame.AddView(pencil, new FrameLayout.LayoutParams(Dp(RemoveDp), ViewGroup.LayoutParams.MatchParent, GravityFlags.Right | GravityFlags.CenterVertical)
+            {
+                RightMargin = row.Removed is not null ? Dp(RemoveDp) : 0,
+            });
         }
 
         if (row.On is { } on)

@@ -26,13 +26,32 @@ public sealed class SwipeEngine
     private readonly Task<bool> loaded;
     private readonly Lock engineLock = new();
     private readonly Dictionary<StandardLanguage, (IntPtr Trie, Dictionary<string, string[]> Spellings)> languages = [];
+
+    /// <summary>A language's personal dictionary (<see cref="PersonalWords"/>), read with its word list.</summary>
+    private readonly Func<StandardLanguage, IReadOnlyList<string>> personal;
     private IntPtr engine;
     private string? layout;
 
-    public SwipeEngine()
+    public SwipeEngine(Func<StandardLanguage, IReadOnlyList<string>> personal)
     {
+        this.personal = personal;
         loaded = Task.Run(Load);
     }
+
+    /// <summary>The personal dictionary changed: every language's trie let go, made again with it at its next swipe.</summary>
+    public void Forget() => Task.Run(() =>
+    {
+        lock (engineLock)
+        {
+            foreach (var (trie, _) in languages.Values)
+            {
+                keyplus_swipe_destroy_trie(trie);
+            }
+
+            languages.Clear();
+            layout = null;
+        }
+    });
 
     /// <summary>A swipe: its points and the letters' centres from 0 to 1 over the letters' room, t in milliseconds, and its language.</summary>
     public sealed record Swipe(float[] X, float[] Y, float[] T, float[] KeyX, float[] KeyY, StandardLanguage Language);
@@ -111,7 +130,7 @@ public sealed class SwipeEngine
         Dictionary<string, string[]> spellings;
         using (var wordList = File.OpenRead(Path.Combine(AppContext.BaseDirectory, language.WordList)))
         {
-            spellings = SwipeWords.WriteLetterForms(wordList, language, words);
+            spellings = SwipeWords.WriteLetterForms(wordList, language, words, personal(language));
         }
 
         var trie = keyplus_swipe_load_trie(language.SwipeLetters, words, "f");
@@ -129,6 +148,9 @@ public sealed class SwipeEngine
 
     [DllImport("keyplus_swipe.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr keyplus_swipe_load_trie([MarshalAs(UnmanagedType.LPUTF8Str)] string letters, [MarshalAs(UnmanagedType.LPUTF8Str)] string vocabPath, [MarshalAs(UnmanagedType.LPUTF8Str)] string freqKey);
+
+    [DllImport("keyplus_swipe.dll", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void keyplus_swipe_destroy_trie(IntPtr trie);
 
     [DllImport("keyplus_swipe.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int keyplus_swipe_set_layout(IntPtr engine, [MarshalAs(UnmanagedType.LPUTF8Str)] string letters, float[] cx, float[] cy, int keys, IntPtr trie);

@@ -103,6 +103,7 @@ a window that does.
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
 | [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
+| [PersonalWords.cs](PersonalWords.cs) | The personal dictionary and the words chosen for swipes, on Android and Windows: kept by language in `personal-words.json`, a word no list has learnt when typed twice, a swipe's choice put first |
 | [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
 | [AndroidUpdates.cs](AndroidUpdates.cs) | Updates on Android: the day's check from the keyboard or the service, its notification, the app's question, Android's installer |
 | [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Voice typing's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
@@ -139,6 +140,16 @@ a window that does.
   Windows' MSI, or Android's own installer, which asks too (and, the first
   time, to allow installing from the app). The popup has Check now on its
   screen. On Windows and Android alike.
+- **Settings › Dictionary**, the personal dictionary, kept on the device and
+  sent nowhere: your words, which swiping reads with the language's word
+  list and the words offered as you type show first (a web domain, a name);
+  each with ✏ to write it again and a red ✕ to delete it, a word added by
+  hand. **Learn new words as I type** (on): a word no word list has, typed
+  letter by letter twice, joins them. **Learn from the words I choose**
+  (on): a word taken from the toolbar in place of a swiped one is typed
+  first the next time that swipe reads the same, so the keyboard follows
+  how you swipe; **Forget the words chosen** undoes it. On Windows and
+  Android alike.
 - **Settings › Glide typing › Delete a swiped word whole** (on, as Gboard's):
   ⌫ right after a swiped word deletes all the swipe typed, the word and the
   space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes

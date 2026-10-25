@@ -102,7 +102,14 @@ public sealed class KeyboardWindow : Window
     private readonly KeyboardSurface keys;
     private readonly SignButton switcher;
     private readonly TextBlock notice;
-    private readonly SwipeEngine swipe = new();
+    private readonly SwipeEngine swipe;
+
+    /// <summary>The personal dictionary and the words chosen for swipes, shared with the settings through their file (<see cref="PersonalWords"/>).</summary>
+    private readonly PersonalWords personal = new(PersonalFile);
+    private readonly IDisposable personalWatch;
+
+    public static readonly string PersonalFile = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Berpiztu", "Keyboard", PersonalWords.FileName);
     private readonly EmojiPanel emoji;
     private readonly NAudioMicrophone microphone = new();
     private readonly VoiceTyping voice;
@@ -196,9 +203,32 @@ public sealed class KeyboardWindow : Window
         ShowActivated = false;
         ShowInTaskbar = true;
 
+        personal.Reload();
+        swipe = new SwipeEngine(language => personal.Words(language.Code));
         keys = new KeyboardSurface(colors);
         keys.NextLanguage += NextLanguage;
-        keys.Swiped += async (path, capital, capitals) => keys.TypeSwiped(await swipe.Words(path), capital, capitals);
+        keys.Swiped += async (path, capital, capitals) =>
+        {
+            var read = await swipe.Words(path);
+            keys.TypeSwiped(personal.Ordered(path.Language.Code, read), read.FirstOrDefault() ?? "", capital, capitals);
+        };
+        keys.SwipeChosen += (language, read, word) => personal.Chose(language.Code, read, word);
+        keys.WordTyped += (language, word) =>
+        {
+            if (personal.Typed(language.Code, word, typed => Knows(language, typed)))
+            {
+                Log.Write($"Dictionary: \"{word}\" learnt in {language.Code}");
+                swipe.Forget();
+            }
+        };
+        // The settings changed the dictionary: swiping reads it again; a choice noted changes no word, and no trie.
+        personalWatch = FileWatch.Changed(PersonalFile, () =>
+        {
+            if (personal.Reload())
+            {
+                swipe.Forget();
+            }
+        });
         keys.Suggestions += ShowSuggestions;
         keys.Offered += words => ShowSuggestions(words, null);
         keys.Suggesting = Suggest;
@@ -386,6 +416,7 @@ public sealed class KeyboardWindow : Window
             preferencesWatch.Dispose();
             keyboardsWatch.Dispose();
             appsWatch.Dispose();
+            personalWatch.Dispose();
             dockedBar?.Undock();
             tray.Dispose();
             icon.Close();
@@ -609,6 +640,7 @@ public sealed class KeyboardWindow : Window
         preferencesWatch.Dispose();
         keyboardsWatch.Dispose();
         appsWatch.Dispose();
+        personalWatch.Dispose();
         Log.Write($"Keyboard: made again in its colours, {preferences.Look}{(app is null ? "" : $", typing in {app}")}");
         Keep();
         var shown = show || IsVisible;
@@ -737,8 +769,13 @@ public sealed class KeyboardWindow : Window
             });
         }
 
-        return reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+        IReadOnlyList<string> listed = reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
+        return [.. personal.Starting(language, typed).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
     }
+
+    /// <summary>Whether the language's word list has the word; until the list is read, taken as known, so nothing is learnt by mistake.</summary>
+    private bool Knows(StandardLanguage language, string word) =>
+        !wordLists.TryGetValue(language, out var reading) || !reading.IsCompletedSuccessfully || reading.Result is not { } ready || ready.Knows(word);
 
     /// <summary>
     /// Words in the toolbar's middle, as Gboard's: a swipe's, the typed one in

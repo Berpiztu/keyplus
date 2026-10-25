@@ -260,6 +260,15 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The words offered for the word being typed, for the toolbar, each to be taken with a tap (<see cref="TakeSuggestion"/>); none, the toolbar as it was.</summary>
     public event Action<IReadOnlyList<string>>? Offered;
 
+    /// <summary>A word typed letter by letter and ended, in its language (<see cref="PersonalWords.Typed"/>).</summary>
+    public event Action<StandardLanguage, string>? WordTyped;
+
+    /// <summary>A word of the toolbar taken in place of a swiped one: the language, the word the swipe read first, the word taken (<see cref="PersonalWords.Chose"/>).</summary>
+    public event Action<StandardLanguage, string, string>? SwipeChosen;
+
+    /// <summary>The word the last swipe read first, before what was learnt put another in its place.</summary>
+    private string? swipeRead;
+
     /// <summary>
     /// The word being typed letter by letter, as the keys typed it: Windows
     /// tells a keyboard nothing of the field, so it is the keys' own count,
@@ -301,15 +310,18 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>
     /// A swipe's words: the likeliest typed, in capitals or with a capital as
     /// Shift had it, with a space before it unless after a space or nothing,
-    /// none after; the words offered in the toolbar.
+    /// none after; the words offered in the toolbar. <paramref name="read"/> is
+    /// the word the swipe read first, which what was learnt may have put
+    /// behind another.
     /// </summary>
-    public void TypeSwiped(IReadOnlyList<string> words, bool capital, bool capitals)
+    public void TypeSwiped(IReadOnlyList<string> words, string read, bool capital, bool capitals)
     {
         if (words.Count == 0)
         {
             return;
         }
 
+        swipeRead = read;
         ForgetTyping();
         var word = Cased(words[0], capital, capitals);
         var text = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? word : " " + word;
@@ -339,6 +351,10 @@ public sealed class KeyboardSurface : FrameworkElement
         lastTyped = text[^1];
         swipedText = text;
         Suggestions?.Invoke([], null);
+        if (swipeRead is { } read)
+        {
+            SwipeChosen?.Invoke(language, read, word);
+        }
     }
 
     private static string Cased(string word, bool capital, bool capitals) =>
@@ -1095,6 +1111,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 break;
             case StandardAction.Enter:
                 EndSwipe(letter: false);
+                EndWord();
                 ForgetTyping();
                 FlushDead();
                 Press(Keycode.Enter);
@@ -1206,7 +1223,17 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else
         {
+            EndWord();
             ForgetTyping();
+        }
+    }
+
+    /// <summary>A word typed letter by letter ended by a space, a sign or Enter: told, for the personal dictionary to learn one no word list has.</summary>
+    private void EndWord()
+    {
+        if (typingWord.Length > 0)
+        {
+            WordTyped?.Invoke(language, typingWord);
         }
     }
 

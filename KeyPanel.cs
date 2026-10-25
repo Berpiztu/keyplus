@@ -478,6 +478,15 @@ public sealed class KeyPanel
     /// </summary>
     public Func<SwipePath, Task<IReadOnlyList<string>>>? Swiping { get; set; }
 
+    /// <summary>A swipe's words in the order to offer them, what was learnt first (<see cref="PersonalWords.Ordered"/>); none, as read.</summary>
+    public Func<StandardLanguage, IReadOnlyList<string>, IReadOnlyList<string>>? OrderSwiped { get; set; }
+
+    /// <summary>A word of the toolbar taken in place of a swiped one: the language, the word the swipe read first, the word taken (<see cref="PersonalWords.Chose"/>).</summary>
+    public Action<StandardLanguage, string, string>? SwipeChosen { get; set; }
+
+    /// <summary>A word typed letter by letter and ended by a space, a sign or Enter, in its language (<see cref="PersonalWords.Typed"/>).</summary>
+    public Action<StandardLanguage, string>? WordTyped { get; set; }
+
     /// <summary>The text just before the caret, to tell whether a swiped word needs a space before it.</summary>
     public Func<string?>? TextBeforeCaret { get; set; }
 
@@ -2426,6 +2435,11 @@ public sealed class KeyPanel
     {
         Typed = text =>
         {
+            if (!(text.Length == 1 && char.IsLetter(text[0])))
+            {
+                EndWord();
+            }
+
             if (EndSwipe(text.Length == 1 && char.IsLetter(text[0])))
             {
                 Type(" ");
@@ -2446,6 +2460,11 @@ public sealed class KeyPanel
         },
         KeyPressed = (code, meta) =>
         {
+            if (code == Keycode.Enter)
+            {
+                EndWord();
+            }
+
             EndSwipe(letter: false);
             Send(code, meta);
             OfferWordsSoon();
@@ -3904,14 +3923,16 @@ public sealed class KeyPanel
 
         try
         {
-            var words = await Swiping(path);
-            if (words.Count == 0)
+            var read = await Swiping(path);
+            if (read.Count == 0)
             {
                 return;
             }
 
+            var words = OrderSwiped?.Invoke(path.Language, read) ?? read;
             ForgetSwipe();
             typingWords = [];
+            swipeRead = (path.Language, read[0]);
             TypeSwiped(words[0], capital, capitals);
             swipeWords = words;
             ShowBars();
@@ -3971,6 +3992,22 @@ public sealed class KeyPanel
         swipedWord = word;
         swipeWords = [];
         ShowBars();
+        if (swipeRead is { } read)
+        {
+            SwipeChosen?.Invoke(read.Language, read.Word, word);
+        }
+    }
+
+    /// <summary>The last swipe's language and the word it read first, before what was learnt put another in its place.</summary>
+    private (StandardLanguage Language, string Word)? swipeRead;
+
+    /// <summary>A word typed letter by letter ended, told with the language of the keyboard in sight; a swiped word is not one.</summary>
+    private void EndWord()
+    {
+        if (swipedText is null && WordTyped is { } told && WordBeforeCaret?.Invoke() is { Length: > 0 } word)
+        {
+            told(standard?.Language ?? StandardKeys.Spanish, word);
+        }
     }
 
     /// <summary>
@@ -4447,6 +4484,11 @@ public sealed class KeyPanel
 
             SetHeld(held ^ key.Modifier);
             return;
+        }
+
+        if (!key.IsLetter && key.Code != Keycode.Del)
+        {
+            EndWord();
         }
 
         if (key.Code == Keycode.Del && (held & KeyModifiers) == Held.None && DeleteSwiped())

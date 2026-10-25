@@ -343,7 +343,7 @@ public sealed class MainActivity : Activity
         ],
         [
             new(GetString(Resource.String.clipboard), Icon: Resource.Drawable.ic_clipboard, Tapped: () => settings!.Open(ClipboardPage()), Opens: true),
-            NotMadeRow(Resource.String.dictionary, Resource.Drawable.ic_settings_dictionary),
+            new(GetString(Resource.String.dictionary), Icon: Resource.Drawable.ic_settings_dictionary, Tapped: () => settings!.Open(DictionaryPage()), Opens: true),
             new(GetString(Resource.String.designs), Icon: Resource.Drawable.ic_settings_dashboard_customize, Tapped: () => settings!.Open(DesignsPage()), Opens: true),
         ],
         [
@@ -618,6 +618,80 @@ public sealed class MainActivity : Activity
         var kept = KeyPlusPreferences.Global(this);
         return new(GetString(title), summary is { } line ? GetString(line) : null, On: kept.GetBoolean(key, byDefault),
             Switched: on => kept.Edit()!.PutBoolean(key, on)!.Apply());
+    }
+
+    /// <summary>The language the dictionary page shows the words of.</summary>
+    private StandardLanguage dictionaryLanguage = StandardKeys.Spanish;
+
+    private PersonalWords Personal()
+    {
+        var personal = new PersonalWords(Path.Combine(FilesDir!.AbsolutePath, PersonalWords.FileName));
+        personal.Reload();
+        return personal;
+    }
+
+    /// <summary>
+    /// Dictionary (<see cref="PersonalWords"/>), as Windows': learning new
+    /// words as you type and from the words chosen for a swipe, the words
+    /// chosen forgotten; the language looked at and a word added; last, your
+    /// words, each with ✏ that writes it again and a red ✕ that deletes it on
+    /// its line, so a longer list moves nothing above it. The keyboard reads the changes as a field opens.
+    /// </summary>
+    private SettingsPage DictionaryPage()
+    {
+        var personal = Personal();
+        var language = dictionaryLanguage;
+        var words = personal.Words(language.Code);
+        List<IReadOnlyList<SettingsRow>> groups =
+        [
+            [
+                new(GetString(Resource.String.dictionary_learn_typed), GetString(Resource.String.dictionary_learn_typed_summary), On: personal.LearnTyped,
+                    Switched: on => personal.SetLearning(on, personal.LearnChosen)),
+                new(GetString(Resource.String.dictionary_learn_chosen), GetString(Resource.String.dictionary_learn_chosen_summary), On: personal.LearnChosen,
+                    Switched: on => personal.SetLearning(personal.LearnTyped, on)),
+                new(GetString(Resource.String.dictionary_forget_chosen), Tapped: personal.ForgetChosen),
+            ],
+            [
+                new(GetString(Resource.String.dictionary_language), language.Name, Tapped: ChooseDictionaryLanguage),
+                new(GetString(Resource.String.dictionary_add), GetString(Resource.String.dictionary_words_summary), Tapped: () =>
+                    AskText(Resource.String.dictionary_add, "", secret: false, written =>
+                    {
+                        personal.Add(language.Code, written);
+                        settings!.Refresh(DictionaryPage());
+                    })),
+            ],
+        ];
+        if (words.Count > 0)
+        {
+            groups.Add([.. words.Select(word => new SettingsRow(word,
+                Removed: () =>
+                {
+                    personal.Remove(language.Code, word);
+                    settings!.Refresh(DictionaryPage());
+                },
+                Edited: () => AskText(Resource.String.dictionary_edit, word, secret: false, written =>
+                {
+                    personal.Rename(language.Code, word, written);
+                    settings!.Refresh(DictionaryPage());
+                })))]);
+        }
+
+        return new(GetString(Resource.String.dictionary), groups);
+    }
+
+    /// <summary>The dictionary's language chosen from the keyboard's, the page shown again with its words.</summary>
+    private void ChooseDictionaryLanguage()
+    {
+        var languages = StandardKeys.Languages;
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.dictionary_language)!
+            .SetSingleChoiceItems([.. languages.Select(language => language.Name)], languages.ToList().IndexOf(dictionaryLanguage), (dialog, chosen) =>
+            {
+                dictionaryLanguage = languages[chosen.Which];
+                (dialog as AlertDialog)?.Dismiss();
+                settings!.Refresh(DictionaryPage());
+            })!
+            .Show();
     }
 
     private SettingsPage GlidePage() => new(GetString(Resource.String.glide),

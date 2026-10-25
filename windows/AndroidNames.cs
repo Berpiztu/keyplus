@@ -197,8 +197,18 @@ namespace Berpiztu.KeyPlus
             public const int update_no = 114;
             public const int update_current = 115;
             public const int update_failed = 116;
+            public const int dictionary = 128;
             public const int glide_delete_word = 117;
             public const int glide_delete_word_summary = 118;
+            public const int dictionary_language = 119;
+            public const int dictionary_words = 120;
+            public const int dictionary_words_summary = 121;
+            public const int dictionary_add = 122;
+            public const int dictionary_learn_typed = 123;
+            public const int dictionary_learn_typed_summary = 124;
+            public const int dictionary_learn_chosen = 125;
+            public const int dictionary_learn_chosen_summary = 126;
+            public const int dictionary_forget_chosen = 127;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

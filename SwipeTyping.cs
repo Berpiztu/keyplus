@@ -41,11 +41,31 @@ public sealed class SwipeTyping
     /// <summary>The language and letters' centres last handed to the engine, so they are handed again only when they changed.</summary>
     private string? layout;
 
-    public SwipeTyping(Context context)
+    /// <summary>A language's personal dictionary (<see cref="PersonalWords"/>), read with its word list.</summary>
+    private readonly Func<StandardLanguage, IReadOnlyList<string>> personal;
+
+    public SwipeTyping(Context context, Func<StandardLanguage, IReadOnlyList<string>> personal)
     {
         this.context = context;
+        this.personal = personal;
         loaded = Task.Run(Load);
     }
+
+    /// <summary>The personal dictionary changed: every language's trie let go, made again with it at its next swipe.</summary>
+    public void Forget() => Task.Run(() =>
+    {
+        lock (engineLock)
+        {
+            var free = JNIEnv.GetStaticMethodID(Decoder, "freeDictionary", "(J)V");
+            foreach (var (trie, _) in languages.Values)
+            {
+                JNIEnv.CallStaticVoidMethod(Decoder, free, new JValue(trie));
+            }
+
+            languages.Clear();
+            layout = null;
+        }
+    });
 
     /// <summary>The words a swipe reads as, the likeliest first; none where FUTO Swipe could not be loaded or read nothing.</summary>
     public async Task<IReadOnlyList<string>> Words(KeyPanel.SwipePath path)
@@ -126,7 +146,7 @@ public sealed class SwipeTyping
             Dictionary<string, string[]> spellings;
             using (var wordList = context.Assets!.Open(language.WordList))
             {
-                spellings = SwipeWords.WriteLetterForms(wordList, language, words);
+                spellings = SwipeWords.WriteLetterForms(wordList, language, words, personal(language));
             }
 
             var trie = CallLong("loadDictionary", "(Ljava/lang/String;Ljava/lang/String;)J", language.SwipeLetters, words);

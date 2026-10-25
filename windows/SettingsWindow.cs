@@ -54,6 +54,7 @@ public sealed class SettingsWindow : Window
             (Texts.Get(Resource.String.preferences), PreferencesPage),
             (Texts.Get(Resource.String.theme), ThemePage),
             (Texts.Get(Resource.String.glide), GlidePage),
+            (Texts.Get(Resource.String.dictionary), DictionaryPage),
             (Texts.Get(Resource.String.voice_typing), VoicePage),
             (Texts.Get(Resource.String.troubleshooting), TroubleshootingPage),
             (Texts.Get(Resource.String.about), AboutPage),
@@ -511,6 +512,145 @@ public sealed class SettingsWindow : Window
             }
         };
         return button;
+    }
+
+    /// <summary>How tall the dictionary's list of words is, whatever it holds, so nothing under it moves.</summary>
+    private const double WordListDp = 110;
+
+    /// <summary>A word's line in the dictionary, shown or being written again: a text box's height.</summary>
+    private const double WordLineDp = 24;
+
+    /// <summary>The red of a word's ✕, the one that deletes it (<see cref="KeyboardLooks.DeleteRed"/>).</summary>
+    private static readonly SolidColorBrush DeleteRed = new(Color.FromArgb(
+        (byte)((KeyboardLooks.DeleteRed >> 24) & 0xFF), (byte)((KeyboardLooks.DeleteRed >> 16) & 0xFF), (byte)((KeyboardLooks.DeleteRed >> 8) & 0xFF), (byte)(KeyboardLooks.DeleteRed & 0xFF)));
+
+    /// <summary>
+    /// Dictionary (<see cref="PersonalWords"/>): by language, your words in a
+    /// box of one size that scrolls, each with ✏ that writes it again and a
+    /// red ✕ that deletes it on its line; a word added with Add or Enter; learning new words as you
+    /// type and from the words chosen for a swipe, each a choice; the words
+    /// chosen forgotten. Each change kept at once, the keyboard taking it
+    /// through the file.
+    /// </summary>
+    private static FrameworkElement DictionaryPage()
+    {
+        var personal = new PersonalWords(KeyboardWindow.PersonalFile);
+        personal.Reload();
+        var form = Form(Resource.String.dictionary);
+        var languages = new ComboBox();
+        foreach (var language in StandardKeys.Languages)
+        {
+            languages.Items.Add(language.Name);
+        }
+
+        languages.SelectedIndex = Math.Max(0, StandardKeys.Languages.ToList().IndexOf(KeyboardPreferences.Read().TypingLanguage));
+        var lines = new StackPanel();
+        var words = new Border
+        {
+            Height = WordListDp,
+            BorderBrush = SystemColors.ActiveBorderBrush,
+            BorderThickness = new Thickness(1),
+            Child = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = lines },
+        };
+        var word = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
+        var add = new Button { Content = Texts.Get(Resource.String.dictionary_add), Padding = new Thickness(12, 2, 12, 2), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        string Code() => StandardKeys.Languages[languages.SelectedIndex].Code;
+
+        static Button LineButton(string sign, Brush colour) => new()
+        {
+            Content = sign,
+            Foreground = colour,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(8, 0, 8, 0),
+            FontWeight = FontWeights.Bold,
+            Cursor = System.Windows.Input.Cursors.Hand,
+        };
+
+        // Each word's line: the word, ✏ that writes it again on its own line (Enter keeps it, Esc leaves it), and the red ✕ that deletes it;
+        // every line one height, editing or not, so nothing moves.
+        void Fill()
+        {
+            lines.Children.Clear();
+            foreach (var kept in personal.Words(Code()))
+            {
+                var delete = LineButton("✕", DeleteRed);
+                delete.Click += (_, _) =>
+                {
+                    personal.Remove(Code(), kept);
+                    Fill();
+                };
+                var edit = LineButton("✏", SystemColors.ControlTextBrush);
+                var shown = new TextBlock { Text = kept, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+                var line = new DockPanel { Height = WordLineDp, Margin = new Thickness(6, 1, 0, 1) };
+                edit.Click += (_, _) =>
+                {
+                    var editing = new TextBox { Text = kept, VerticalContentAlignment = VerticalAlignment.Center };
+                    editing.KeyDown += (_, e) =>
+                    {
+                        if (e.Key == System.Windows.Input.Key.Enter)
+                        {
+                            personal.Rename(Code(), kept, editing.Text);
+                            Fill();
+                            e.Handled = true;
+                        }
+                        else if (e.Key == System.Windows.Input.Key.Escape)
+                        {
+                            Fill();
+                            e.Handled = true;
+                        }
+                    };
+                    line.Children.Remove(shown);
+                    line.Children.Add(editing);
+                    editing.Focus();
+                    editing.SelectAll();
+                };
+                DockPanel.SetDock(delete, Dock.Right);
+                DockPanel.SetDock(edit, Dock.Right);
+                line.Children.Add(delete);
+                line.Children.Add(edit);
+                line.Children.Add(shown);
+                lines.Children.Add(line);
+            }
+        }
+
+        void Add()
+        {
+            personal.Add(Code(), word.Text);
+            word.Clear();
+            Fill();
+        }
+
+        languages.SelectionChanged += (_, _) => Fill();
+        add.Click += (_, _) => Add();
+        word.KeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                Add();
+                e.Handled = true;
+            }
+        };
+        var typed = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_typed), IsChecked = personal.LearnTyped };
+        var chosen = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_chosen), IsChecked = personal.LearnChosen };
+        typed.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
+        chosen.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
+        var forget = new Button { Content = Texts.Get(Resource.String.dictionary_forget_chosen), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        forget.Click += (_, _) => personal.ForgetChosen();
+
+        var adding = new DockPanel();
+        DockPanel.SetDock(add, Dock.Right);
+        adding.Children.Add(add);
+        adding.Children.Add(word);
+        // The choices first, the words last: a list at the top would push them out of the page.
+        form.Children.Add(Field(null, typed, Resource.String.dictionary_learn_typed_summary));
+        form.Children.Add(Field(null, chosen, Resource.String.dictionary_learn_chosen_summary));
+        form.Children.Add(Field(null, forget, null));
+        form.Children.Add(Field(Resource.String.dictionary_language, languages, null));
+        form.Children.Add(Field(Resource.String.dictionary_words, adding, Resource.String.dictionary_words_summary));
+        form.Children.Add(Field(null, words, null));
+        Fill();
+        return form;
     }
 
     /// <summary>Glide typing, as Android's: swiping over the letters, its trail and ⌫ deleting a swiped word whole; FUTO Swipe's notice in sight, as its licence asks.</summary>

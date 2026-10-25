@@ -18,6 +18,9 @@ public enum KeyboardLook
 
 public static class KeyboardLooks
 {
+    /// <summary>The red of a ✕ that deletes (a word of the dictionary), on Android and Windows alike: Material's red 700.</summary>
+    public const uint DeleteRed = 0xFFD32F2F;
+
     /// <summary>Tema's choices, in their order.</summary>
     public static readonly KeyboardLook[] All = [KeyboardLook.System, KeyboardLook.Light, KeyboardLook.Dark, KeyboardLook.Custom];
 

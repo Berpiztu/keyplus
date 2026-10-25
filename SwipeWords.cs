@@ -17,27 +17,42 @@ public static class SwipeWords
     /// A language's AOSP word list, gzipped ("word=…,f=…" lines), written to
     /// a path by each word's letters alone, the accents taken off, at the
     /// commonest frequency among its spellings; the words with a letter the
-    /// keyboard has no key for left out. Its spellings by letters, back.
+    /// keyboard has no key for left out; the personal dictionary's words with
+    /// them (<see cref="PersonalWords.Frequency"/>). Its spellings by letters,
+    /// back.
     /// </summary>
-    public static Dictionary<string, string[]> WriteLetterForms(Stream wordList, StandardLanguage language, string path)
+    public static Dictionary<string, string[]> WriteLetterForms(Stream wordList, StandardLanguage language, string path, IReadOnlyList<string>? personal = null)
     {
         var forms = new Dictionary<string, List<(string Word, int Frequency)>>();
+        void Add((string Word, int Frequency) entry)
+        {
+            if (Letters(entry.Word, language.SwipeLetters) is not { } letters)
+            {
+                return;
+            }
+
+            if (!forms.TryGetValue(letters, out var spelled))
+            {
+                forms[letters] = spelled = [];
+            }
+
+            spelled.Add(entry);
+        }
+
         using (var reader = new StreamReader(new GZipStream(wordList, CompressionMode.Decompress), Encoding.UTF8))
         {
             while (reader.ReadLine() is { } line)
             {
-                if (Entry(line) is not { } entry || Letters(entry.Word, language.SwipeLetters) is not { } letters)
+                if (Entry(line) is { } entry)
                 {
-                    continue;
+                    Add(entry);
                 }
-
-                if (!forms.TryGetValue(letters, out var spelled))
-                {
-                    forms[letters] = spelled = [];
-                }
-
-                spelled.Add(entry);
             }
+        }
+
+        foreach (var word in personal ?? [])
+        {
+            Add((word, PersonalWords.Frequency));
         }
 
         using (var writer = new StreamWriter(path, false, new UTF8Encoding(false)))

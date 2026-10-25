@@ -217,4 +217,14 @@
   <string name="attach_keyboard">Pegar al teclado</string>
   <string name="attach_app">Pegar a la app</string>
   <string name="detach_keys">Quitar lo pegado</string>
+  <string name="dictionary_language">Idioma</string>
+  <string name="dictionary_words">Tus palabras</string>
+  <string name="dictionary_words_summary">El deslizamiento y las sugerencias al escribir las usan como las del idioma</string>
+  <string name="dictionary_add">Añadir</string>
+  <string name="dictionary_learn_typed">Aprender palabras nuevas al escribir</string>
+  <string name="dictionary_learn_typed_summary">Una palabra que no está en la lista, escrita letra a letra dos veces, pasa a tus palabras</string>
+  <string name="dictionary_learn_chosen">Aprender de las palabras que elijo</string>
+  <string name="dictionary_learn_chosen_summary">Una palabra elegida en la barra en lugar de la deslizada sale primero la próxima vez que se lea ese deslizamiento</string>
+  <string name="dictionary_forget_chosen">Olvidar las palabras elegidas</string>
+  <string name="dictionary_edit">Modificar la palabra</string>
 </resources>
