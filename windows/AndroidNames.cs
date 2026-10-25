@@ -226,6 +226,15 @@ namespace Berpiztu.KeyPlus
             public const int spelling_on_summary = 172;
             public const int spelling_capitalize = 190;
             public const int spelling_capitalize_summary = 191;
+            public const int dictionary_addresses = 192;
+            public const int dictionary_addresses_summary = 193;
+            public const int dictionary_not_address = 194;
+            public const int dictionary_import_addresses = 195;
+            public const int dictionary_import_addresses_summary = 196;
+            public const int dictionary_export_addresses = 197;
+            public const int dictionary_export_addresses_summary = 198;
+            public const int dictionary_addresses_exported = 199;
+            public const int dictionary_addresses_imported = 200;
             public const int voice_fallback_local = 173;
             public const int spelling_by_language = 174;
             public const int spelling_dictionary_es = 175;

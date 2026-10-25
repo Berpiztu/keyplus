@@ -1234,7 +1234,16 @@ public sealed class KeyPanel
                 }
             });
             button.SetPadding(Dp(2), 0, Dp(2), 0);
-            button.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(sp), 1, (int)ComplexUnitType.Sp);
+
+            // An address in two lines in its room, as Gboard's, made as small as both need.
+            var address = word is not null && !learnt && PersonalWords.IsAddress(word);
+            if (address)
+            {
+                button.SetMaxLines(2);
+                button.Text = PersonalWords.InTwoLines(word!);
+            }
+
+            button.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(address ? sp * PersonalWords.AddressTypeShare : sp), 1, (int)ComplexUnitType.Sp);
             if (i == 1)
             {
                 button.SetTypeface(null, TypefaceStyle.Bold);
@@ -1334,6 +1343,15 @@ public sealed class KeyPanel
 
     /// <summary>The standard keyboard's language as a dictation asks for it, by its locale ("es-ES", "en-US").</summary>
     public string DictationLocale => (standard?.Language ?? StandardKeys.Spanish).Locale;
+
+    /// <summary>The kind of field typed in, for the standard keyboard to suit it (<see cref="StandardKeyboard.Field"/>).</summary>
+    public void FieldIs(StandardField kind)
+    {
+        if (standard is not null)
+        {
+            standard.Field = kind;
+        }
+    }
 
     /// <summary>Whether the caret stands where a sentence begins (Spelling's Capital at the start of a sentence): the standard keyboard's Shift on by itself, or off again.</summary>
     public void SentenceStart(bool begins) => standard?.SentenceStart(begins);
@@ -2518,7 +2536,8 @@ public sealed class KeyPanel
                 Type(" ");
             }
 
-            var fixing = letter ? null : FixWord();
+            // @ ends no word, as Gboard's: an address goes on.
+            var fixing = letter || text == "@" ? null : FixWord();
             Type(text);
             OfferWords();
             if (fixing is { } offered)
@@ -4161,6 +4180,13 @@ public sealed class KeyPanel
     public void OfferWords()
     {
         var word = swipedText is null && Suggesting is not null && standard is not null ? WordBeforeCaret?.Invoke() ?? "" : "";
+
+        // A piece of an address ("com" of someone@example.com) is no word: nothing offered for it, nor to learn.
+        if (word.Length > 0 && InAddress(RecentText?.Invoke() ?? "", word.Length))
+        {
+            word = "";
+        }
+
         IReadOnlyList<string> words = word.Length > 0 ? Suggesting!(standard!.Language, word) : [];
         var learning = word.Length >= 2 && Learnable?.Invoke(standard!.Language, word) == true;
         if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
@@ -4184,7 +4210,8 @@ public sealed class KeyPanel
     /// <summary>A word offered taken in place of the one being typed, with a space after it, as Gboard's: the words gone from the toolbar.</summary>
     private void TakeSuggestion(string word)
     {
-        var text = word + " ";
+        // An e-mail address is the field's whole, with nothing after it.
+        var text = word.Contains('@') ? word : word + " ";
         if (ReplaceBeforeCaret is { } replace)
         {
             replace(typingWord.Length, text);
@@ -4310,6 +4337,7 @@ public sealed class KeyPanel
     {
         if (Fixing is null || swipedText is not null || WordBeforeCaret?.Invoke() is not { Length: > 0 } word
             || (TextAfterCaret?.Invoke() is { Length: > 0 } after && char.IsLetter(after[0]))
+            || InAddress(RecentText?.Invoke() ?? "", word.Length)
             || Fixing(TypingLanguage, word) is not { Words.Count: > 0 } fixes)
         {
             return null;
@@ -4384,6 +4412,21 @@ public sealed class KeyPanel
         EndOffer();
     }
 
+    /// <summary>
+    /// Whether the text before the caret ends in an e-mail or web address,
+    /// the last <paramref name="word"/> characters aside (the word being
+    /// ended, or the . that closed a sentence): what
+    /// stands before it since the last space holds @ . / or :
+    /// ("someone@example", "www.berpiztu"), so nothing in it is corrected, as
+    /// Gboard's; a word after a sentence's . and a space is a word.
+    /// </summary>
+    private static bool InAddress(string recent, int word)
+    {
+        var before = recent[..Math.Max(0, recent.Length - word)];
+        var token = before[(before.LastIndexOfAny([' ', '\n', '\t']) + 1)..];
+        return token.IndexOfAny(['@', '.', '/', ':']) >= 0;
+    }
+
     /// <summary>The sentence the text before the caret ends with: from after the last . ? ! or new line before its end; empty where there is none.</summary>
     private static string SentenceAt(string recent)
     {
@@ -4401,7 +4444,8 @@ public sealed class KeyPanel
     {
         var language = TypingLanguage;
         if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { Accents: true } spelling
-            || RecentText?.Invoke() is not { } recent || SentenceAt(recent) is not { Length: > 1 } sentence)
+            || RecentText?.Invoke() is not { } recent || SentenceAt(recent) is not { Length: > 1 } sentence
+            || InAddress(recent, 1))
         {
             return;
         }

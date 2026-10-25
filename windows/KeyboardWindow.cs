@@ -249,7 +249,9 @@ public sealed class KeyboardWindow : Window
         });
         keys.Suggestions += ShowSuggestions;
         keys.Offered += ShowTyping;
-        keys.Suggesting = (language, typed) => spellingEngine.Suggest(language, typed);
+        keys.AddressesStarting = typed => [.. personal.AddressesStarting(typed).Take(WordSuggestions.Offered)];
+        keys.SelectionCase = TurnSelectionCase;
+        keys.Suggesting = (language, typed) => personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered);
         keys.PressedAt = () => input.PressedAt;
         keys.KeyedAt = () => input.KeyedAt;
         spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
@@ -929,6 +931,12 @@ public sealed class KeyboardWindow : Window
         var on = kept.GlidesIn(keys.KeyLanguage.Code) && SwipeData.ReadyFor(keys.KeyLanguage);
         keys.Glides = on;
         glideButton.Lit = on;
+
+        // Swiping made ready at once, not at the first swipe, the owner's.
+        if (on)
+        {
+            swipe.Prepare(keys.KeyLanguage);
+        }
     }
 
     /// <summary>
@@ -993,10 +1001,13 @@ public sealed class KeyboardWindow : Window
     /// <summary>A word or a correction in the toolbar's middle, in its colours; a tap on it, where it takes one, does it and ends the toolbar's words when told to.</summary>
     private Border SuggestionPlace(string text, bool bold, Action? taken, bool ends = true)
     {
+        // An address in two lines in its room, as Gboard's and Android's, smaller to fit both.
+        var address = PersonalWords.IsAddress(text);
         var label = new TextBlock
         {
-            Text = text,
-            FontSize = SuggestionSize,
+            Text = address ? PersonalWords.InTwoLines(text) : text,
+            TextAlignment = TextAlignment.Center,
+            FontSize = address ? SuggestionSize * PersonalWords.AddressTypeShare : SuggestionSize,
             FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
             Foreground = new SolidColorBrush(colors.Glyph),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -1091,7 +1102,7 @@ public sealed class KeyboardWindow : Window
     {
         var language = keys.KeyLanguage;
         var typed = keys.TypingWord;
-        if (typed.Length < 2 || !personal.LearnTyped || !Learns(language) || !spellingEngine.Unknown(language, typed))
+        if (typed.Length < 2 || keys.TypingAddress || !personal.LearnTyped || !Learns(language) || !spellingEngine.Unknown(language, typed))
         {
             ShowSuggestions(words, null);
             return;
@@ -1851,6 +1862,127 @@ public sealed class KeyboardWindow : Window
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string name);
+
+    /// <summary>
+    /// Shift tapped twice, as on Android: the text selected in the window
+    /// typed in turned to its next case and selected again, to turn again.
+    /// Windows lets no keyboard read another window's text, so it is copied
+    /// (Ctrl+C), what the clipboard held kept and put back after; nothing
+    /// copied in a moment, nothing is selected, and Shift stays locked. A
+    /// selection of more than one line is left as it is.
+    /// </summary>
+    private async void TurnSelectionCase()
+    {
+        var held = HeldOnClipboard();
+        var before = GetClipboardSequenceNumber();
+        KeySender.Press(Android.Views.Keycode.A + ('c' - 'a'), KeySender.Held.Ctrl);
+        for (var waited = 0; waited < SelectionWaits && GetClipboardSequenceNumber() == before; waited++)
+        {
+            await Task.Delay(SelectionWaitMs);
+        }
+
+        if (GetClipboardSequenceNumber() == before)
+        {
+            return;
+        }
+
+        var selected = ClipboardText();
+        PutBack(held);
+        if (selected is not { Length: > 0 } || selected.Contains('\n'))
+        {
+            Log.Detail("Selection's case: nothing selected on one line, so Shift stays locked");
+            return;
+        }
+
+        var turned = StandardKeys.NextCase(selected, new System.Globalization.CultureInfo(keys.KeyLanguage.Locale));
+        KeySender.Type(turned);
+        foreach (var _ in turned)
+        {
+            KeySender.Press(Android.Views.Keycode.DpadLeft, KeySender.Held.Shift);
+        }
+
+        keys.ShiftOff();
+    }
+
+    /// <summary>How long the window typed in is given to copy what is selected: ten waits of 30 ms.</summary>
+    private const int SelectionWaits = 10;
+    private const int SelectionWaitMs = 30;
+
+    /// <summary>What the clipboard holds, every format it can be read in, to put back.</summary>
+    private static DataObject? HeldOnClipboard()
+    {
+        try
+        {
+            var copy = new DataObject();
+            if (Clipboard.GetDataObject() is not { } now)
+            {
+                return copy;
+            }
+
+            foreach (var format in now.GetFormats(false))
+            {
+                try
+                {
+                    if (now.GetData(format) is { } data)
+                    {
+                        copy.SetData(format, data);
+                    }
+                }
+                catch (Exception unreadable) when (unreadable is ExternalException or OutOfMemoryException)
+                {
+                    // A format the application that put it there keeps to itself: the others go back.
+                }
+            }
+
+            return copy;
+        }
+        catch (ExternalException busy)
+        {
+            Log.Write($"Selection's case: the clipboard could not be read: {busy.Message}");
+            return null;
+        }
+    }
+
+    private static string? ClipboardText()
+    {
+        try
+        {
+            return Clipboard.ContainsText() ? Clipboard.GetText() : null;
+        }
+        catch (ExternalException busy)
+        {
+            Log.Write($"Selection's case: the copy could not be read: {busy.Message}");
+            return null;
+        }
+    }
+
+    private static void PutBack(DataObject? held)
+    {
+        try
+        {
+            // Not read, it is left as the copy made it; empty before, emptied again.
+            if (held is null)
+            {
+                return;
+            }
+
+            if (held.GetFormats().Length == 0)
+            {
+                Clipboard.Clear();
+            }
+            else
+            {
+                Clipboard.SetDataObject(held, copy: true);
+            }
+        }
+        catch (ExternalException busy)
+        {
+            Log.Write($"Selection's case: what the clipboard held could not be put back: {busy.Message}");
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetClipboardSequenceNumber();
 }
 
 /// <summary>A toolbar's sign, the Android keyboard's drawable, in the keys' letters' colour; a click, what it does.</summary>

@@ -636,9 +636,45 @@ public sealed class StandardKeyboard : View
 
     /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made.</summary>
     private IReadOnlyList<IReadOnlyList<StandardKey>> Rows(StandardPage shown) =>
-        design is not null && shown is StandardPage.Letters or StandardPage.Pc or StandardPage.XrLetters
-            ? design.Page(StandardKeys.Page(shown, language), language)
+        shown is StandardPage.Letters or StandardPage.XrLetters ? ForField(LettersOf(shown))
+            : design is not null && shown is StandardPage.Pc ? design.Page(StandardKeys.Page(shown, language), language)
             : StandardKeys.Page(shown, language);
+
+    private IReadOnlyList<IReadOnlyList<StandardKey>> LettersOf(StandardPage shown) =>
+        design is not null ? design.Page(StandardKeys.Page(shown, language), language) : StandardKeys.Page(shown, language);
+
+    /// <summary>
+    /// The kind of field typed in, as it tells it (<see cref="StandardField"/>),
+    /// Estándar's alone, never Estándar PC's: a number's opens on 1234; a web
+    /// or e-mail address's letters have / or @ in the comma's place and .com
+    /// beside the space; any other, the letters as they are.
+    /// </summary>
+    public StandardField Field
+    {
+        get => fieldKind;
+        set
+        {
+            fieldKind = pc ? StandardField.Text : value;
+            ShowPage(fieldKind == StandardField.Number ? (xr ? StandardPage.XrNumbers : StandardPage.Numbers) : BasePage);
+        }
+    }
+
+    private StandardField fieldKind;
+
+    /// <summary>The letters' rows for a web or e-mail address's field: / or @ in the comma's place (its emoji left out), .com taking room from the space.</summary>
+    private IReadOnlyList<IReadOnlyList<StandardKey>> ForField(IReadOnlyList<IReadOnlyList<StandardKey>> rows)
+    {
+        if (fieldKind is not (StandardField.Web or StandardField.Email))
+        {
+            return rows;
+        }
+
+        var sign = fieldKind == StandardField.Web ? "/" : "@";
+        return [.. rows.Select(row => (IReadOnlyList<StandardKey>)[.. row.SelectMany(key =>
+            key.HintIcon == Resource.Drawable.ic_key_emoji ? [key with { Label = sign, Text = sign, HintIcon = 0 }]
+            : key.Action == StandardAction.Space ? [key with { Width = Math.Max(1, key.Width - StandardKeys.DotCom.Width) }, StandardKeys.DotCom]
+            : new[] { key })])];
+    }
 
     private void ShowPage(StandardPage shown)
     {
@@ -746,7 +782,11 @@ public sealed class StandardKeyboard : View
     private Choices ChoicesFor(StandardKey key, RectF box)
     {
         List<string> texts = [key.Hint!];
-        if (key.Text is { Length: 1 } letter && language.MoreLetters.TryGetValue(char.ToLowerInvariant(letter[0]), out var more))
+        if (key == StandardKeys.DotCom)
+        {
+            texts.AddRange(StandardKeys.MoreDomains);
+        }
+        else if (key.Text is { Length: 1 } letter && language.MoreLetters.TryGetValue(char.ToLowerInvariant(letter[0]), out var more))
         {
             var capitals = ShiftedFor(key);
             texts.AddRange(more.Select(character => capitals ? char.ToUpper(character, CultureInfo.CurrentCulture).ToString() : character.ToString()));
@@ -815,7 +855,7 @@ public sealed class StandardKeyboard : View
         fill.StrokeWidth = Dp(1);
         canvas.DrawRoundRect(offered.Ground, corner, corner, fill);
         fill.SetStyle(Paint.Style.Fill);
-        var size = LetterRow * glyphScale * LabelShare;
+        var size = offered.Cells.Count > 0 ? offered.Texts.Min(word => Fitted(word, LetterRow * glyphScale * LabelShare, offered.Cells[0].Width() * LabelRoomShare)) : 0;
         for (var at = 0; at < offered.Texts.Count; at++)
         {
             var cell = offered.Cells[at];
@@ -972,7 +1012,8 @@ public sealed class StandardKeyboard : View
             return;
         }
 
-        DrawText(canvas, showsHint ? key.Hint! : LabelOf(key), box.CenterX(), box.CenterY(), h * LabelShare, glyph);
+        var label = showsHint ? key.Hint! : LabelOf(key);
+        DrawText(canvas, label, box.CenterX(), box.CenterY(), Fitted(label, h * LabelShare, box.Width() * LabelRoomShare), glyph);
 
         // A PC's key, as a PC's keycap: its Shift's at the top corner, its Alt Gr's at the bottom one, and with Shift or
         // Alt Gr on only what it types then; Gboard's, its held symbol at the top but while it stands in the key's place.
@@ -982,7 +1023,7 @@ public sealed class StandardKeyboard : View
             DrawCorner(canvas, shifted, box, h, glyph, top: true);
         }
 
-        if (corners && key.Hint is not null)
+        if (corners && key.Hint is not null && key.Label.Length == 1)
         {
             DrawCorner(canvas, key.Hint, box, h, glyph, top: !pc);
         }
@@ -1058,6 +1099,14 @@ public sealed class StandardKeyboard : View
         var fits = text.MeasureText(label) <= room;
         text.SetTypeface(Typeface.Default);
         return fits;
+    }
+
+    /// <summary>A label's size: the one given, smaller where the label is wider than its room (.com, a popup's .net).</summary>
+    private float Fitted(string label, float size, float room)
+    {
+        text.TextSize = size;
+        var width = text.MeasureText(label);
+        return width > room ? size * room / width : size;
     }
 
     private void DrawText(Canvas canvas, string label, float centreX, float centreY, float size, Color color)

@@ -61,6 +61,8 @@ public sealed class MainActivity : Activity
     private const int DictionaryExportRequest = 4;
     private const int DictionaryImportRequest = 5;
     private const int LogSaveRequest = 6;
+    private const int AddressesExportRequest = 7;
+    private const int AddressesImportRequest = 8;
 
     /// <summary>The log's box, Windows': as tall whatever it holds, its type small and of one width.</summary>
     private const int LogViewerDp = 220;
@@ -379,7 +381,6 @@ public sealed class MainActivity : Activity
     /// </summary>
     private SettingsPage VoicePage()
     {
-        var kept = KeyPlusPreferences.Global(this);
         var allowed = CheckSelfPermission(Android.Manifest.Permission.RecordAudio) == Android.Content.PM.Permission.Granted;
         var autoStop = VoicePreferences.AutoStop(this);
         var choice = VoicePreferences.Choice(this);
@@ -414,7 +415,7 @@ public sealed class MainActivity : Activity
             groups.Add(
             [
                 new(GetString(Resource.String.voice_lan), VoicePreferences.LanAddress(this) is { Length: > 0 } ip ? ip : GetString(Resource.String.voice_lan_hint),
-                    Tapped: () => AskText(Resource.String.voice_lan, VoicePreferences.LanAddress(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.LanAddressKey, text.Trim())!.Apply())),
+                    Tapped: () => AskText(Resource.String.voice_lan, VoicePreferences.LanAddress(this), secret: false, text => KeepVoice(VoicePreferences.LanAddressKey, text))),
                 microphoneRow,
                 gainRow,
             ]);
@@ -425,17 +426,28 @@ public sealed class MainActivity : Activity
             groups.Add(
             [
                 new(GetString(Resource.String.voice_address), VoicePreferences.Address(this) is { Length: > 0 } address ? address : notSet,
-                    Tapped: () => AskText(Resource.String.voice_address, VoicePreferences.Address(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.AddressKey, text.Trim())!.Apply())),
+                    Tapped: () => AskText(Resource.String.voice_address, VoicePreferences.Address(this), secret: false, text => KeepVoice(VoicePreferences.AddressKey, text))),
                 new(GetString(Resource.String.voice_user), VoicePreferences.User(this) is { Length: > 0 } user ? user : notSet,
-                    Tapped: () => AskText(Resource.String.voice_user, VoicePreferences.User(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.UserKey, text.Trim())!.Apply())),
+                    Tapped: () => AskText(Resource.String.voice_user, VoicePreferences.User(this), secret: false, text => KeepVoice(VoicePreferences.UserKey, text))),
                 new(GetString(Resource.String.voice_password), password.Length > 0 ? new string('•', 8) : notSet,
-                    Tapped: () => AskText(Resource.String.voice_password, "", secret: true, text => VoicePreferences.SetPassword(this, text))),
+                    Tapped: () => AskText(Resource.String.voice_password, "", secret: true, text =>
+                    {
+                        VoicePreferences.SetPassword(this, text);
+                        settings!.Refresh(VoicePage());
+                    })),
                 microphoneRow,
                 gainRow,
             ]);
         }
 
         return new(GetString(Resource.String.voice_typing), groups);
+    }
+
+    /// <summary>A voice setting written in its dialog kept, the page made again with it.</summary>
+    private void KeepVoice(string key, string text)
+    {
+        KeyPlusPreferences.Global(this).Edit()!.PutString(key, text.Trim())!.Apply();
+        settings!.Refresh(VoicePage());
     }
 
     /// <summary>Parar solo al dejar de hablar: turned, the page made again, the silence's row under it while it is on.</summary>
@@ -487,13 +499,18 @@ public sealed class MainActivity : Activity
     private void AskMicrophone() => RequestPermissions([Android.Manifest.Permission.RecordAudio], MicrophoneRequest);
 
     /// <summary>A text asked (an address, a user, a password, hidden as typed), the one it has offered; kept as written, an empty one too.</summary>
-    private void AskText(int title, string offered, bool secret, Action<string> written)
+    private void AskText(int title, string offered, bool secret, Action<string> written, bool address = false)
     {
         var field = new EditText(this) { Text = offered };
         field.SetSingleLine(true);
         if (secret)
         {
             field.InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationPassword;
+        }
+        else if (address)
+        {
+            // An e-mail address's field: the keyboard's @ and .com, the addresses kept offered, nothing corrected.
+            field.InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationEmailAddress;
         }
 
         field.SelectAll();
@@ -504,11 +521,7 @@ public sealed class MainActivity : Activity
         new AlertDialog.Builder(this)
             .SetTitle(title)!
             .SetView(frame)!
-            .SetPositiveButton(Resource.String.ok, (_, _) =>
-            {
-                written(field.Text ?? "");
-                settings!.Refresh(VoicePage());
-            })!
+            .SetPositiveButton(Resource.String.ok, (_, _) => written(field.Text ?? ""))!
             .SetNegativeButton(Resource.String.cancel, (_, _) => { })!
             .Show();
     }
@@ -721,6 +734,7 @@ public sealed class MainActivity : Activity
                     Switched: on => personal.SetLearning(on, personal.LearnChosen)),
                 new(GetString(Resource.String.dictionary_learn_chosen), GetString(Resource.String.dictionary_learn_chosen_summary), On: personal.LearnChosen,
                     Switched: on => personal.SetLearning(personal.LearnTyped, on)),
+                Switch(Resource.String.dictionary_learn_emails, Resource.String.dictionary_learn_emails_summary, KeyPlusPreferences.LearnEmailsKey),
                 new(GetString(Resource.String.dictionary_forget_chosen), Tapped: personal.ForgetChosen),
                 new(GetString(Resource.String.dictionary_export), GetString(Resource.String.dictionary_export_summary), Tapped: () =>
                     StartActivityForResult(new Intent(Intent.ActionCreateDocument)
@@ -729,6 +743,43 @@ public sealed class MainActivity : Activity
                         .PutExtra(Intent.ExtraTitle, $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json"), DictionaryExportRequest)),
             ],
             LanguageRows(Resource.String.dictionary_by_language),
+            [
+                new(GetString(Resource.String.dictionary_addresses), GetString(Resource.String.dictionary_addresses_summary)),
+                new(GetString(Resource.String.dictionary_import_addresses), GetString(Resource.String.dictionary_import_addresses_summary), Tapped: () =>
+                    StartActivityForResult(new Intent(Intent.ActionOpenDocument)
+                        .AddCategory(Intent.CategoryOpenable)
+                        .SetType("*/*"), AddressesImportRequest)),
+                new(GetString(Resource.String.dictionary_export_addresses), GetString(Resource.String.dictionary_export_addresses_summary), Tapped: () =>
+                    StartActivityForResult(new Intent(Intent.ActionCreateDocument)
+                        .AddCategory(Intent.CategoryOpenable)
+                        .SetType("application/json")
+                        .PutExtra(Intent.ExtraTitle, $"berpiztu-addresses-{DateTime.Now:yyyy-MM-dd_HHmm}.json"), AddressesExportRequest)),
+                new(GetString(Resource.String.dictionary_add_address), Tapped: () =>
+                    AskText(Resource.String.dictionary_add_address, "", secret: false, written =>
+                    {
+                        // Only an address: anything else belongs in a language's words.
+                        if (!PersonalWords.IsAddress(written))
+                        {
+                            Log.Write("Dictionary: an address not added, for it has no @");
+                            Told(Resource.String.dictionary_addresses, GetString(Resource.String.dictionary_not_address));
+                            return;
+                        }
+
+                        personal.Add(PersonalWords.Shared, written);
+                        settings!.Refresh(DictionaryPage());
+                    }, address: true)),
+                .. personal.Addresses.Select(address => new SettingsRow(address,
+                    Removed: () =>
+                    {
+                        personal.Remove(PersonalWords.Shared, address);
+                        settings!.Refresh(DictionaryPage());
+                    },
+                    Edited: () => AskText(Resource.String.dictionary_edit, address, secret: false, written =>
+                    {
+                        personal.Rename(PersonalWords.Shared, address, written);
+                        settings!.Refresh(DictionaryPage());
+                    }, address: true))),
+            ],
         ]);
     }
 
@@ -776,12 +827,6 @@ public sealed class MainActivity : Activity
             glide,
             [
                 new(GetString(Resource.String.dictionary)),
-                new(GetString(Resource.String.dictionary_add), GetString(Resource.String.dictionary_words_summary), Tapped: () =>
-                    AskText(Resource.String.dictionary_add, "", secret: false, written =>
-                    {
-                        personal.Add(code, written);
-                        settings!.Refresh(Again());
-                    })),
                 new(GetString(Resource.String.dictionary_import), GetString(Resource.String.dictionary_import_summary), Tapped: () =>
                 {
                     dictionaryLanguage = language;
@@ -789,6 +834,12 @@ public sealed class MainActivity : Activity
                         .AddCategory(Intent.CategoryOpenable)
                         .SetType("*/*"), DictionaryImportRequest);
                 }),
+                new(GetString(Resource.String.dictionary_add), GetString(Resource.String.dictionary_words_summary), Tapped: () =>
+                    AskText(Resource.String.dictionary_add, "", secret: false, written =>
+                    {
+                        personal.Add(code, written);
+                        settings!.Refresh(Again());
+                    })),
             ],
         ];
         var words = personal.Words(code);
@@ -907,7 +958,7 @@ public sealed class MainActivity : Activity
     /// a file read into it, its words added and none taken away; what came of
     /// it told, a failure written to the log too.
     /// </summary>
-    private void DictionaryFile(Android.Net.Uri file, bool exporting)
+    private void DictionaryFile(Android.Net.Uri file, bool exporting, bool onlyAddresses = false)
     {
         var personal = Personal();
         try
@@ -917,10 +968,11 @@ public sealed class MainActivity : Activity
                 using (var stream = ContentResolver!.OpenOutputStream(file, "wt")!)
                 using (var writer = new StreamWriter(stream))
                 {
-                    writer.Write(personal.Export());
+                    writer.Write(personal.Export(onlyAddresses ? PersonalWords.Shared : null));
                 }
 
-                Toast.MakeText(this, GetString(Resource.String.dictionary_exported, new Java.Lang.String(personal.Count.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
+                var (said, count) = onlyAddresses ? (Resource.String.dictionary_addresses_exported, personal.Addresses.Count) : (Resource.String.dictionary_exported, personal.Count);
+                Toast.MakeText(this, GetString(said, new Java.Lang.String(count.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
                 return;
             }
 
@@ -931,9 +983,10 @@ public sealed class MainActivity : Activity
                 text = reader.ReadToEnd();
             }
 
-            var added = personal.Import(text, dictionaryLanguage.Code);
-            settings?.Refresh(LanguagePage(dictionaryLanguage));
-            Toast.MakeText(this, GetString(Resource.String.dictionary_imported, new Java.Lang.String(added.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
+            var added = personal.Import(text, onlyAddresses ? PersonalWords.Shared : dictionaryLanguage.Code);
+            settings?.Refresh(onlyAddresses ? DictionaryPage() : LanguagePage(dictionaryLanguage));
+            Toast.MakeText(this, GetString(onlyAddresses ? Resource.String.dictionary_addresses_imported : Resource.String.dictionary_imported,
+                new Java.Lang.String(added.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
         }
         catch (Exception failure) when (failure is IOException or System.Text.Json.JsonException or InvalidDataException or Java.Lang.Exception)
         {
@@ -1117,6 +1170,12 @@ public sealed class MainActivity : Activity
         if (resultCode == Result.Ok && data?.Data is { } chosen && requestCode is DictionaryExportRequest or DictionaryImportRequest)
         {
             DictionaryFile(chosen, exporting: requestCode == DictionaryExportRequest);
+            return;
+        }
+
+        if (resultCode == Result.Ok && data?.Data is { } addresses && requestCode is AddressesExportRequest or AddressesImportRequest)
+        {
+            DictionaryFile(addresses, exporting: requestCode == AddressesExportRequest, onlyAddresses: true);
             return;
         }
 

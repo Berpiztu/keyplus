@@ -64,6 +64,9 @@ public sealed class SpellingEngine
             _ = DictionaryFor(language)?.Async();
             _ = commonErrors.Async();
         }
+
+        // The words offered as you type, where its word list is downloaded (with Glide typing).
+        _ = WordListOf(language).Async();
     }
 
     /// <summary>A language's word list, read away from the keyboard's thread the first time it is asked for and again once it is downloaded again; none while it is not on this device.</summary>
@@ -127,7 +130,7 @@ public sealed class SpellingEngine
             fixes.TryGetValue(typed, out found);
         }
 
-        IReadOnlyList<string> itself = IsWord(language, typed) ? [typed] : [];
+        IReadOnlyList<string> itself = IsWord(language, typed) ? [Kept(language, typed) ?? typed] : [];
         return [.. itself.Concat(personal.Starting(language, typed)).Concat(found?.Words ?? []).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
     }
 
@@ -171,6 +174,16 @@ public sealed class SpellingEngine
     }
 
     /// <summary>
+    /// The user's dictionary's way of writing a word typed in small letters,
+    /// where it keeps it with capitals ("iosu": Iosu), as Gboard's: offered
+    /// in the toolbar's centre in its place, and, with Autocorrect, written so;
+    /// none where it keeps it as typed, or not at all.
+    /// </summary>
+    private string? Kept(StandardLanguage language, string typed) =>
+        typed.Any(char.IsUpper) ? null
+        : personal.Words(language.Code).FirstOrDefault(word => word.Any(char.IsUpper) && string.Equals(word, typed, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// A word the language writes only with a capital, as Gboard writes it,
     /// typed all in small letters: one of the language's own
     /// (<see cref="StandardLanguage.Capitals"/>: English's "i"), or one its
@@ -184,6 +197,11 @@ public sealed class SpellingEngine
             || personal.Words(language.Code).Contains(word, StringComparer.Ordinal))
         {
             return null;
+        }
+
+        if (Kept(language, word) is { } kept)
+        {
+            return kept;
         }
 
         var capital = char.ToUpper(word[0], CultureInfo.InvariantCulture) + word[1..];
@@ -266,7 +284,28 @@ public sealed class SpellingEngine
             return;
         }
 
+        // One search at a time, the latest word typed waiting for it: typed fast, each letter's would run at once, together.
+        if (searching)
+        {
+            waiting = (language, word);
+            return;
+        }
+
+        searching = true;
         Task.Run(() => fixes[word] = Corrections(word, checking))
-            .ContinueWith(_ => FixesFound?.Invoke(language, word), TaskScheduler.FromCurrentSynchronizationContext());
+            .ContinueWith(_ =>
+            {
+                searching = false;
+                FixesFound?.Invoke(language, word);
+                if (waiting is { } next)
+                {
+                    waiting = null;
+                    FindFixes(next.Language, next.Word);
+                }
+            }, TaskScheduler.FromCurrentSynchronizationContext());
     }
+
+    /// <summary>Whether a misspelled word's search is running away from the keyboard's thread, and the word typed since, to look for next.</summary>
+    private bool searching;
+    private (StandardLanguage Language, string Word)? waiting;
 }

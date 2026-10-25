@@ -68,16 +68,38 @@ public sealed class SwipeTyping
         }
     });
 
-    /// <summary>The words a swipe reads as, the likeliest first; none where FUTO Swipe could not be loaded or read nothing.</summary>
-    public async Task<IReadOnlyList<string>> Words(KeyPanel.SwipePath path)
+    /// <summary>
+    /// A language's swiping made ready at once, away from the keyboard's
+    /// thread, the owner's: the engine and the language's trie, as the
+    /// keyboard opens in a language swiped in, so its first swipe waits for
+    /// nothing.
+    /// </summary>
+    public void Prepare(StandardLanguage language) => Task.Run(async () =>
     {
-        // Not loaded for want of the encoder, and it is here now: loaded again.
+        if (await Loaded())
+        {
+            lock (engineLock)
+            {
+                _ = Prepared(language);
+            }
+        }
+    });
+
+    /// <summary>The engine as loaded; not loaded for want of its files, and they are here now, loaded again.</summary>
+    private Task<bool> Loaded()
+    {
         if (loaded.IsCompleted && !loaded.Result && SwipeData.ModelDownloaded)
         {
             loaded = Task.Run(Load);
         }
 
-        if (!await loaded)
+        return loaded;
+    }
+
+    /// <summary>The words a swipe reads as, the likeliest first; none where FUTO Swipe could not be loaded or read nothing.</summary>
+    public async Task<IReadOnlyList<string>> Words(KeyPanel.SwipePath path)
+    {
+        if (!await Loaded())
         {
             return [];
         }

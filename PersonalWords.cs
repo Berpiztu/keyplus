@@ -27,6 +27,39 @@ public sealed class PersonalWords(string path)
     /// <summary>The file's name, in the app's own folder (Android's files, Windows' %APPDATA%\Berpiztu\Keyboard).</summary>
     public const string FileName = "personal-words.json";
 
+    /// <summary>
+    /// Where the e-mail addresses are kept, every language's alike, the
+    /// owner's: one typed or added in any language goes here, and one an
+    /// older file kept in a language's list is moved here as it is read.
+    /// </summary>
+    public const string Shared = "all";
+
+    /// <summary>Whether a word is an e-mail address, kept with every language's (<see cref="Shared"/>).</summary>
+    public static bool IsAddress(string word) => word.Contains('@');
+
+    /// <summary>The e-mail addresses, every language's.</summary>
+    public IReadOnlyList<string> Addresses => Words(Shared);
+
+    /// <summary>The e-mail addresses that start as what is typed, whatever its case.</summary>
+    public IReadOnlyList<string> AddressesStarting(string typed) =>
+        [.. Addresses.Where(address => IsAddress(address) && address.StartsWith(typed, StringComparison.OrdinalIgnoreCase))];
+
+    /// <summary>
+    /// A word's suggestions with the addresses that start as it, as Gboard's
+    /// in any field ("name": name@example.com): after the first, the
+    /// one in the toolbar's centre, so beside it; from two letters on.
+    /// </summary>
+    public IReadOnlyList<string> WithAddresses(IReadOnlyList<string> words, string typed, int most) =>
+        typed.Length < 2 || AddressesStarting(typed) is not { Count: > 0 } addresses
+            ? words
+            : [.. words.Take(1).Concat(addresses).Concat(words.Skip(1)).Distinct().Take(most)];
+
+    /// <summary>An address's type in a toolbar, a share of a word's, the owner's: a little smaller, its two lines clear in a word's room.</summary>
+    public const double AddressTypeShare = 0.7;
+
+    /// <summary>An address as a toolbar shows it, in two lines in a word's room, as Gboard's: its name, then from its @.</summary>
+    public static string InTwoLines(string address) => address.IndexOf('@') is > 0 and var at ? $"{address[..at]}\n{address[at..]}" : address;
+
     /// <summary>A personal word's frequency in the swipe's word list (AOSP's run 0 to 255): as common as "también".</summary>
     public const int Frequency = 180;
 
@@ -39,7 +72,7 @@ public sealed class PersonalWords(string path)
         /// <summary>Settings › Dictionary › Learn from the words I choose.</summary>
         public bool LearnChosen { get; set; } = true;
 
-        /// <summary>Each language's personal dictionary.</summary>
+        /// <summary>Each language's personal dictionary, and every language's e-mail addresses (<see cref="Shared"/>).</summary>
         public Dictionary<string, List<string>> Words { get; set; } = [];
 
         /// <summary>Each language's swipes: the word read first, lower case, and how often each word was taken for it.</summary>
@@ -73,6 +106,8 @@ public sealed class PersonalWords(string path)
             return;
         }
 
+        language = IsAddress(word) ? Shared : language;
+
         Change(file =>
         {
             var words = Of(file.Words, language, () => []);
@@ -103,9 +138,9 @@ public sealed class PersonalWords(string path)
 
         Change(file =>
         {
-            var words = Of(file.Words, language, () => []);
-            words.RemoveAll(kept => string.Equals(kept, word, StringComparison.CurrentCultureIgnoreCase)
-                || string.Equals(kept, written, StringComparison.CurrentCultureIgnoreCase));
+            Of(file.Words, language, () => []).RemoveAll(kept => string.Equals(kept, word, StringComparison.CurrentCultureIgnoreCase));
+            var words = Of(file.Words, IsAddress(written) ? Shared : language, () => []);
+            words.RemoveAll(kept => string.Equals(kept, written, StringComparison.CurrentCultureIgnoreCase));
             words.Add(written);
         });
     }
@@ -122,10 +157,14 @@ public sealed class PersonalWords(string path)
     private sealed record ExportFile(string Kind, int Version, DateTime Exported, Dictionary<string, List<string>> Words);
 
     /// <summary>The dictionary as a file the keyboard of another device imports: every language's words; what was chosen for swipes stays here.</summary>
-    public string Export()
+    public string Export() => Export(null);
+
+    /// <summary>One list alone as such a file: the e-mail addresses (<see cref="Shared"/>), to take them to another device; none, every language's and the addresses.</summary>
+    public string Export(string? only)
     {
         Reload();
-        return JsonSerializer.Serialize(new ExportFile(ExportKind, 1, DateTime.Now, kept.Words), new JsonSerializerOptions { WriteIndented = true });
+        var words = only is null ? kept.Words : new Dictionary<string, List<string>> { [only] = [.. Words(only)] };
+        return JsonSerializer.Serialize(new ExportFile(ExportKind, 1, DateTime.Now, words), new JsonSerializerOptions { WriteIndented = true });
     }
 
     /// <summary>How many words an export holds.</summary>
@@ -173,9 +212,10 @@ public sealed class PersonalWords(string path)
         {
             foreach (var (code, added) in words)
             {
-                var kept = Of(file.Words, code, () => []);
-                foreach (var word in added.Select(word => word.Trim()).Where(word => word.Length > 0 && !word.Contains(' ')))
+                // Imported as the addresses, a file's addresses alone.
+                foreach (var word in added.Select(word => word.Trim()).Where(word => word.Length > 0 && !word.Contains(' ') && (language != Shared || IsAddress(word))))
                 {
+                    var kept = Of(file.Words, IsAddress(word) ? Shared : code, () => []);
                     if (!kept.Contains(word, StringComparer.CurrentCultureIgnoreCase))
                     {
                         kept.Add(word);
@@ -267,12 +307,31 @@ public sealed class PersonalWords(string path)
     {
         try
         {
-            return File.Exists(path) ? JsonSerializer.Deserialize<Kept>(File.ReadAllText(path)) ?? new() : new();
+            return Gathered(File.Exists(path) ? JsonSerializer.Deserialize<Kept>(File.ReadAllText(path)) ?? new() : new());
         }
         catch (Exception unreadable) when (unreadable is JsonException or IOException)
         {
             return kept;
         }
+    }
+
+    /// <summary>The e-mail addresses a language's list holds (kept so before they were every language's) moved to <see cref="Shared"/>.</summary>
+    private static Kept Gathered(Kept file)
+    {
+        foreach (var (language, words) in file.Words.Where(language => language.Key != Shared).ToList())
+        {
+            foreach (var address in words.Where(IsAddress).ToList())
+            {
+                words.Remove(address);
+                var shared = Of(file.Words, Shared, () => []);
+                if (!shared.Contains(address, StringComparer.CurrentCultureIgnoreCase))
+                {
+                    shared.Add(address);
+                }
+            }
+        }
+
+        return file;
     }
 
     private static string Signature(Kept file) =>

@@ -847,6 +847,7 @@ public sealed class SettingsWindow : Window
         form.Children.Add(Field(null, forget, null));
         form.Children.Add(Field(null, export, Resource.String.dictionary_export_summary));
         form.Children.Add(Field(null, LanguageLines(choosing: false, DictionaryPage), Resource.String.dictionary_by_language));
+        form.Children.Add(Field(Resource.String.dictionary_addresses, WordsPart(PersonalWords.Shared), Resource.String.dictionary_addresses_summary));
         return form;
     }
 
@@ -939,6 +940,14 @@ public sealed class SettingsWindow : Window
 
         void Add()
         {
+            // The addresses' list takes only addresses: anything else belongs in a language's words.
+            if (code == PersonalWords.Shared && !PersonalWords.IsAddress(word.Text))
+            {
+                Log.Write("Dictionary: an address not added, for it has no @");
+                MessageBox.Show(Texts.Get(Resource.String.dictionary_not_address), Texts.Get(Resource.String.dictionary_addresses), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             personal.Add(code, word.Text);
             word.Clear();
             Fill();
@@ -953,7 +962,8 @@ public sealed class SettingsWindow : Window
                 e.Handled = true;
             }
         };
-        var import = new Button { Content = Texts.Get(Resource.String.dictionary_import), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        var addresses = code == PersonalWords.Shared;
+        var import = new Button { Content = Texts.Get(addresses ? Resource.String.dictionary_import_addresses : Resource.String.dictionary_import), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
         import.Click += (_, _) =>
         {
             var open = new Microsoft.Win32.OpenFileDialog { Filter = "JSON, TXT|*.json;*.txt|*.*|*.*" };
@@ -966,7 +976,7 @@ public sealed class SettingsWindow : Window
             {
                 var added = personal.Import(System.IO.File.ReadAllText(open.FileName), code);
                 Fill();
-                MessageBox.Show(Texts.Get(Resource.String.dictionary_imported, added), Texts.Get(Resource.String.dictionary));
+                MessageBox.Show(Texts.Get(addresses ? Resource.String.dictionary_addresses_imported : Resource.String.dictionary_imported, added), Texts.Get(Resource.String.dictionary));
             }
             catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or System.IO.InvalidDataException)
             {
@@ -978,11 +988,43 @@ public sealed class SettingsWindow : Window
         DockPanel.SetDock(add, Dock.Right);
         adding.Children.Add(add);
         adding.Children.Add(word);
-        part.Children.Add(Field(Resource.String.dictionary_words, adding, Resource.String.dictionary_words_summary));
+
+        // Import (and the addresses' Export) first, then adding one by hand, then the list, the user's order.
+        part.Children.Add(Field(null, import, addresses ? Resource.String.dictionary_import_addresses_summary : Resource.String.dictionary_import_summary));
+        if (addresses)
+        {
+            part.Children.Add(Field(null, ExportAddresses(personal), Resource.String.dictionary_export_addresses_summary));
+        }
+
+        part.Children.Add(Field(addresses ? null : Resource.String.dictionary_words, adding, addresses ? null : Resource.String.dictionary_words_summary));
         part.Children.Add(Field(null, words, null));
-        part.Children.Add(Field(null, import, Resource.String.dictionary_import_summary));
         Fill();
         return part;
+    }
+
+    /// <summary>Export the addresses: every e-mail address to a file, to take them to another device.</summary>
+    private static Button ExportAddresses(PersonalWords personal)
+    {
+        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export_addresses), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        export.Click += (_, _) =>
+        {
+            var save = new Microsoft.Win32.SaveFileDialog { FileName = $"berpiztu-addresses-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
+            if (save.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                System.IO.File.WriteAllText(save.FileName, personal.Export(PersonalWords.Shared));
+                MessageBox.Show(Texts.Get(Resource.String.dictionary_addresses_exported, personal.Addresses.Count), Texts.Get(Resource.String.dictionary));
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
+            {
+                DictionaryFailed(failure);
+            }
+        };
+        return export;
     }
 
     /// <summary>Glide typing, as Android's: swiping over the letters, its trail and ⌫ deleting a swiped word whole; FUTO Swipe's notice in sight, as its licence asks.</summary>

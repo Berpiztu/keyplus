@@ -169,13 +169,94 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>The keyboard opening: the screenshots watched, if the user has let it read the photos since.</summary>
-    /// <summary>The caret moved (a key typed, a tap in the text): Shift on where a sentence begins.</summary>
+    /// <summary>
+    /// Everything a language has turned on loaded at once, the owner's, as
+    /// the keyboard opens and as the language changes, not at its first use:
+    /// its Spelling's dictionary, misspellings and accent model, its word
+    /// list, and, with Glide typing on in it, FUTO Swipe's engine and its trie.
+    /// </summary>
+    private void PrepareLanguage(StandardLanguage language)
+    {
+        spelling.Prepare(language);
+        if (LanguageChoices.GlidesIn(this, language.Code))
+        {
+            swipeTyping?.Prepare(language);
+        }
+    }
+
+    /// <summary>The caret moved (a key typed, a tap in the text): Shift on where a sentence begins; an account's field's text kept, to be learnt as it is left.</summary>
     public override void OnUpdateSelection(int oldSelStart, int oldSelEnd, int newSelStart, int newSelEnd, int candidatesStart, int candidatesEnd)
     {
         base.OnUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd);
         selection = (Math.Min(newSelStart, newSelEnd), Math.Max(newSelStart, newSelEnd));
         SentenceShift();
+        if (accountField && CurrentInputConnection is { } field)
+        {
+            accountText = (field.GetTextBeforeCursor(AddressReach, 0)?.ToString() ?? "") + (field.GetTextAfterCursor(AddressReach, 0)?.ToString() ?? "");
+        }
     }
+
+    /// <summary>
+    /// The kind of field typed in, as Android's field tells it: Estándar suits
+    /// it (<see cref="StandardField"/>); an e-mail address's, or one named or
+    /// hinted as a user's or an account's, offers the addresses the
+    /// dictionary has and keeps the one typed as it is left; a password's,
+    /// a number's or an address's is neither corrected nor offered words.
+    /// </summary>
+    private void TakeField(Android.Views.InputMethods.EditorInfo? info)
+    {
+        var type = info?.InputType ?? Android.Text.InputTypes.ClassText;
+        var kind = type & Android.Text.InputTypes.MaskClass;
+        var variation = type & Android.Text.InputTypes.MaskVariation;
+        fieldKind = kind switch
+        {
+            Android.Text.InputTypes.ClassNumber or Android.Text.InputTypes.ClassPhone or Android.Text.InputTypes.ClassDatetime => StandardField.Number,
+            Android.Text.InputTypes.ClassText when variation == Android.Text.InputTypes.TextVariationUri => StandardField.Web,
+            Android.Text.InputTypes.ClassText when variation is Android.Text.InputTypes.TextVariationEmailAddress or Android.Text.InputTypes.TextVariationWebEmailAddress => StandardField.Email,
+            _ => StandardField.Text,
+        };
+        secretField = (kind == Android.Text.InputTypes.ClassText && variation is Android.Text.InputTypes.TextVariationPassword
+                or Android.Text.InputTypes.TextVariationWebPassword or Android.Text.InputTypes.TextVariationVisiblePassword)
+            || (kind == Android.Text.InputTypes.ClassNumber && variation == Android.Text.InputTypes.NumberVariationPassword);
+        var named = $"{info?.HintText} {info?.FieldName}";
+        accountField = !secretField && (fieldKind == StandardField.Email
+            || (fieldKind == StandardField.Text && System.Text.RegularExpressions.Regex.IsMatch(named, AccountWords, System.Text.RegularExpressions.RegexOptions.IgnoreCase)));
+        accountText = "";
+        panel?.FieldIs(fieldKind);
+    }
+
+    /// <summary>What names a user's or an account's field, in its hint or its name, in English or Spanish.</summary>
+    private const string AccountWords = "user|usuario|login|e-?mail|correo|account|cuenta";
+
+    /// <summary>How much of an account's field is read either side of the caret: an address at most.</summary>
+    private const int AddressReach = 320;
+
+    private StandardField fieldKind;
+    private bool secretField;
+    private bool accountField;
+    private string accountText = "";
+
+    /// <summary>Whether the field typed in is corrected and offered the words being typed: ordinary text alone, never a password, a number or an address.</summary>
+    private bool WordsField => fieldKind == StandardField.Text && !secretField && !accountField;
+
+    /// <summary>An account's field left: the address typed in it kept in the dictionary (Keep the e-mail addresses I type), once.</summary>
+    private void LearnAddress()
+    {
+        var typed = accountText.Trim();
+        accountText = "";
+        if (!accountField || !KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.LearnEmailsKey, true)
+            || !System.Text.RegularExpressions.Regex.IsMatch(typed, @"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+            || Addresses("").Contains(typed, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        personal.Add(PersonalWords.Shared, typed);
+        Log.Write("Dictionary: an e-mail address typed in an account's field kept");
+    }
+
+    /// <summary>The e-mail addresses the dictionary has, every language's, those starting as the one typed.</summary>
+    private IReadOnlyList<string> Addresses(string typed) => personal.AddressesStarting(typed);
 
     /// <summary>The field's selection as Android last told it, its start and end.</summary>
     private (int Start, int End) selection;
@@ -195,11 +276,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             return false;
         }
 
-        var culture = new System.Globalization.CultureInfo(KeyPlusPreferences.Language(this).Locale);
-        var upper = selected.ToUpper(culture);
-        var lower = selected.ToLower(culture);
-        var first = lower.Length > 0 ? char.ToUpper(lower[0], culture) + lower[1..] : lower;
-        var turned = selected == upper ? lower : selected == lower ? first : upper;
+        var turned = StandardKeys.NextCase(selected, new System.Globalization.CultureInfo(KeyPlusPreferences.Language(this).Locale));
         field.BeginBatchEdit();
         field.CommitText(turned, 1);
         field.SetSelection(selection.Start, selection.Start + turned.Length);
@@ -244,8 +321,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Swiping = SwipeOn();
             panel.ForgetTyping();
             spelling.Forget();
-            spelling.Prepare(KeyPlusPreferences.Language(this));
+            PrepareLanguage(KeyPlusPreferences.Language(this));
             panel.GridTiles = GridTiles();
+            TakeField(info);
             SentenceShift();
 
             // Not shown, for another keyboard in use: its ⌨ icon in its place, which a tap opens. Made its
@@ -515,6 +593,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
         };
         placed.Mode = panel.Mode;
         placed.Pc = panel.Keyboard?.Base == Keyboards.StandardPcBase;
+
+        // Made again in the same field (Standard and Standard PC swapped, its colours changed): suited to it still.
+        panel.FieldIs(fieldKind);
         placed.Landscape = Resources!.Configuration!.Orientation == Android.Content.Res.Orientation.Landscape;
         panel.Scale = placed.Scale;
         if (OnHeadset)
@@ -536,7 +617,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // Words swiped over the letters, as Gboard's (FUTO Swipe).
             panel.Swiping = SwipeOn();
             panel.GlidesFor = language => LanguageChoices.Glides(this, language);
-            panel.Fixing = (language, word) => spelling.Fix(language, word);
+            panel.Fixing = (language, word) => WordsField ? spelling.Fix(language, word) : null;
             panel.SpellingIn = language => LanguageChoices.Applied(this, language.Code);
             panel.CorrectSentence = async sentence => await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
             panel.CorrectSentenceNow = sentence => spelling.Accents.InUse()?.Restore(sentence);
@@ -544,7 +625,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.SelectionCase = TurnSelectionCase;
 
             // Nothing learnt by itself, nor while Autocorrect or Spelling is off (writing code): a word no list has offered to learn with a tap.
-            panel.Learnable = (language, word) => personal.LearnTyped && Learns(language) && spelling.Unknown(language, word);
+            panel.Learnable = (language, word) => WordsField && personal.LearnTyped && Learns(language) && spelling.Unknown(language, word);
             panel.Learn = (language, word) =>
             {
                 personal.Learn(language.Code, word);
@@ -553,11 +634,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
             };
             panel.LanguageChanged += language =>
             {
-                spelling.Prepare(language);
+                PrepareLanguage(language);
                 panel!.GridTiles = GridTiles();
             };
             panel.VoiceTapped += Dictate;
-            panel.Suggesting = (language, typed) => spelling.Suggest(language, typed);
+            panel.Suggesting = (language, typed) => accountField ? [.. Addresses(typed).Take(WordSuggestions.Offered)]
+                : WordsField ? personal.WithAddresses(spelling.Suggest(language, typed), typed, WordSuggestions.Offered) : [];
             panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
             panel.SwipeChosen = (language, read, word) =>
             {
@@ -568,9 +650,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             };
             panel.WordBeforeCaret = () =>
             {
-                var before = CurrentInputConnection?.GetTextBeforeCursor(WordReach, 0)?.ToString() ?? "";
+                // An account's field: the address being typed whole, up to the last space.
+                var before = CurrentInputConnection?.GetTextBeforeCursor(accountField ? AddressReach : WordReach, 0)?.ToString() ?? "";
                 var start = before.Length;
-                while (start > 0 && char.IsLetter(before[start - 1]))
+                while (start > 0 && (accountField ? !char.IsWhiteSpace(before[start - 1]) : char.IsLetter(before[start - 1])))
                 {
                     start--;
                 }
@@ -742,6 +825,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         LanguageChoices.SetGlide(this, language.Code, !LanguageChoices.GlidesIn(this, language.Code));
         panel!.GridTiles = GridTiles();
+        PrepareLanguage(language);
     }
 
     /// <summary>What a tool lacks, offered in the toolbar with Download (<see cref="KeyPanel.OfferDownload"/>); once fetched, what it is for turned on and the tools lit again.</summary>
@@ -750,7 +834,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             progress => fetched.Download(progress, CancellationToken.None), () =>
             {
                 turnOn();
-                spelling.Prepare(KeyPlusPreferences.Language(this));
+                PrepareLanguage(KeyPlusPreferences.Language(this));
                 panel!.GridTiles = GridTiles();
             });
 
@@ -1539,6 +1623,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     public override void OnFinishInputView(bool finishingInput)
     {
+        LearnAddress();
         panel?.StopRepeat();
         DropDictation();
         base.OnFinishInputView(finishingInput);

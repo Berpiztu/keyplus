@@ -68,11 +68,25 @@ public sealed record StandardKey(
     float Below = 0f,
     bool Lower = false)
 {
-    /// <summary>Whether held it goes on and on, as a PC's arrows do.</summary>
-    public bool Repeats => Code is Keycode.DpadLeft or Keycode.DpadRight or Keycode.DpadUp or Keycode.DpadDown;
+    /// <summary>Whether held it goes on and on, as a PC's arrows and Delete do.</summary>
+    public bool Repeats => Code is Keycode.DpadLeft or Keycode.DpadRight or Keycode.DpadUp or Keycode.DpadDown or Keycode.ForwardDel;
 
     /// <summary>What a PC's key shows in its top corner, as a PC's keycap prints it: its Shift's, but for a letter, whose capital goes without saying.</summary>
     public string? ShiftCorner => Text is { Length: 1 } one && char.IsLetter(one[0]) ? null : Shifted;
+}
+
+/// <summary>
+/// The kind of field typed in, as an Android field tells it, for the standard
+/// keyboard to suit it as Gboard's does: numbers open on 1234; a web address
+/// has / and .com, an e-mail address @ and .com, in the comma's place and
+/// beside the space.
+/// </summary>
+public enum StandardField
+{
+    Text,
+    Number,
+    Web,
+    Email,
 }
 
 /// <summary>The standard keyboard's pages.</summary>
@@ -551,6 +565,26 @@ public static class StandardKeys
 
     private static StandardKey Delete() =>
         new("⌫", StandardAction.Delete, Width: WideWidth, Look: StandardLook.Function, Icon: Resource.Drawable.ic_key_backspace);
+
+    /// <summary>
+    /// The case text selected turns to with Shift tapped twice, the owner's:
+    /// all in capitals, then in small letters, then its first letter a
+    /// capital, and round again, from the one it is in now (in another,
+    /// capitals first).
+    /// </summary>
+    public static string NextCase(string text, System.Globalization.CultureInfo culture)
+    {
+        var upper = text.ToUpper(culture);
+        var lower = text.ToLower(culture);
+        var first = lower.Length > 0 ? char.ToUpper(lower[0], culture) + lower[1..] : lower;
+        return text == upper ? lower : text == lower ? first : upper;
+    }
+
+    /// <summary>.com, beside the space in a web or e-mail address's field; held, the other endings.</summary>
+    public static readonly StandardKey DotCom = new(".com", Text: ".com", Hint: ".net", Look: StandardLook.Function);
+
+    /// <summary>The endings .com's long press offers after its corner's (.net).</summary>
+    public static readonly string[] MoreDomains = [".org", ".es"];
 
     private static StandardKey Space() => new("", StandardAction.Space, Text: " ", Width: SpaceWidth);
 

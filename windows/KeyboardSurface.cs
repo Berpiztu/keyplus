@@ -324,6 +324,8 @@ public sealed class KeyboardSurface : FrameworkElement
         sentence = new StringBuilder();
         sentenceFrom = Environment.TickCount64;
         sentenceBlind = blind;
+        inAddress = false;
+        addressTyped = "";
     }
 
     /// <summary>Whether the sentence began where a press put the caret: what is before it, maybe a word's first letters, is not known.</summary>
@@ -389,7 +391,7 @@ public sealed class KeyboardSurface : FrameworkElement
             var whole = sentence.ToString();
             var known = SentenceKnown;
             BeginSentence();
-            if (Spelling.Accents && whole.Trim().Length > 1)
+            if (Spelling.Accents && whole.Trim().Length > 1 && !EndsInAddress(whole))
             {
                 if (!known)
                 {
@@ -665,7 +667,8 @@ public sealed class KeyboardSurface : FrameworkElement
     private void OfferWords()
     {
         // Offered even where the word's start is not known: a word offered is only written with a tap.
-        IReadOnlyList<string> words = typingWord.Length > 0 && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
+        IReadOnlyList<string> words = addressTyped.Contains('@') && AddressesStarting is { } addresses ? addresses(addressTyped)
+            : typingWord.Length > 0 && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
         Offered?.Invoke(words);
     }
 
@@ -682,6 +685,17 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A word offered taken in place of the one being typed, with a space after it, as Gboard's.</summary>
     public void TakeSuggestion(string word)
     {
+        // An address in place of the one being typed, whole, with nothing after it.
+        if (PersonalWords.IsAddress(word))
+        {
+            Retype(addressTyped.Contains('@') ? addressTyped.Length : typingWord.Length, word);
+            addressTyped = word;
+            lastTyped = word[^1];
+            typingWord = "";
+            Offered?.Invoke([]);
+            return;
+        }
+
         Retype(typingWord.Length, word + " ");
         lastTyped = ' ';
         boundaryAt = Environment.TickCount64;
@@ -1736,6 +1750,29 @@ public sealed class KeyboardSurface : FrameworkElement
         ModifiersUsed();
     }
 
+    /// <summary>
+    /// Whether what is being typed is an e-mail or web address: @ . / or :
+    /// typed since the last space ("someone@example", "www.berpiztu"), so nothing
+    /// in it is corrected; a space, a new line or a word ended by one ends it.
+    /// </summary>
+    private bool inAddress;
+
+    /// <summary>What these keys typed since the last space, while it is theirs alone: with an @ in it, an e-mail address being typed, the addresses kept offered for it (<see cref="AddressesStarting"/>).</summary>
+    private string addressTyped = "";
+
+    /// <summary>The e-mail addresses the dictionary keeps that start as the one typed, every language's.</summary>
+    public Func<string, IReadOnlyList<string>>? AddressesStarting { get; set; }
+
+    /// <summary>Whether an e-mail or web address is being typed: no word in it is offered to learn.</summary>
+    public bool TypingAddress => inAddress || addressTyped.Contains('@');
+
+    /// <summary>Whether a sentence closed by its . ends in an address ("someone@example."), its accents then left as they are.</summary>
+    private static bool EndsInAddress(string sentence)
+    {
+        var closed = sentence.TrimEnd()[..^1];
+        return closed[(closed.LastIndexOfAny([' ', '\n', '\t']) + 1)..].IndexOfAny(['@', '.', '/', ':']) >= 0;
+    }
+
     /// <summary>Text typed, a dead key's accent on it where it has one with it (´ then a: á), or before it; a space types the accent alone.</summary>
     private void Type(string typed)
     {
@@ -1748,7 +1785,11 @@ public sealed class KeyboardSurface : FrameworkElement
         }
 
         var letters = typed.Length > 0 && typed.All(char.IsLetter);
-        var fixing = letters ? null : FixWord();
+
+        // @ ends no word, and nothing in an address is corrected, as Gboard's and Android's.
+        var fixing = letters || typed == "@" || inAddress ? null : FixWord();
+        inAddress = typed.Length > 0 && !typed.Any(char.IsWhiteSpace) && (inAddress || typed.IndexOfAny(['@', '.', '/', ':']) >= 0);
+        addressTyped = typed.Length == 0 || typed.Any(char.IsWhiteSpace) ? "" : addressTyped + typed;
         if (typed is "?" or "!")
         {
             MendSentence(typed[0]);
@@ -1878,6 +1919,7 @@ public sealed class KeyboardSurface : FrameworkElement
     private void ToggleShift()
     {
         var now = DateTime.UtcNow;
+        sentenceShift = false;
         shift = shift switch
         {
             Shift.Off => Shift.Once,
@@ -1885,6 +1927,20 @@ public sealed class KeyboardSurface : FrameworkElement
             _ => Shift.Off,
         };
         shiftTappedAt = now;
+        if (shift == Shift.Locked)
+        {
+            SelectionCase?.Invoke();
+        }
+    }
+
+    /// <summary>Shift tapped twice: the text selected in the window typed in, where there is some, turned to its next case (<see cref="StandardKeys.NextCase"/>), Shift then off again (<see cref="ShiftOff"/>); none selected, Shift stays locked.</summary>
+    public Action? SelectionCase { get; set; }
+
+    /// <summary>Shift off, its two taps having turned a selection's case.</summary>
+    public void ShiftOff()
+    {
+        shift = Shift.Off;
+        InvalidateVisual();
     }
 
     /// <summary>The keys' places as laid out, each its row and its place in the row, alongside <see cref="laid"/>.</summary>

@@ -116,7 +116,7 @@ public sealed class SpellingDictionary
             .Select(weighed => weighed.Word)];
 
     /// <summary>Whether a word of the list is close enough to a misspelled one to be offered for it: a letter wrong at most, and a sound or an accent besides.</summary>
-    public bool Close(string typed, string listed) => Distance(typed, listed) <= NearDistance;
+    public bool Close(string typed, string listed) => Distance(typed, listed, NearDistance) <= NearDistance;
 
     private const double NearDistance = 1.25;
 
@@ -129,42 +129,65 @@ public sealed class SpellingDictionary
     /// Spanish does not sound, a quarter; any other letter changed, put in,
     /// left out or swapped, one.
     /// </summary>
-    private double Distance(string typed, string meant)
+    /// <remarks>
+    /// Run over tens of thousands of a word list's words for each word typed
+    /// (<see cref="Close"/>), so it makes nothing to throw away: the table's
+    /// last three rows alone, on the stack, the letters lowered one by one;
+    /// and past <paramref name="most"/> in a whole row, where no nearer can
+    /// follow, it stops there. Made anew for each word, it held a phone's
+    /// keyboard for seconds while a misspelled word was typed.
+    /// </remarks>
+    private double Distance(string typed, string meant, double most = double.MaxValue)
     {
-        var a = typed.ToLowerInvariant();
-        var b = meant.ToLowerInvariant();
-        var cost = new double[a.Length + 1, b.Length + 1];
-        for (var i = 0; i <= a.Length; i++)
+        var (a, b) = (typed, meant);
+        var size = b.Length + 1;
+        Span<double> twoAbove = size <= MostOnStack ? stackalloc double[size] : new double[size];
+        Span<double> above = size <= MostOnStack ? stackalloc double[size] : new double[size];
+        Span<double> row = size <= MostOnStack ? stackalloc double[size] : new double[size];
+        for (var j = 1; j < size; j++)
         {
-            cost[i, 0] = i == 0 ? 0 : cost[i - 1, 0] + Added(a, i - 1);
-        }
-
-        for (var j = 0; j <= b.Length; j++)
-        {
-            cost[0, j] = j == 0 ? 0 : cost[0, j - 1] + Added(b, j - 1);
+            above[j] = above[j - 1] + Added(b, j - 1);
         }
 
         for (var i = 1; i <= a.Length; i++)
         {
-            for (var j = 1; j <= b.Length; j++)
+            row[0] = above[0] + Added(a, i - 1);
+            var least = row[0];
+            for (var j = 1; j < size; j++)
             {
-                var best = Math.Min(cost[i - 1, j - 1] + Changed(a[i - 1], b[j - 1]), Math.Min(cost[i - 1, j] + Added(a, i - 1), cost[i, j - 1] + Added(b, j - 1)));
-                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1])
+                var best = Math.Min(above[j - 1] + Changed(Lower(a, i - 1), Lower(b, j - 1)), Math.Min(above[j] + Added(a, i - 1), row[j - 1] + Added(b, j - 1)));
+                if (i > 1 && j > 1 && Lower(a, i - 1) == Lower(b, j - 2) && Lower(a, i - 2) == Lower(b, j - 1))
                 {
-                    best = Math.Min(best, cost[i - 2, j - 2] + 1);
+                    best = Math.Min(best, twoAbove[j - 2] + 1);
                 }
 
-                cost[i, j] = best;
+                row[j] = best;
+                least = Math.Min(least, best);
             }
+
+            if (least > most)
+            {
+                return least;
+            }
+
+            var spare = twoAbove;
+            twoAbove = above;
+            above = row;
+            row = spare;
         }
 
-        return cost[a.Length, b.Length];
+        return above[b.Length];
     }
+
+    /// <summary>How long a word's table rows may be to stand on the stack; a longer one (a pasted line) is made on the heap.</summary>
+    private const int MostOnStack = 128;
+
+    private static char Lower(string word, int at) => char.ToLowerInvariant(word[at]);
 
     /// <summary>A letter of one word the other lacks: a letter written twice for once or once for twice (helo, hello) half a mistake; in Spanish an h a quarter.</summary>
     private double Added(string word, int at) =>
-        spanish && word[at] == 'h' ? 0.25
-        : (at > 0 && word[at - 1] == word[at]) || (at + 1 < word.Length && word[at + 1] == word[at]) ? 0.5
+        spanish && Lower(word, at) == 'h' ? 0.25
+        : (at > 0 && Lower(word, at - 1) == Lower(word, at)) || (at + 1 < word.Length && Lower(word, at + 1) == Lower(word, at)) ? 0.5
         : 1;
 
     private double Changed(char typed, char meant)

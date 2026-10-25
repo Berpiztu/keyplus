@@ -85,6 +85,9 @@ public static class KeyPlusPreferences
     /// <summary>Whether Berpiztu AI Keyboard is the headset's own here: a headset, its box asked for in Preferencias.</summary>
     public static bool HeadsetKeyboard(Context context) => IsHeadset(context) && Global(context).GetBoolean(HeadsetBoxKey, false);
 
+    /// <summary>Dictionary's Keep the e-mail addresses I type, the owner's: on unless turned off.</summary>
+    public const string LearnEmailsKey = "learnEmails";
+
     /// <summary>Spelling's Capital at the start of a sentence, as on Windows: off unless turned on; Shift on by itself where the field says a sentence begins.</summary>
     public const string CapitalizeSentencesKey = "capitalizeSentences";
 
