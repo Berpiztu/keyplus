@@ -268,6 +268,12 @@ namespace Berpiztu.KeyPlus
             public const int dictionary_learn_chosen = 125;
             public const int dictionary_learn_chosen_summary = 126;
             public const int dictionary_forget_chosen = 127;
+            public const int emoji_row = 201;
+            public const int emoji_row_summary = 202;
+            public const int try_number = 203;
+            public const int try_email = 205;
+            public const int try_web = 206;
+            public const int app_list = 207;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

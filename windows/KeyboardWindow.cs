@@ -154,8 +154,22 @@ public sealed class KeyboardWindow : Window
     private bool movedForMenu;
     private bool transcribing;
 
-    /// <summary>The words a swipe read as, in the toolbar's middle as Gboard's: the one typed in bold in the centre, one on each side, a tap on one taking its place.</summary>
+    /// <summary>The words a swipe read as, in the toolbar's middle as Gboard's: the one typed in bold in the centre, one on each side, a tap on one taking its place; in the emoji row where it shows.</summary>
     private readonly Grid suggestions = new() { Visibility = Visibility.Collapsed };
+
+    /// <summary>The toolbar's middle, where the words offered go without the emoji row.</summary>
+    private readonly Grid barMiddle = new();
+
+    /// <summary>
+    /// Over the toolbar (Preferences' Show the emoji row, on unless turned off), the Android keyboard's height, Gboard's
+    /// 100 px of the Fold: the emoji typed lately, or the words offered while typing, so the toolbar keeps its buttons.
+    /// </summary>
+    private const double EmojiRowDp = 100 / 2.25;
+    private readonly Grid emojiRow = new() { Height = EmojiRowDp };
+    private readonly EmojiStrip recentEmoji = new();
+
+    /// <summary>The toolbar's buttons that make room for the words offered in its middle, without the emoji row: all but the first and the last.</summary>
+    private UIElement[] between = [];
 
     private const double SuggestionSize = 15;
     private readonly DispatcherTimer noticeTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -294,6 +308,14 @@ public sealed class KeyboardWindow : Window
         keys.EmojisAsked += ShowEmoji;
         emoji = new EmojiPanel(colors) { Visibility = Visibility.Collapsed };
         emoji.Typed += keys.TypeText;
+        emoji.Typed += _ => FillRecentEmoji();
+        recentEmoji.Chosen += typed =>
+        {
+            EmojiArt.Used(typed);
+            keys.TypeText(typed);
+            FillRecentEmoji();
+        };
+        emojiRow.Children.Add(recentEmoji);
         emoji.Deleted += keys.DeleteBack;
         emoji.Closed += HideEmoji;
 
@@ -333,8 +355,9 @@ public sealed class KeyboardWindow : Window
         focus.MenuClosed += () => movedForMenu = false;
         focus.TextFocused += () =>
         {
-            // A field come to: the sentence typed from here is the keys' own, as far as Spelling can tell.
+            // A field come to: the sentence typed from here is the keys' own, as far as Spelling can tell; the keys its kind's.
             keys.BeginSentence();
+            keys.Field = focus.FieldKind;
             if (focus.App is { } typedIn)
             {
                 AppColors.Seen(typedIn);
@@ -441,20 +464,12 @@ public sealed class KeyboardWindow : Window
         bar.Children.Add(design);
         bar.Children.Add(dock);
         bar.Children.Add(resize);
-        var middle = new Grid();
-        middle.Children.Add(notice);
-        middle.Children.Add(suggestions);
-        bar.Children.Add(middle);
+        barMiddle.Children.Add(notice);
+        bar.Children.Add(barMiddle);
 
         // While words are suggested, as Android's (Gboard's): the first and the last button, the words between them.
-        UIElement[] between = [smiley, spellingButton, glideButton, mic, settings, design, dock, resize];
-        System.ComponentModel.DependencyPropertyDescriptor.FromProperty(VisibilityProperty, typeof(Grid)).AddValueChanged(suggestions, (_, _) =>
-        {
-            foreach (var tool in between)
-            {
-                tool.Visibility = suggestions.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-            }
-        });
+        between = [smiley, spellingButton, glideButton, mic, settings, design, dock, resize];
+        System.ComponentModel.DependencyPropertyDescriptor.FromProperty(VisibilityProperty, typeof(Grid)).AddValueChanged(suggestions, (_, _) => ShowTools());
         Moves(bar);
 
         var handle = new Border
@@ -482,8 +497,10 @@ public sealed class KeyboardWindow : Window
         top.Children.Add(bar);
         top.Children.Add(designer.Bar);
         var card = new DockPanel();
+        DockPanel.SetDock(emojiRow, Dock.Top);
         DockPanel.SetDock(top, Dock.Top);
         DockPanel.SetDock(handleBand, Dock.Bottom);
+        card.Children.Add(emojiRow);
         card.Children.Add(top);
         card.Children.Add(handleBand);
         var middleKeys = new Grid();
@@ -502,6 +519,7 @@ public sealed class KeyboardWindow : Window
             Effect = shadow,
         };
 
+        ShowEmojiRow();
         Restore();
         ShowSwitcher();
         Closing += (_, e) =>
@@ -832,11 +850,19 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
+        var rowBefore = preferences.EmojiRow;
         preferences = kept;
         if (!colors.Matches(kept.ColorsIn(app, ownColor)) && !keys.Designing)
         {
             Remake(show: false);
             return;
+        }
+
+        // The emoji row turned on or off: the keys keep their rows' height, the window as much taller or shorter.
+        if (kept.EmojiRow != rowBefore)
+        {
+            ShowEmojiRow();
+            FitKeys(keys.RowScale);
         }
 
         if (kept.Language is { } code && code != keys.KeyLanguage.Code && StandardKeys.Languages.FirstOrDefault(language => language.Code == code) is { } chosen)
@@ -1059,6 +1085,40 @@ public sealed class KeyboardWindow : Window
     /// being typed, the likeliest in the centre, each taken with a tap. None,
     /// the toolbar empty again.
     /// </summary>
+    /// <summary>
+    /// The emoji row as the preferences have it: shown, the words offered in it and the toolbar's buttons all kept; not
+    /// shown, the words in the toolbar's middle, between its first and last button.
+    /// </summary>
+    private void ShowEmojiRow()
+    {
+        var on = preferences.EmojiRow;
+        emojiRow.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        Panel home = on ? emojiRow : barMiddle;
+        if (suggestions.Parent != home)
+        {
+            (suggestions.Parent as Panel)?.Children.Remove(suggestions);
+            home.Children.Add(suggestions);
+        }
+
+        FillRecentEmoji();
+        ShowTools();
+    }
+
+    /// <summary>The words offered in sight or not: in the toolbar, its buttons between the first and the last make room; in the emoji row, the emoji typed lately do.</summary>
+    private void ShowTools()
+    {
+        var words = suggestions.Visibility == Visibility.Visible;
+        foreach (var tool in between)
+        {
+            tool.Visibility = words && !preferences.EmojiRow ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        recentEmoji.Visibility = words ? Visibility.Hidden : Visibility.Visible;
+    }
+
+    /// <summary>The emoji row's emoji: those typed lately, the last first.</summary>
+    private void FillRecentEmoji() => recentEmoji.Items = EmojiArt.Recent();
+
     private void ShowSuggestions(IReadOnlyList<string> words, string? typed)
     {
         suggestions.Children.Clear();
@@ -1384,7 +1444,7 @@ public sealed class KeyboardWindow : Window
     }
 
     /// <summary>The bar, the handle and the shadow's band around the keys, at the window's height for rows at a share of Gboard's; docked, the bar alone.</summary>
-    private double ChromeHeight => docked ? BarDp + dockedLift : (2 * ShadowDp) + BarDp + HandleBandDp;
+    private double ChromeHeight => (preferences.EmojiRow ? EmojiRowDp : 0) + (docked ? BarDp + dockedLift : (2 * ShadowDp) + BarDp + HandleBandDp);
 
     /// <summary>
     /// The window as tall as the keyboard in use needs for rows at a share of Gboard's: its rows keep their height when the

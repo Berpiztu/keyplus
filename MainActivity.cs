@@ -263,7 +263,7 @@ public sealed class MainActivity : Activity
 
 #if KEYBOARD
     private SettingsScreen? settings;
-    private EditText? tryBox;
+    private View? tryBox;
 
     /// <summary>Whether the settings show, the keyboard on and in use: shown once, not made again at each return.</summary>
     private bool showingSettings;
@@ -550,6 +550,7 @@ public sealed class MainActivity : Activity
             [
                 .. FloatingRows(here),
                 Switch(Resource.String.avoid_caret, Resource.String.avoid_caret_summary, KeyPlusPreferences.AvoidCaretKey),
+                Switch(Resource.String.emoji_row, Resource.String.emoji_row_summary, KeyPlusPreferences.EmojiRowKey),
                 .. HeadsetRows(),
                 new(GetString(Resource.String.avoid_menus), GetString(Resource.String.avoid_menus_summary), On: kept.GetBoolean(KeyPlusPreferences.AvoidMenusKey, true), Switched: on =>
                 {
@@ -1409,34 +1410,50 @@ public sealed class MainActivity : Activity
     }
 
     /// <summary>
-    /// A box to try the keys in right after installing: several lines, so
-    /// the arrows, Home, End and the pages have room to move in. Its size is
-    /// fixed: a long text scrolls inside it, the screen never moves.
+    /// The boxes to try the keys in right after installing, a box for each kind of field the keyboard suits
+    /// (<see cref="StandardField"/>), as the Windows settings': text, a number's, an e-mail address's and a web
+    /// address's, by their short signs, two by two, as wide as the list and each a line tall, about as tall as the one
+    /// box of three lines they took the place of (the owner's, 2026-10-25). Their size is fixed: a long text scrolls
+    /// inside and the screen never moves.
     /// </summary>
-    private EditText TryBox()
+    private View TryBox()
     {
-        var box = new EditText(this)
+        (int Hint, Android.Text.InputTypes Kind)[] kinds =
+        [
+            (Resource.String.try_keys, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagCapSentences),
+            (Resource.String.try_number, Android.Text.InputTypes.ClassNumber),
+            (Resource.String.try_email, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationEmailAddress),
+            (Resource.String.try_web, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationUri),
+        ];
+        var gap = (int)(8 * Resources!.DisplayMetrics!.Density);
+        var table = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        for (var r = 0; r < kinds.Length; r += 2)
         {
-            Hint = GetString(Resource.String.try_keys),
-            InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagMultiLine | Android.Text.InputTypes.TextFlagCapSentences,
-            Gravity = GravityFlags.Top | GravityFlags.Left,
-            VerticalScrollBarEnabled = true,
-        };
-        box.SetLines(3);
-        box.SetMaxLines(3);
-        box.SetHorizontallyScrolling(false);
-        box.SetTextSize(Android.Util.ComplexUnitType.Sp, 16);
+            var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+            for (var i = r; i < r + 2; i++)
+            {
+                var field = Outlined(new EditText(this) { Hint = GetString(kinds[i].Hint), InputType = kinds[i].Kind, Ellipsize = Android.Text.TextUtils.TruncateAt.End });
+                field.SetSingleLine(true);
+                row.AddView(field, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f) { LeftMargin = i > r ? gap : 0 });
+            }
 
-        // Outlined, so it reads as a box, not as the theme's line alone.
+            table.AddView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { TopMargin = r > 0 ? gap : 0 });
+        }
+
+        table.LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = 2 * gap };
+        return table;
+    }
+
+    /// <summary>A box to type in outlined, so it reads as a box, not as the theme's line alone; its text 16 sp.</summary>
+    private EditText Outlined(EditText box)
+    {
         var density = Resources!.DisplayMetrics!.Density;
         var outline = new Android.Graphics.Drawables.GradientDrawable();
         outline.SetStroke((int)(1.5f * density), Android.Graphics.Color.Gray);
         outline.SetCornerRadius(8 * density);
         box.Background = outline;
         box.SetPadding((int)(12 * density), (int)(10 * density), (int)(12 * density), (int)(10 * density));
-        var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent);
-        layout.SetMargins(0, 0, 0, (int)(16 * Resources!.DisplayMetrics!.Density));
-        box.LayoutParameters = layout;
+        box.SetTextSize(Android.Util.ComplexUnitType.Sp, 16);
         return box;
     }
 

@@ -163,7 +163,7 @@ public sealed class KeyboardSurface : FrameworkElement
         set
         {
             pc = value;
-            ShowPage(value ? StandardPage.Pc : StandardPage.Letters);
+            ShowPage(BasePage);
             InvalidateMeasure();
         }
     }
@@ -912,11 +912,41 @@ public sealed class KeyboardSurface : FrameworkElement
         return keys > across ? (width - (2 * SideDp) - ((keys - 1) * KeyGapDp)) / keys : unit;
     }
 
-    /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made.</summary>
-    private IReadOnlyList<IReadOnlyList<StandardKey>> Rows(StandardPage shown) =>
-        design is not null && shown is StandardPage.Letters or StandardPage.Pc
+    /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made; Estándar's letters as the field's kind has them, but while designing.</summary>
+    private IReadOnlyList<IReadOnlyList<StandardKey>> Rows(StandardPage shown)
+    {
+        var rows = design is not null && shown is StandardPage.Letters or StandardPage.Pc
             ? design.Page(StandardKeys.Page(shown, language), language)
             : StandardKeys.Page(shown, language);
+        return shown == StandardPage.Letters && !Designing ? StandardKeys.ForField(rows, fieldKind) : rows;
+    }
+
+    /// <summary>
+    /// The kind of field typed in, as Android's (<see cref="StandardField"/>), Estándar's alone, never Estándar PC's: a
+    /// number's opens on 1234; a web or e-mail address's letters have / or @ in the comma's place and .com beside the
+    /// space. Windows tells it of the settings' boxes to try them alone (<see cref="FocusWatch.FieldKind"/>). The page
+    /// changes only when the kind does, so a click in the same field leaves the page in sight.
+    /// </summary>
+    public StandardField Field
+    {
+        get => fieldKind;
+        set
+        {
+            if (value == fieldKind)
+            {
+                return;
+            }
+
+            // Kept on Estándar PC too, whose keys it leaves as they are: Estándar again, the field's page.
+            fieldKind = value;
+            ShowPage(BasePage);
+        }
+    }
+
+    private StandardField fieldKind;
+
+    /// <summary>The page a field opens on: a number's 1234, else the letters, Estándar's or Estándar PC's.</summary>
+    private StandardPage BasePage => pc ? StandardPage.Pc : fieldKind == StandardField.Number ? StandardPage.Numbers : StandardPage.Letters;
 
     /// <summary>The words (Esc, Ctrl, Bloq Mayús…) as large as three in four of them hold, the same size, the rest a step smaller.</summary>
     private void SizeWords()

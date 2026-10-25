@@ -59,7 +59,12 @@ public sealed record AppColor(
     string? KeyColor = null,
     string? AccentColor = null,
     string? WindowColor = null,
-    bool OnScreen = false);
+    bool OnScreen = false,
+    // Its two colours as they were before the last one was chosen, for Deshacer; none once used.
+    AppColorsBefore? Before = null);
+
+/// <summary>An application's keyboard and accent colours before the last one was chosen, which Deshacer takes back.</summary>
+public sealed record AppColorsBefore(string? KeyColor, string? AccentColor);
 
 /// <summary>
 /// A colour as Tema keeps it, #RRGGBB, and the arithmetic both keyboards make

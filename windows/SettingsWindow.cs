@@ -28,9 +28,16 @@ public sealed class SettingsWindow : Window
     private const double RowGapDp = 4;
     private const double Step = 0.5;
 
-    /// <summary>Tema's choices' type and their hint's, smaller than the other pages', the room left to the keyboard drawn under them.</summary>
-    private const double CompactSize = 12;
-    private const double CompactHintSize = 11;
+    /// <summary>
+    /// The settings' one type, everywhere (the owner's, 2026-10-25): Fluent's font at 12, the buttons and every text and
+    /// box alike; only the page's title over it larger, 14 in bold. Every button alike, its padding this one.
+    /// </summary>
+    private const double TextSize = 12;
+    private const double TitleSize = 14;
+    private static readonly Thickness ButtonPadding = new(12, 0, 12, 0);
+
+    /// <summary>The height of every control, the owner's (2026-10-25): buttons, boxes to type in, drop-downs, the menu's lines, check boxes and radio buttons alike; Fluent's 32 to 40 were out of proportion to a type of 12.</summary>
+    private const double ControlHeight = 24;
 
     /// <summary>The argument that starts the program as the settings.</summary>
     public const string Argument = "--settings";
@@ -44,6 +51,7 @@ public sealed class SettingsWindow : Window
     {
         Title = Texts.Get(Resource.String.settings_title);
         ThemeMode = ThemeMode.System;
+        UniformType();
         Width = WidthDp;
         Height = HeightDp;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -93,42 +101,169 @@ public sealed class SettingsWindow : Window
         Content = panes;
     }
 
-    /// <summary>The lines the box to try the keys in shows, as Android's: room for the arrows, Home, End and the pages to move in.</summary>
-    private const int TryLines = 3;
+    /// <summary>
+    /// The boxes to try each kind of field's keys in (<see cref="StandardField"/>), two by two: text, a number's, an
+    /// e-mail address's and a web address's, by their short signs; the keyboard tells each kind by its UI Automation id
+    /// (<see cref="FocusWatch.FieldIds"/>).
+    /// </summary>
+    private static readonly (int Hint, string? Id)[] TryFields =
+    [
+        (Resource.String.try_keys, null),
+        (Resource.String.try_number, FocusWatch.NumberFieldId),
+        (Resource.String.try_email, FocusWatch.EmailFieldId),
+        (Resource.String.try_web, FocusWatch.WebFieldId),
+    ];
 
     /// <summary>
-    /// Over the pages' list, as Android's app has it: a box to try the keys in, and
-    /// what Spelling does, without another program. Its size is fixed: a long
-    /// text scrolls inside it and nothing under it moves.
+    /// Over the pages' list, as Android's app has it: a box for each kind of field to try its keys in, and what Spelling
+    /// does, without another program, two by two, as wide as the list and each a line tall, the four about as tall as
+    /// the one box of three lines they took the place of (the owner's, 2026-10-25). Their size is fixed: a long text
+    /// scrolls inside and nothing under them moves.
     /// </summary>
     private static FrameworkElement TryBox()
     {
-        var box = new TextBox
+        var table = new Grid { Margin = new Thickness(MarginDp / 2, MarginDp / 2, MarginDp / 2, 0) };
+        table.ColumnDefinitions.Add(new ColumnDefinition());
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(MarginDp / 2) });
+        table.ColumnDefinitions.Add(new ColumnDefinition());
+        table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        table.RowDefinitions.Add(new RowDefinition { Height = new GridLength(MarginDp / 2) });
+        table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var i = 0; i < TryFields.Length; i++)
         {
-            AcceptsReturn = true,
-            AcceptsTab = true,
-            TextWrapping = TextWrapping.Wrap,
-            MinLines = TryLines,
-            MaxLines = TryLines,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            FontSize = 16,
-        };
+            var (hint, id) = TryFields[i];
+            var box = new TextBox { AcceptsTab = id is null, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden };
+            if (id is not null)
+            {
+                System.Windows.Automation.AutomationProperties.SetAutomationId(box, id);
+            }
 
-        // WPF's text box has no hint of its own: Android's words over it while it is empty.
+            var place = Hinted(box, Texts.Get(hint));
+            Grid.SetColumn(place, (i % 2) * 2);
+            Grid.SetRow(place, (i / 2) * 2);
+            table.Children.Add(place);
+        }
+
+        return table;
+    }
+
+    /// <summary>The room WPF's text box keeps inside its border, either side of its text (its view's margin, 2 each side).</summary>
+    private const double TextBoxInnerMargin = 4;
+
+    /// <summary>WPF's text box has no hint of its own: Android's words over it while it is empty, where its text starts.</summary>
+    private static Grid Hinted(TextBox box, string words)
+    {
+        // The window's type, as the box's; where the box's text starts once its look (Fluent's padding) is applied.
         var hint = new TextBlock
         {
-            Text = Texts.Get(Resource.String.try_keys),
-            FontSize = 16,
+            Text = words,
             Opacity = 0.6,
             IsHitTestVisible = false,
-            Margin = new Thickness(12, 7, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
+        box.Loaded += (_, _) => hint.Margin = new Thickness(box.BorderThickness.Left + box.Padding.Left + (TextBoxInnerMargin / 2), 0, 0, 0);
         box.TextChanged += (_, _) => hint.Visibility = box.Text.Length == 0 ? Visibility.Visible : Visibility.Hidden;
-        var place = new Grid { Margin = new Thickness(MarginDp / 2, MarginDp / 2, MarginDp / 2, 0) };
+        var place = new Grid();
         place.Children.Add(box);
         place.Children.Add(hint);
         return place;
     }
+
+    /// <summary>
+    /// The settings' one type and one size of control: the window's size and font, which every text, box and control
+    /// takes, Fluent's own size set to it too; every control on Fluent's look, one height (<see cref="ControlHeight"/>),
+    /// with one padding across.
+    /// </summary>
+    private void UniformType()
+    {
+        FontSize = TextSize;
+        var font = TryFindResource("ContentControlThemeFontFamily") as FontFamily ?? FontFamily;
+        FontFamily = font;
+        Resources["ControlContentThemeFontSize"] = TextSize;
+        Uniform(typeof(Button), ButtonPadding);
+        Uniform(typeof(TextBox), ButtonPadding);
+        Uniform(typeof(ComboBox), ButtonPadding);
+        Uniform(typeof(ListBoxItem), ButtonPadding);
+        Uniform(typeof(CheckBox), null);
+        Uniform(typeof(RadioButton), null);
+    }
+
+    /// <summary>A kind of control on Fluent's look, <see cref="ControlHeight"/> tall and, where given, this padding, for the whole window; a check box's and a radio button's own padding kept, the room between the box and its words.</summary>
+    private void Uniform(Type kind, Thickness? padding)
+    {
+        var style = new Style(kind, TryFindResource(kind) as Style);
+        style.Setters.Add(new Setter(MinHeightProperty, 0.0));
+        style.Setters.Add(new Setter(HeightProperty, ControlHeight));
+        if (padding is { } across)
+        {
+            style.Setters.Add(new Setter(Control.PaddingProperty, across));
+        }
+
+        style.Setters.Add(new Setter(Control.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+        if (padding is null)
+        {
+            style.Setters.Add(new EventSetter(LoadedEvent, new RoutedEventHandler((sender, _) => FitTemplate((FrameworkElement)sender))));
+        }
+
+        Resources[kind] = style;
+    }
+
+    /// <summary>
+    /// A check box's or a radio button's look made as tall as the control: Fluent's draws its box or circle in a part of
+    /// its own 32 tall, which a lower control cut; that part made <see cref="ControlHeight"/> tall, the box and the
+    /// words on its middle line.
+    /// </summary>
+    private static void FitTemplate(FrameworkElement control)
+    {
+        var parts = new Stack<DependencyObject>([control]);
+        while (parts.TryPop(out var part))
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(part); i++)
+            {
+                var child = VisualTreeHelper.GetChild(part, i);
+                if (child is FrameworkElement shaped && shaped.TemplatedParent == control)
+                {
+                    // The part Fluent made 32 tall, made the control's height, in its middle; the box or circle and the words on one
+                    // middle line, the words without the margin Fluent puts over them. A part that takes its parent's height is
+                    // left so: centred, it would have none, and a check box's square showed as a line.
+                    if (shaped.Height > ControlHeight)
+                    {
+                        shaped.Height = ControlHeight;
+                        shaped.VerticalAlignment = VerticalAlignment.Center;
+                    }
+
+                    if (shaped.MinHeight > ControlHeight)
+                    {
+                        shaped.MinHeight = 0;
+                    }
+
+                    if (shaped is ContentPresenter)
+                    {
+                        shaped.VerticalAlignment = VerticalAlignment.Center;
+                        shaped.Margin = new Thickness(shaped.Margin.Left, 0, shaped.Margin.Right, 0);
+                    }
+                }
+
+                parts.Push(child);
+            }
+        }
+    }
+
+    /// <summary>The corners of a panel that groups a page's part, Fluent's card's.</summary>
+    private const double CardCornerDp = 8;
+
+    /// <summary>A part of a page grouped on a panel, raised as Fluent's cards are: their ground and their outline, round corners.</summary>
+    private Border Card(UIElement content) => new()
+    {
+        Background = TryFindResource("CardBackgroundFillColorDefaultBrush") as Brush ?? SystemColors.WindowBrush,
+        BorderBrush = TryFindResource("CardStrokeColorDefaultBrush") as Brush ?? SystemColors.ActiveBorderBrush,
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(CardCornerDp),
+        Padding = new Thickness(FieldGapDp / 2),
+        Margin = new Thickness(0, 0, 0, FieldGapDp / 2),
+        Child = content,
+    };
 
     /// <summary>A page in the window's right, scrolling where it is taller.</summary>
     private void ShowPage(FrameworkElement shown) => page.Content = new ScrollViewer { Content = shown, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -181,7 +316,7 @@ public sealed class SettingsWindow : Window
 
             name.VerticalAlignment = VerticalAlignment.Center;
             name.Margin = new Thickness(0, 0, 0, FieldGapDp / 2);
-            var open = new Button { Content = Texts.Get(Resource.String.more_options), Padding = new Thickness(12, 2, 12, 2), Margin = new Thickness(FieldGapDp, 0, 0, FieldGapDp / 2) };
+            var open = new Button { Content = Texts.Get(Resource.String.more_options), Margin = new Thickness(FieldGapDp, 0, 0, FieldGapDp / 2) };
             open.Click += (_, _) => ShowPage(LanguagePage(language, from));
             Grid.SetRow(name, row);
             Grid.SetRow(open, row);
@@ -205,11 +340,11 @@ public sealed class SettingsWindow : Window
     {
         var code = language.Code;
         var form = new StackPanel { Margin = new Thickness(MarginDp) };
-        var back = new Button { Content = "←", Padding = new Thickness(10, 0, 10, 0), Margin = new Thickness(0, 0, FieldGapDp / 2, 0), VerticalAlignment = VerticalAlignment.Center };
+        var back = new Button { Content = "←", Margin = new Thickness(0, 0, FieldGapDp / 2, 0), VerticalAlignment = VerticalAlignment.Center };
         back.Click += (_, _) => ShowPage(from());
         var heading = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, FieldGapDp) };
         heading.Children.Add(back);
-        heading.Children.Add(new TextBlock { Text = language.Name, FontSize = 20, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        heading.Children.Add(new TextBlock { Text = language.Name, FontSize = TitleSize, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         form.Children.Add(heading);
         form.Children.Add(Section(Resource.String.spelling));
         foreach (var choice in LanguageOptions.SpellingChoices(code, Texts.Get))
@@ -322,12 +457,16 @@ public sealed class SettingsWindow : Window
         }
 
         choosing.Children.Add(keyboards);
+
+        // Two panels, each its part (the owner's, 2026-10-25): the keyboard, its name and its summary; the colours.
+        var choosingKeyboard = new StackPanel();
+        choosingKeyboard.Children.Add(choosing);
+        choosingKeyboard.Children.Add(naming);
+        choosingKeyboard.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) });
+        coloring.Margin = new Thickness(0);
         var controls = new StackPanel();
-        TextElement.SetFontSize(controls, CompactSize);
-        controls.Children.Add(choosing);
-        controls.Children.Add(coloring);
-        controls.Children.Add(naming);
-        controls.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.keyboards_saved_summary), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, FontSize = CompactHintSize, Margin = new Thickness(0, 2, 0, FieldGapDp / 2) });
+        controls.Children.Add(Card(choosingKeyboard));
+        controls.Children.Add(Card(coloring));
         DockPanel.SetDock(controls, Dock.Top);
         form.Children.Add(controls);
         var zoom = new Viewbox { Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Child = box };
@@ -477,84 +616,71 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Colores in one row of one size whatever it holds: Tema's choice (Sistema, Claro, Oscuro, Personalizado), and, under
-    /// Personalizado alone, Por app, then, with it on, the applications typed in and, for the one chosen, De la app (its
-    /// window's colour), then the two colours (that application's, with one chosen) and Deshacer. A part that does not apply is
-    /// hidden in its place, the list as wide as its longest choice; each change kept at once, the page drawn again in it,
-    /// the keyboard taking it.
+    /// Colores in two lines of one size whatever they hold (the owner's, 2026-10-25): Tema's choice (Sistema, Claro, Oscuro,
+    /// Personalizado, Por aplicación), the two colours and Deshacer: Personalizado's for every application, or, Por
+    /// aplicación, the one chosen's; under them Aplicación, the applications typed in and, for the one chosen, De la app
+    /// (its window's colours). Por aplicación is Personalizado with Por app on, as kept before. Nothing is
+    /// hidden: a part that does not apply is there, turned off; the two lists as wide as the choices' longest, whatever
+    /// they hold (an application's open list as wide as its names). Each change kept at once, the page drawn again in
+    /// it, the keyboard taking it.
     /// </summary>
-    private StackPanel ColorsRow()
+    private Grid ColorsRow()
     {
         var kept = KeyboardPreferences.Read();
         var general = Palette.Read(kept);
         var custom = general.Look == KeyboardLook.Custom;
-        var app = custom ? AppLookedAt() : null;
+        var perApp = custom && kept.PerApp;
+        var app = perApp ? AppLookedAt() : null;
         var appColor = app is not null ? AppColors.For(app) : null;
-        Visibility Shown(bool shown) => shown ? Visibility.Visible : Visibility.Hidden;
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
-        row.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.look), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, RowGapDp, 0) });
+        var rows = new Grid { Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
+        foreach (var _ in Enumerable.Range(0, 3))
+        {
+            rows.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        }
 
-        var looks = new ComboBox { VerticalAlignment = VerticalAlignment.Center };
+        rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        rows.RowDefinitions.Add(new RowDefinition { Height = new GridLength(RowGapDp) });
+        rows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        void Place(FrameworkElement part, int row, int column)
+        {
+            part.VerticalAlignment = VerticalAlignment.Center;
+            Grid.SetRow(part, row * 2);
+            Grid.SetColumn(part, column);
+            rows.Children.Add(part);
+        }
+
+        Place(new TextBlock { Text = Texts.Get(Resource.String.look), Margin = new Thickness(0, 0, RowGapDp, 0) }, 0, 0);
+
+        // Tema's choices, then Por aplicación, Personalizado with each application's colours.
+        const string PerAppChoice = "perApp";
+        var looks = new ComboBox();
         foreach (var look in KeyboardLooks.All)
         {
             looks.Items.Add(new ComboBoxItem { Content = Texts.Get(KeyboardLooks.Name(look)), Tag = look });
         }
 
-        looks.SelectedIndex = Array.IndexOf(KeyboardLooks.All, general.Look);
-        WidestOf(looks, [.. KeyboardLooks.All.Select(look => Texts.Get(KeyboardLooks.Name(look)))]);
+        looks.Items.Add(new ComboBoxItem { Content = Texts.Get(Resource.String.per_app), Tag = PerAppChoice });
+        looks.SelectedIndex = perApp ? KeyboardLooks.All.Length : Array.IndexOf(KeyboardLooks.All, general.Look);
+        WidestOf(looks, [.. KeyboardLooks.All.Select(look => Texts.Get(KeyboardLooks.Name(look))), Texts.Get(Resource.String.per_app)]);
         looks.SelectionChanged += (_, _) =>
         {
-            if (looks.SelectedItem is ComboBoxItem { Tag: KeyboardLook look } && look != general.Look)
+            var now = KeyboardPreferences.Read();
+            var chosen = looks.SelectedItem switch
             {
-                (KeyboardPreferences.Read() with { Look = look }).Keep();
+                ComboBoxItem { Tag: PerAppChoice } => now with { Look = KeyboardLook.Custom, PerApp = true },
+                ComboBoxItem { Tag: KeyboardLook look } => now with { Look = look, PerApp = false },
+                _ => now,
+            };
+            if (chosen != now)
+            {
+                chosen.Keep();
                 ShowPage(ThemePage());
             }
         };
-        row.Children.Add(looks);
+        Place(looks, 0, 1);
 
-        // The two colours: the application's chosen, else Tema's Personalizado's; hidden for an application taking its window's.
-        void Choose(Func<AppColor, AppColor> forApp, Func<KeyboardColors, KeyboardColors> forTema)
-        {
-            if (app is not null && appColor is not null)
-            {
-                AppColors.Set(app, forApp(appColor) with { Look = AppLook.Custom });
-                ShowPage(ThemePage());
-            }
-            else
-            {
-                KeepColors(keptNow => forTema(keptNow.Colors));
-            }
-        }
-
-        // Each colour as the keyboard shows it: the application's, or Tema's.
-        var showing = app is not null && appColor is not null ? Palette.Read(kept.ColorsIn(app, Palette.Parse(appColor.WindowColor))) : general;
-        var keyShown = showing.KeyColor ?? showing.Ground;
-        var accentShown = showing.AccentColor ?? showing.Primary;
-        var colorsShown = Shown(custom && appColor?.Look != AppLook.Own);
-        var keyColor = ColorButton(Resource.String.look_keyboard, keyShown, colorsShown, chosen => Choose(color => color with { KeyColor = chosen }, colors => colors with { KeyColor = chosen }));
-        var accentColor = ColorButton(Resource.String.look_accent, accentShown, colorsShown, chosen => Choose(color => color with { AccentColor = chosen }, colors => colors with { AccentColor = chosen }));
-
-        // Deshacer, Tema's Personalizado's: its two colours as they were before the last one was chosen, one step back, hidden in
-        // its place once used, with none, for the other choices, or while an application's colours are shown.
-        var undo = new Button { Content = "↶", Padding = new Thickness(RowGapDp, 0, RowGapDp, 0), Margin = new Thickness(RowGapDp, 0, 0, 0) };
-        undo.Visibility = Shown(custom && app is null && kept.Before is not null);
-        undo.Click += (_, _) =>
-        {
-            if (KeyboardPreferences.Read() is { Before: { } before } keptNow)
-            {
-                (keptNow.With(before) with { Before = null }).Keep();
-                ShowPage(ThemePage());
-            }
-        };
-
-        // Por app and the applications typed in, the list filled again as it opens: the keyboard adds to it.
-        var on = new CheckBox { Content = Texts.Get(Resource.String.per_app), IsChecked = kept.PerApp, Visibility = Shown(custom), VerticalAlignment = VerticalAlignment.Center, MinWidth = 0, Margin = new Thickness(RowGapDp * 2, 0, 0, 0) };
-        on.Click += (_, _) =>
-        {
-            (KeyboardPreferences.Read() with { PerApp = on.IsChecked == true }).Keep();
-            ShowPage(ThemePage());
-        };
-        var apps = new ComboBox { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(RowGapDp, 0, 0, 0), Visibility = Shown(custom && kept.PerApp) };
+        // The applications typed in, the list filled again as it opens: the keyboard adds to it.
+        var apps = new ComboBox { IsEnabled = perApp };
         void FillApps()
         {
             apps.Items.Clear();
@@ -577,8 +703,13 @@ public sealed class SettingsWindow : Window
             }
         };
 
-        // De la app: the application chosen takes its window's colour.
-        var own = new CheckBox { Content = Texts.Get(Resource.String.app_own), IsChecked = appColor?.Look == AppLook.Own, Visibility = Shown(appColor is not null), VerticalAlignment = VerticalAlignment.Center, MinWidth = 0, Margin = new Thickness(RowGapDp, 0, 0, 0) };
+        // As wide as the choices' list above it, whatever the application's name.
+        looks.Loaded += (_, _) => apps.Width = looks.Width;
+        Place(new TextBlock { Text = Texts.Get(Resource.String.app_list), Margin = new Thickness(0, 0, RowGapDp, 0) }, 1, 0);
+        Place(apps, 1, 1);
+
+        // De la app: the application chosen takes its window's colours.
+        var own = new CheckBox { Content = Texts.Get(Resource.String.app_own), IsChecked = appColor?.Look == AppLook.Own, IsEnabled = appColor is not null, MinWidth = 0, Margin = new Thickness(RowGapDp, 0, 0, 0) };
         own.Click += (_, _) =>
         {
             if (app is null || appColor is null)
@@ -599,14 +730,50 @@ public sealed class SettingsWindow : Window
 
             ShowPage(ThemePage());
         };
+        Place(own, 1, 2);
 
-        // In the owner's order: Por app, the application, De la app, then the colours and Deshacer.
-        foreach (var part in new FrameworkElement[] { on, apps, own, keyColor, accentColor, undo })
+        // The two colours: the application's chosen, else Personalizado's for every application.
+        void Choose(Func<AppColor, AppColor> forApp, Func<KeyboardColors, KeyboardColors> forTema)
         {
-            row.Children.Add(part);
+            if (app is not null && appColor is not null)
+            {
+                AppColors.Set(app, forApp(appColor) with { Look = AppLook.Custom, Before = new(appColor.KeyColor, appColor.AccentColor) });
+                ShowPage(ThemePage());
+            }
+            else
+            {
+                KeepColors(keptNow => forTema(keptNow.Colors));
+            }
         }
 
-        return row;
+        // Each colour as the keyboard shows it: the application's, or Tema's. On with Personalizado, or, Por aplicación,
+        // for an application chosen that does not take its window's.
+        var showing = app is not null && appColor is not null ? Palette.Read(kept.ColorsIn(app, Palette.Parse(appColor.WindowColor))) : general;
+        var colorsOn = custom && (!perApp || appColor is { Look: not AppLook.Own });
+        var colours = new StackPanel { Orientation = Orientation.Horizontal };
+        colours.Children.Add(ColorButton(Resource.String.look_keyboard, showing.KeyColor ?? showing.Ground, colorsOn, chosen => Choose(color => color with { KeyColor = chosen }, colors => colors with { KeyColor = chosen })));
+        colours.Children.Add(ColorButton(Resource.String.look_accent, showing.AccentColor ?? showing.Primary, colorsOn, chosen => Choose(color => color with { AccentColor = chosen }, colors => colors with { AccentColor = chosen })));
+
+
+        // Deshacer, beside the two colours it takes back: those shown as they were before the last one was chosen, one step
+        // back; off once used, with none, or where the colours are off.
+        var undo = new Button { Content = Texts.Get(Resource.String.undo), Margin = new Thickness(RowGapDp, 0, 0, 0), IsEnabled = colorsOn && (appColor is not null ? appColor.Before is not null : kept.Before is not null) };
+        undo.Click += (_, _) =>
+        {
+            if (app is not null && appColor is { Before: { } appBefore })
+            {
+                AppColors.Set(app, appColor with { KeyColor = appBefore.KeyColor, AccentColor = appBefore.AccentColor, Before = null });
+            }
+            else if (app is null && KeyboardPreferences.Read() is { Before: { } before } keptNow)
+            {
+                (keptNow.With(before) with { Before = null }).Keep();
+            }
+
+            ShowPage(ThemePage());
+        };
+        colours.Children.Add(undo);
+        Place(colours, 0, 2);
+        return rows;
     }
 
     /// <summary>
@@ -624,14 +791,17 @@ public sealed class SettingsWindow : Window
 
     /// <summary>
     /// A colour of Personalizado's: a button with the colour shown and its name, which opens Windows' own colour picker on
-    /// it; one chosen is told as it is kept, #RRGGBB.
+    /// it; one chosen is told as it is kept, #RRGGBB; off where it does not apply.
     /// </summary>
-    private Button ColorButton(int name, Color shown, Visibility visibility, Action<string> chosen)
+    private Button ColorButton(int name, Color shown, bool enabled, Action<string> chosen)
     {
-        var face = new StackPanel { Orientation = Orientation.Horizontal };
+        const double OffOpacity = 0.35;
+        // Off, its colour and its words faded, so it reads as off: Fluent fades a button's frame alone, and the colour shown
+        // in full looked as if it could be chosen (the owner, 2026-10-25).
+        var face = new StackPanel { Orientation = Orientation.Horizontal, Opacity = enabled ? 1 : OffOpacity };
         face.Children.Add(new Border { Width = 14, Height = 14, Background = new SolidColorBrush(shown), BorderBrush = SystemColors.ControlTextBrush, BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, RowGapDp, 0), VerticalAlignment = VerticalAlignment.Center });
         face.Children.Add(new TextBlock { Text = Texts.Get(name), VerticalAlignment = VerticalAlignment.Center });
-        var button = new Button { Content = face, Visibility = visibility, Padding = new Thickness(RowGapDp, 0, RowGapDp, 0), Margin = new Thickness(RowGapDp, 0, 0, 0) };
+        var button = new Button { Content = face, IsEnabled = enabled, Margin = new Thickness(RowGapDp, 0, 0, 0) };
         button.Click += (_, _) =>
         {
             using var picker = new System.Windows.Forms.ColorDialog { FullOpen = true, AnyColor = true, Color = System.Drawing.Color.FromArgb(shown.R, shown.G, shown.B) };
@@ -688,7 +858,6 @@ public sealed class SettingsWindow : Window
         {
             Content = Texts.Get(Resource.String.spelling_download_again),
             HorizontalAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(12, 2, 12, 2),
             Visibility = turnedOn.Count > 0 ? Visibility.Visible : Visibility.Hidden,
         };
         var state = new TextBlock { Height = 20 };
@@ -726,7 +895,7 @@ public sealed class SettingsWindow : Window
         }
 
         var state = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-        var download = new Button { Content = Texts.Get(Resource.String.download), Padding = new Thickness(12, 0, 12, 0), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var download = new Button { Content = Texts.Get(Resource.String.download), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
         void Show()
         {
             var missing = box.IsChecked == true && !fetches.Downloaded();
@@ -820,9 +989,9 @@ public sealed class SettingsWindow : Window
         var chosen = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_chosen), IsChecked = personal.LearnChosen };
         typed.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
         chosen.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
-        var forget = new Button { Content = Texts.Get(Resource.String.dictionary_forget_chosen), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        var forget = new Button { Content = Texts.Get(Resource.String.dictionary_forget_chosen), HorizontalAlignment = HorizontalAlignment.Left };
         forget.Click += (_, _) => personal.ForgetChosen();
-        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export), HorizontalAlignment = HorizontalAlignment.Left };
         export.Click += (_, _) =>
         {
             var save = new Microsoft.Win32.SaveFileDialog { FileName = $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
@@ -878,7 +1047,7 @@ public sealed class SettingsWindow : Window
             Child = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = lines },
         };
         var word = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
-        var add = new Button { Content = Texts.Get(Resource.String.dictionary_add), Padding = new Thickness(12, 2, 12, 2), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var add = new Button { Content = Texts.Get(Resource.String.dictionary_add), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
 
         static Button LineButton(string sign, Brush colour) => new()
         {
@@ -963,7 +1132,7 @@ public sealed class SettingsWindow : Window
             }
         };
         var addresses = code == PersonalWords.Shared;
-        var import = new Button { Content = Texts.Get(addresses ? Resource.String.dictionary_import_addresses : Resource.String.dictionary_import), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        var import = new Button { Content = Texts.Get(addresses ? Resource.String.dictionary_import_addresses : Resource.String.dictionary_import), HorizontalAlignment = HorizontalAlignment.Left };
         import.Click += (_, _) =>
         {
             var open = new Microsoft.Win32.OpenFileDialog { Filter = "JSON, TXT|*.json;*.txt|*.*|*.*" };
@@ -1005,7 +1174,7 @@ public sealed class SettingsWindow : Window
     /// <summary>Export the addresses: every e-mail address to a file, to take them to another device.</summary>
     private static Button ExportAddresses(PersonalWords personal)
     {
-        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export_addresses), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export_addresses), HorizontalAlignment = HorizontalAlignment.Left };
         export.Click += (_, _) =>
         {
             var save = new Microsoft.Win32.SaveFileDialog { FileName = $"berpiztu-addresses-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
@@ -1050,7 +1219,7 @@ public sealed class SettingsWindow : Window
         // VS Code's menus: what they need, and a button that puts it in VS Code's shortcuts, saying what it did.
         var vscode = new StackPanel();
         vscode.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.avoid_menus_electron), TextWrapping = TextWrapping.Wrap });
-        var done = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 12, Margin = new Thickness(0, 4, 0, 0) };
+        var done = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Margin = new Thickness(0, 4, 0, 0) };
         var put = new Button { Content = Texts.Get(Resource.String.troubleshooting_vscode_button), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, FieldGapDp / 2, 0, 0) };
         put.Click += (_, _) =>
         {
@@ -1076,8 +1245,6 @@ public sealed class SettingsWindow : Window
         {
             IsReadOnly = true,
             Height = LogViewerDp,
-            FontFamily = new FontFamily("Consolas"),
-            FontSize = 11,
             TextWrapping = TextWrapping.NoWrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -1088,9 +1255,9 @@ public sealed class SettingsWindow : Window
             viewer.ScrollToEnd();
         }
 
-        var refresh = new Button { Content = Texts.Get(Resource.String.troubleshooting_log_refresh), Padding = new Thickness(12, 2, 12, 2) };
+        var refresh = new Button { Content = Texts.Get(Resource.String.troubleshooting_log_refresh) };
         refresh.Click += (_, _) => ShowLog();
-        var clear = new Button { Content = Texts.Get(Resource.String.troubleshooting_log_clear), Padding = new Thickness(12, 2, 12, 2), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var clear = new Button { Content = Texts.Get(Resource.String.troubleshooting_log_clear), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
         clear.Click += (_, _) =>
         {
             Log.Clear();
@@ -1151,6 +1318,7 @@ public sealed class SettingsWindow : Window
                 KeyboardIcon = changed.KeyboardIcon,
                 AvoidCaret = changed.AvoidCaret,
                 AvoidMenus = changed.AvoidMenus,
+                EmojiRow = changed.EmojiRow,
             };
             preferences.Keep();
             Showing();
@@ -1190,6 +1358,9 @@ public sealed class SettingsWindow : Window
         var menus = new CheckBox { Content = Texts.Get(Resource.String.avoid_menus), IsChecked = preferences.AvoidMenus };
         menus.Click += (_, _) => Change(preferences with { AvoidMenus = menus.IsChecked == true });
         form.Children.Add(Field(null, menus, Resource.String.avoid_menus_summary));
+        var emojiRow = new CheckBox { Content = Texts.Get(Resource.String.emoji_row), IsChecked = preferences.EmojiRow };
+        emojiRow.Click += (_, _) => Change(preferences with { EmojiRow = emojiRow.IsChecked == true });
+        form.Children.Add(Field(null, emojiRow, Resource.String.emoji_row_summary));
         return form;
     }
 
@@ -1280,7 +1451,7 @@ public sealed class SettingsWindow : Window
 
     /// <summary>A page's name, on its top.</summary>
     private static TextBlock Heading(int name) =>
-        new() { Text = Texts.Get(name), FontSize = 20, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, FieldGapDp) };
+        new() { Text = Texts.Get(name), FontSize = TitleSize, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, FieldGapDp) };
 
     private static Slider Stepped(double least, double most, double value) =>
         new() { Minimum = least, Maximum = most, Value = value, TickFrequency = Step, IsSnapToTickEnabled = true, SmallChange = Step, LargeChange = 1, VerticalAlignment = VerticalAlignment.Center };
@@ -1313,7 +1484,7 @@ public sealed class SettingsWindow : Window
         field.Children.Add(control);
         if (hint is { } said)
         {
-            field.Children.Add(new TextBlock { Text = said, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), FontSize = 12 });
+            field.Children.Add(new TextBlock { Text = said, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) });
         }
 
         return field;
@@ -1321,5 +1492,5 @@ public sealed class SettingsWindow : Window
 
     /// <summary>A part of a page under its own heading: Spelling and Dictionary on a language's page.</summary>
     private static TextBlock Section(int name) =>
-        new() { Text = Texts.Get(name), FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, FieldGapDp / 2, 0, FieldGapDp / 2) };
+        new() { Text = Texts.Get(name), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, FieldGapDp / 2, 0, FieldGapDp / 2) };
 }

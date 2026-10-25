@@ -419,3 +419,54 @@ public sealed class EmojiSheet : FrameworkElement
         return null;
     }
 }
+
+/// <summary>
+/// The emoji typed lately in a row, over the toolbar (Preferences' Show the emoji row), as the Android keyboard's: each in
+/// its cell from the left, as many as fit, Gboard's sizes on the Fold (cells 83 px, the emoji 48 of them); a click types one.
+/// </summary>
+public sealed class EmojiStrip : FrameworkElement
+{
+    private const double PixelsPerDp = 2.25;
+    private const double CellDp = 83 / PixelsPerDp;
+    private const double EmojiDp = CellDp * 48 / 83;
+    private const double SideDp = 12 / PixelsPerDp;
+
+    private IReadOnlyList<string> items = [];
+
+    public EmojiStrip() => ClipToBounds = true;
+
+    public event Action<string>? Chosen;
+
+    public IReadOnlyList<string> Items
+    {
+        set
+        {
+            items = value;
+            InvalidateVisual();
+        }
+    }
+
+    protected override void OnRender(DrawingContext context)
+    {
+        context.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
+        var pixels = (int)Math.Round(EmojiDp * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        var top = (RenderSize.Height - EmojiDp) / 2;
+        for (var i = 0; i < items.Count && SideDp + ((i + 1) * CellDp) <= RenderSize.Width; i++)
+        {
+            context.DrawImage(EmojiArt.Draw(items[i], pixels), new Rect(SideDp + (i * CellDp) + ((CellDp - EmojiDp) / 2), top, EmojiDp, EmojiDp));
+        }
+    }
+
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e) => e.Handled = true;
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        var at = (int)Math.Floor((e.GetPosition(this).X - SideDp) / CellDp);
+        if (at >= 0 && at < items.Count && SideDp + ((at + 1) * CellDp) <= RenderSize.Width)
+        {
+            Chosen?.Invoke(items[at]);
+        }
+
+        e.Handled = true;
+    }
+}

@@ -61,6 +61,9 @@ public static class KeyPlusPreferences
     public const string SwipeTypingKey = "swipeTyping";
     public const string SwipeTrailKey = "swipeTrail";
     public const string SwipeDeleteWordKey = "swipeDeleteWord";
+
+    /// <summary>Preferencias' Extra line for suggestions and recent emoji, on unless turned off: over the toolbar the words offered while typing, else the emoji typed lately, so the toolbar keeps its buttons.</summary>
+    public const string EmojiRowKey = "emojiRow";
     public const string SpellingOpenMarkKey = "spellingOpenMark";
 
     /// <summary>Dock the floating keyboard dragged to the bottom, float the docked one dragged up (Gboard docks; the owner wants both or neither): off unless turned on.</summary>

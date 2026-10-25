@@ -583,6 +583,24 @@ public static class StandardKeys
     /// <summary>.com, beside the space in a web or e-mail address's field; held, the other endings.</summary>
     public static readonly StandardKey DotCom = new(".com", Text: ".com", Hint: ".net", Look: StandardLook.Function);
 
+    /// <summary>
+    /// The letters' rows for a field's kind, on Android and Windows alike: a web or e-mail address's with / or @ in the
+    /// comma's place (its emoji left out) and .com taking room from the space; any other's as they are.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<StandardKey>> ForField(IReadOnlyList<IReadOnlyList<StandardKey>> rows, StandardField field)
+    {
+        if (field is not (StandardField.Web or StandardField.Email))
+        {
+            return rows;
+        }
+
+        var sign = field == StandardField.Web ? "/" : "@";
+        return [.. rows.Select(row => (IReadOnlyList<StandardKey>)[.. row.SelectMany(key =>
+            key.HintIcon == Resource.Drawable.ic_key_emoji ? [key with { Label = sign, Text = sign, HintIcon = 0 }]
+            : key.Action == StandardAction.Space ? [key with { Width = Math.Max(1, key.Width - DotCom.Width) }, DotCom]
+            : new[] { key })])];
+    }
+
     /// <summary>The endings .com's long press offers after its corner's (.net).</summary>
     public static readonly string[] MoreDomains = [".org", ".es"];
 

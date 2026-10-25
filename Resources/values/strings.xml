@@ -23,6 +23,9 @@
   <string name="minimize">Minimize</string>
   <string name="settings_title">Berpiztu AI Keyboard settings</string>
   <string name="try_keys">Try the keys here</string>
+  <string name="try_number">123</string>
+  <string name="try_email">@</string>
+  <string name="try_web">www</string>
   <string name="setup_title">Set up Berpiztu AI Keyboard</string>
   <string name="setup_turn_on">1. Turn on the keyboard</string>
   <string name="setup_turn_on_summary">Let Android use it as a keyboard</string>
@@ -102,8 +105,9 @@
   <string name="look_custom">Custom</string>
   <string name="look_keyboard">Base</string>
   <string name="look_accent">Accent</string>
-  <string name="per_app">Per app</string>
-  <string name="app_own">App\'s</string>
+  <string name="per_app">Per application</string>
+  <string name="app_own">App\'s theme</string>
+  <string name="app_list">Application</string>
   <string name="hue">Hue</string>
   <string name="saturation">Saturation</string>
   <string name="brightness">Brightness</string>
@@ -252,6 +256,8 @@
   <string name="dictionary_learn_emails_summary">An address typed in an e-mail or user field is added to the dictionary as you leave it, and offered there the next time</string>
   <string name="dictionary_learn_chosen_summary">A word taken from the toolbar in place of a swiped one is typed first the next time that swipe is read</string>
   <string name="dictionary_forget_chosen">Forget the words chosen</string>
+  <string name="emoji_row">Extra line for suggestions and recent emoji</string>
+  <string name="emoji_row_summary">A line over the toolbar: the words offered while typing, else the emoji used lately; the toolbar keeps all its buttons</string>
   <string name="dictionary_edit">Edit the word</string>
   <string name="dictionary_export">Export the dictionary</string>
   <string name="dictionary_export_summary">Every language\'s words in a file another device\'s keyboard imports</string>

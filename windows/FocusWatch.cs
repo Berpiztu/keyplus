@@ -257,7 +257,7 @@ public sealed class FocusWatch : IDisposable
                 Log.Detail($"Focus: {RoleName(role)} in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
                 if (editable)
                 {
-                    TellTextFocused(AppOf(window));
+                    TellTextFocused(AppOf(window), FocusedFieldKind());
                 }
                 else if (!menu)
                 {
@@ -291,11 +291,45 @@ public sealed class FocusWatch : IDisposable
         }
     }
 
-    private void TellTextFocused(string? app) => Tell(() =>
+    private void TellTextFocused(string? app, StandardField kind = StandardField.Text) => Tell(() =>
     {
         App = app;
+        FieldKind = kind;
         TextFocused?.Invoke();
     });
+
+    /// <summary>
+    /// The kind of the text field focused (<see cref="StandardField"/>), as the keyboard's own settings tell it of their
+    /// boxes to try each kind's keys in, by their UI Automation id (<see cref="FieldIds"/>); Windows tells it of no
+    /// other field, which is text.
+    /// </summary>
+    public StandardField FieldKind { get; private set; }
+
+    /// <summary>The settings' boxes' UI Automation ids, each a kind of field.</summary>
+    public const string NumberFieldId = "Berpiztu.Field.Number";
+    public const string EmailFieldId = "Berpiztu.Field.Email";
+    public const string WebFieldId = "Berpiztu.Field.Web";
+
+    public static readonly IReadOnlyDictionary<string, StandardField> FieldIds = new Dictionary<string, StandardField>
+    {
+        [NumberFieldId] = StandardField.Number,
+        [EmailFieldId] = StandardField.Email,
+        [WebFieldId] = StandardField.Web,
+    };
+
+    private static StandardField FocusedFieldKind()
+    {
+        try
+        {
+            return System.Windows.Automation.AutomationElement.FocusedElement?.Current.AutomationId is { } id && FieldIds.TryGetValue(id, out var kind)
+                ? kind
+                : StandardField.Text;
+        }
+        catch (Exception refused) when (refused is ArgumentException or InvalidOperationException or COMException or System.Windows.Automation.ElementNotAvailableException)
+        {
+            return StandardField.Text;
+        }
+    }
 
     /// <summary>Windows already asked for their accessibility, so it is asked once a window.</summary>
     private readonly HashSet<IntPtr> awakened = [];

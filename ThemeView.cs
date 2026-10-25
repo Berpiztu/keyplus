@@ -52,7 +52,13 @@ public sealed class ThemeView : LinearLayout
 
     /// <summary>Kept as a field: Android holds its listeners weakly.</summary>
     private readonly PreferenceWatch appsWatch;
-    private (int Width, int Height) room;
+    private (int Width, int Height) room = keptRoom;
+
+    /// <summary>
+    /// The preview's room as last told, kept for the page made again (a colour chosen remakes it): its card zoomed to it
+    /// before it is first drawn, where it was drawn whole first and made smaller after, the keyboard shrinking on screen.
+    /// </summary>
+    private static (int Width, int Height) keptRoom;
 
     private StandardLanguage language;
     private IReadOnlyList<KeyboardEntry> listed = [];
@@ -104,11 +110,15 @@ public sealed class ThemeView : LinearLayout
 
         var hint = new TextView(context) { Text = context.GetString(Resource.String.keyboards_saved_summary), Alpha = 0.7f };
         hint.SetTextSize(ComplexUnitType.Sp, HintSp);
+        // Two cards, each its part, as the Windows settings' (the owner's, 2026-10-25): the keyboard, its name and its
+        // summary; the colours.
+        var choosingKeyboard = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        choosingKeyboard.AddView(choosing);
+        choosingKeyboard.AddView(naming);
+        choosingKeyboard.AddView(hint, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
         controls = new LinearLayout(context) { Orientation = Orientation.Vertical };
-        controls.AddView(choosing);
-        controls.AddView(new ColorsRow(context, remade), new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
-        controls.AddView(naming);
-        controls.AddView(hint, new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(FieldGapDp) });
+        controls.AddView(settings.Card(choosingKeyboard), new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(FieldGapDp / 2) });
+        controls.AddView(settings.Card(new ColorsRow(context, remade)), new LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(FieldGapDp) });
         AddView(controls);
 
         // The card as the keyboard shows it: its bar, Diseñar in its place, then the keys, + Tecla's list over them while chosen.
@@ -137,7 +147,7 @@ public sealed class ThemeView : LinearLayout
         card.AddView(keysPlace, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
         var box = new Box(context, (width, height) =>
         {
-            room = (width, height);
+            room = keptRoom = (width, height);
             Post(Fit);
         });
         card.PivotX = card.PivotY = 0;

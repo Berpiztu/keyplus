@@ -117,7 +117,7 @@ a window that does.
 | [MenuWatchService.cs](MenuWatchService.cs) | Also move out of the way of menus on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Theme's Per app, the colour beside the field typed in, on a screenshot |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Standard PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Settings › Theme), by language: Standard, Standard PC and those saved; each screen's one in each language |
-| [ColorsRow.cs](ColorsRow.cs) | Theme's Colours row: System, Light, Dark, Custom, Per app with App's, the two colours on hue, saturation and brightness bars, ↶ |
+| [ColorsRow.cs](ColorsRow.cs) | Theme's Colours, two lines on a card as Windows': System, Light, Dark, Custom, Per application, the two colours on hue, saturation and brightness bars, Undo (Tema's or the application's); Application and App's theme; a part that does not apply turned off, never hidden |
 | [AppThemes.cs](AppThemes.cs) | Per app's applications typed in, by package, with their colours: their theme's background made light or dark as the device is, or the colour seen on the screen |
 | [ThemeView.cs](ThemeView.cs) | Settings › Theme: the language and the keyboard, Save as and Delete, and the keyboard drawn as the screen shows it, designed there |
 | [StandardDesigner.cs](StandardDesigner.cs) | Design's pills, + Key's list and Done's saving, the keyboard's and Theme's alike |
@@ -403,7 +403,16 @@ From then on **Turn on KeyPlus keys** turns the service on by itself,
 keeping the others that are on. The key it pairs with is made for that one
 time and never kept. A computer's `adb shell` runs the same two commands,
 and `deploy.ps1` and `debug.ps1` run them too. Berpiztu AI Keyboard's
-screen has a box at its top to try the keys in.
+screen has at its top, two by two, a box for each kind of field to try the
+keys in: text, 123 (a number's), @ (an e-mail address's) and www (a web
+address's), on Android and in the Windows settings alike.
+
+**Preferences › Extra line for suggestions and recent emoji** (on unless
+turned off), on Android and Windows: a line over the toolbar, of one height
+whatever it holds, with the words offered while typing, else the emoji used
+lately, so the toolbar keeps all its buttons; off, no line, the words in the
+toolbar as before. The emoji panel stands in the keys' place, the toolbar
+and that line over it.
 
 For the keyboard, on a phone or a headset:
 

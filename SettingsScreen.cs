@@ -337,6 +337,21 @@ public sealed class SettingsScreen
         }
     }
 
+    /// <summary>A part of a page grouped on a card, as a group of rows is (the cards' ground, the group's large corners), the Windows settings' panels alike.</summary>
+    public FrameLayout Card(View content)
+    {
+        var shape = new GradientDrawable();
+        shape.SetColor(card);
+        shape.SetCornerRadius(Dp(OuterCornerDp));
+        var frame = new FrameLayout(context) { Background = shape };
+        frame.SetPadding(Dp(CardPaddingDp), Dp(CardPaddingDp), Dp(CardPaddingDp), Dp(CardPaddingDp));
+        frame.AddView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
+        return frame;
+    }
+
+    /// <summary>The room inside a card around what it groups.</summary>
+    private const float CardPaddingDp = 10;
+
     /// <summary>A row as a card: rounded large at its group's ends, a little elsewhere; its sign, title, line and switch.</summary>
     private View Row(SettingsRow row, bool first, bool last, bool compact)
     {

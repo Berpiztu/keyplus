@@ -1298,6 +1298,9 @@ public sealed class KeyPanel
     {
         standardBar.RemoveAllViews();
         barRoomShown = -1;
+
+        // The line over the toolbar first: the words offered go there while it shows, and the toolbar keeps its buttons.
+        ShowEmojiRow();
         if (editingTools)
         {
             FillEditingBar();
@@ -1311,8 +1314,9 @@ public sealed class KeyPanel
         }
 
         var colors = standardColors!;
+        var wordsInBar = OffersWords && !EmojiRowShown;
         var recent = OffersWords ? null : RecentCopy();
-        var suggesting = OffersWords || recent is not null;
+        var suggesting = wordsInBar || recent is not null;
         var first = covered is not null
             ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
             : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
@@ -1322,7 +1326,7 @@ public sealed class KeyPanel
             (offered.Parent as ViewGroup)?.RemoveView(offered);
             standardBar.AddView(offered, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
-        else if (OffersWords)
+        else if (wordsInBar)
         {
             standardBar.AddView(SwipeWordsRow(SuggestionSp, colors.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
@@ -1553,20 +1557,28 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// Over the toolbar, while it shows, the emoji typed lately in a row, as
-    /// Gboard's on the Fold: as many as fit, a tap typing one; none typed yet,
-    /// no row.
+    /// Over the toolbar, while it shows and Preferencias' Extra line for suggestions and recent emoji is on, a line of
+    /// one height whatever it holds, as the Windows keyboard's: the words offered while typing, so the toolbar keeps its
+    /// buttons, else the emoji typed lately, as Gboard's on the Fold, as many as fit, a tap typing one. Off, no line,
+    /// the words in the toolbar.
     /// </summary>
     private void ShowEmojiRow()
     {
-        var recent = emojiPanel is not null && standardBar.Visibility == ViewStates.Visible && !designingStandard ? Emojis.Recent(context) : [];
-        emojiRow.Visibility = recent.Count > 0 ? ViewStates.Visible : ViewStates.Gone;
+        var shown = EmojiRowShown;
+        emojiRow.Visibility = shown ? ViewStates.Visible : ViewStates.Gone;
         emojiRowItems.RemoveAllViews();
-        if (recent.Count == 0)
+        if (!shown)
         {
             return;
         }
 
+        if (OffersWords)
+        {
+            emojiRowItems.AddView(SwipeWordsRow(SuggestionSp, standardColors!.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            return;
+        }
+
+        var recent = Emojis.Recent(context);
         var width = strip.Width > 0 ? strip.Width : context.Resources!.DisplayMetrics!.WidthPixels;
         var cell = Dp(EmojiRowCellDp);
         var measure = new Paint { TextSize = 100 };
@@ -1585,6 +1597,9 @@ public sealed class KeyPanel
             emojiRowItems.AddView(item, new LinearLayout.LayoutParams(cell, ViewGroup.LayoutParams.MatchParent));
         }
     }
+
+    /// <summary>Whether the line over the toolbar shows: the option on, the standard keyboard's toolbar in sight, not while designing.</summary>
+    private bool EmojiRowShown => emojiRowOn && emojiPanel is not null && standardBar.Visibility == ViewStates.Visible && !designingStandard;
 
     /// <summary>The grid in the keys' place: its buttons as placed.</summary>
     private void ShowGrid()
@@ -2680,6 +2695,13 @@ public sealed class KeyPanel
         sounds = kept.GetBoolean(KeyPlusPreferences.SoundKey, false);
         showsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
         deletesSwipedWord = kept.GetBoolean(KeyPlusPreferences.SwipeDeleteWordKey, true);
+        var rowBefore = emojiRowOn;
+        emojiRowOn = kept.GetBoolean(KeyPlusPreferences.EmojiRowKey, true);
+        if (emojiRowOn != rowBefore && strip.IsAttachedToWindow)
+        {
+            ShowBars();
+        }
+
         if (standard is not null)
         {
             standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
@@ -2696,6 +2718,9 @@ public sealed class KeyPanel
 
     /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed.</summary>
     private bool deletesSwipedWord = true;
+
+    /// <summary>Preferencias' Extra line for suggestions and recent emoji (<see cref="KeyPlusPreferences.EmojiRowKey"/>).</summary>
+    private bool emojiRowOn = true;
 
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen, the kind of keyboard in sight kept in it (Estándar, Estándar PC); where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
     private void NextLanguage()

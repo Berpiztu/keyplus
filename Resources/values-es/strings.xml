@@ -17,6 +17,9 @@
   <string name="minimize">Minimizar</string>
   <string name="settings_title">Ajustes de Berpiztu AI Keyboard</string>
   <string name="try_keys">Prueba las teclas aquí</string>
+  <string name="try_number">123</string>
+  <string name="try_email">@</string>
+  <string name="try_web">www</string>
   <string name="setup_title">Configura Berpiztu AI Keyboard</string>
   <string name="setup_turn_on">1. Activa el teclado</string>
   <string name="setup_turn_on_summary">Permite que Android lo use como teclado</string>
@@ -96,8 +99,9 @@
   <string name="look_custom">Personalizado</string>
   <string name="look_keyboard">Fondo</string>
   <string name="look_accent">Acento</string>
-  <string name="per_app">Por app</string>
-  <string name="app_own">De la app</string>
+  <string name="per_app">Por aplicación</string>
+  <string name="app_own">Tema de la app</string>
+  <string name="app_list">Aplicación</string>
   <string name="hue">Tono</string>
   <string name="saturation">Saturación</string>
   <string name="brightness">Brillo</string>
@@ -246,6 +250,8 @@
   <string name="dictionary_learn_emails_summary">Una dirección escrita en un campo de correo o de usuario se añade al diccionario al salir de él, y se propone ahí la próxima vez</string>
   <string name="dictionary_learn_chosen_summary">Una palabra elegida en la barra en lugar de la deslizada sale primero la próxima vez que se lea ese deslizamiento</string>
   <string name="dictionary_forget_chosen">Olvidar las palabras elegidas</string>
+  <string name="emoji_row">Línea extra para sugerencias y emojis recientes</string>
+  <string name="emoji_row_summary">Una línea encima de la barra: las palabras sugeridas mientras escribes y, si no, los emojis usados últimamente; la barra conserva todos sus botones</string>
   <string name="dictionary_edit">Modificar la palabra</string>
   <string name="dictionary_export">Exportar el diccionario</string>
   <string name="dictionary_export_summary">Las palabras de todos los idiomas en un fichero que importa el teclado de otro dispositivo</string>

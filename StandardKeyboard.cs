@@ -636,7 +636,7 @@ public sealed class StandardKeyboard : View
 
     /// <summary>A page's rows: the letters' as designed where the keyboard has a design, else as made.</summary>
     private IReadOnlyList<IReadOnlyList<StandardKey>> Rows(StandardPage shown) =>
-        shown is StandardPage.Letters or StandardPage.XrLetters ? ForField(LettersOf(shown))
+        shown is StandardPage.Letters or StandardPage.XrLetters ? StandardKeys.ForField(LettersOf(shown), fieldKind)
             : design is not null && shown is StandardPage.Pc ? design.Page(StandardKeys.Page(shown, language), language)
             : StandardKeys.Page(shown, language);
 
@@ -660,21 +660,6 @@ public sealed class StandardKeyboard : View
     }
 
     private StandardField fieldKind;
-
-    /// <summary>The letters' rows for a web or e-mail address's field: / or @ in the comma's place (its emoji left out), .com taking room from the space.</summary>
-    private IReadOnlyList<IReadOnlyList<StandardKey>> ForField(IReadOnlyList<IReadOnlyList<StandardKey>> rows)
-    {
-        if (fieldKind is not (StandardField.Web or StandardField.Email))
-        {
-            return rows;
-        }
-
-        var sign = fieldKind == StandardField.Web ? "/" : "@";
-        return [.. rows.Select(row => (IReadOnlyList<StandardKey>)[.. row.SelectMany(key =>
-            key.HintIcon == Resource.Drawable.ic_key_emoji ? [key with { Label = sign, Text = sign, HintIcon = 0 }]
-            : key.Action == StandardAction.Space ? [key with { Width = Math.Max(1, key.Width - StandardKeys.DotCom.Width) }, StandardKeys.DotCom]
-            : new[] { key })])];
-    }
 
     private void ShowPage(StandardPage shown)
     {
