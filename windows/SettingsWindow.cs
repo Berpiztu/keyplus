@@ -638,6 +638,53 @@ public sealed class SettingsWindow : Window
         var forget = new Button { Content = Texts.Get(Resource.String.dictionary_forget_chosen), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
         forget.Click += (_, _) => personal.ForgetChosen();
 
+        // A failure, in the file or in what it holds, told in a window and written to the log.
+        void Failed(Exception failure)
+        {
+            Log.Write($"Dictionary: the file could not be read or written: {failure.Message}");
+            MessageBox.Show(Texts.Get(Resource.String.dictionary_file_failed, failure.Message), Texts.Get(Resource.String.dictionary), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        export.Click += (_, _) =>
+        {
+            var save = new Microsoft.Win32.SaveFileDialog { FileName = $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
+            if (save.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                System.IO.File.WriteAllText(save.FileName, personal.Export());
+                MessageBox.Show(Texts.Get(Resource.String.dictionary_exported, personal.Count), Texts.Get(Resource.String.dictionary));
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
+            {
+                Failed(failure);
+            }
+        };
+        var import = new Button { Content = Texts.Get(Resource.String.dictionary_import), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        import.Click += (_, _) =>
+        {
+            var open = new Microsoft.Win32.OpenFileDialog { Filter = "JSON, TXT|*.json;*.txt|*.*|*.*" };
+            if (open.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                var added = personal.Import(System.IO.File.ReadAllText(open.FileName), Code());
+                Fill();
+                MessageBox.Show(Texts.Get(Resource.String.dictionary_imported, added), Texts.Get(Resource.String.dictionary));
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or System.IO.InvalidDataException)
+            {
+                Failed(failure);
+            }
+        };
+
         var adding = new DockPanel();
         DockPanel.SetDock(add, Dock.Right);
         adding.Children.Add(add);
@@ -646,6 +693,8 @@ public sealed class SettingsWindow : Window
         form.Children.Add(Field(null, typed, Resource.String.dictionary_learn_typed_summary));
         form.Children.Add(Field(null, chosen, Resource.String.dictionary_learn_chosen_summary));
         form.Children.Add(Field(null, forget, null));
+        form.Children.Add(Field(null, export, Resource.String.dictionary_export_summary));
+        form.Children.Add(Field(null, import, Resource.String.dictionary_import_summary));
         form.Children.Add(Field(Resource.String.dictionary_language, languages, null));
         form.Children.Add(Field(Resource.String.dictionary_words, adding, Resource.String.dictionary_words_summary));
         form.Children.Add(Field(null, words, null));

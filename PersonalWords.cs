@@ -122,6 +122,76 @@ public sealed class PersonalWords(string path)
         file.LearnChosen = chosen;
     });
 
+    /// <summary>What an exported dictionary says it is, so an import knows it.</summary>
+    public const string ExportKind = "berpiztu-dictionary";
+
+    private sealed record ExportFile(string Kind, int Version, DateTime Exported, Dictionary<string, List<string>> Words);
+
+    /// <summary>The dictionary as a file the keyboard of another device imports: every language's words; what was chosen for swipes stays here.</summary>
+    public string Export()
+    {
+        Reload();
+        return JsonSerializer.Serialize(new ExportFile(ExportKind, 1, DateTime.Now, kept.Words), new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>How many words an export holds.</summary>
+    public int Count => kept.Words.Values.Sum(words => words.Count);
+
+    /// <summary>
+    /// A file imported, its words added to those there and none taken away:
+    /// a dictionary exported here, every language; Gboard's (a word, its
+    /// shortcut and its locale a line, "es-ES" put in Spanish), or a text with
+    /// a word a line, in <paramref name="language"/>. How many were new.
+    /// </summary>
+    public int Import(string text, string language)
+    {
+        Reload();
+        var before = Count;
+        Dictionary<string, List<string>> words = [];
+        if (text.TrimStart().StartsWith('{'))
+        {
+            var file = JsonSerializer.Deserialize<ExportFile>(text);
+            if (file?.Kind != ExportKind)
+            {
+                throw new InvalidDataException("It is not a dictionary exported by the keyboard.");
+            }
+
+            words = file.Words;
+        }
+        else
+        {
+            foreach (var line in text.Split('\n'))
+            {
+                var columns = line.Trim().Split('\t');
+                if (columns[0].Length == 0 || columns[0].StartsWith('#'))
+                {
+                    continue;
+                }
+
+                var code = columns.Length > 2 && columns[2].Length >= 2 && StandardKeys.Languages.Any(known => known.Code == columns[2][..2].ToLowerInvariant())
+                    ? columns[2][..2].ToLowerInvariant()
+                    : language;
+                Of(words, code, () => []).Add(columns[0]);
+            }
+        }
+
+        Change(file =>
+        {
+            foreach (var (code, added) in words)
+            {
+                var kept = Of(file.Words, code, () => []);
+                foreach (var word in added.Select(word => word.Trim()).Where(word => word.Length > 0 && !word.Contains(' ')))
+                {
+                    if (!kept.Contains(word, StringComparer.CurrentCultureIgnoreCase))
+                    {
+                        kept.Add(word);
+                    }
+                }
+            }
+        });
+        return Count - before;
+    }
+
     /// <summary>Every word chosen for a swipe forgotten: swipes type again what they read first.</summary>
     public void ForgetChosen() => Change(file => file.Chosen.Clear());
 

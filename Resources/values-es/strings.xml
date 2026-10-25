@@ -227,4 +227,11 @@
   <string name="dictionary_learn_chosen_summary">Una palabra elegida en la barra en lugar de la deslizada sale primero la próxima vez que se lea ese deslizamiento</string>
   <string name="dictionary_forget_chosen">Olvidar las palabras elegidas</string>
   <string name="dictionary_edit">Modificar la palabra</string>
+  <string name="dictionary_export">Exportar el diccionario</string>
+  <string name="dictionary_export_summary">Las palabras de todos los idiomas en un fichero que importa el teclado de otro dispositivo</string>
+  <string name="dictionary_import">Importar un diccionario</string>
+  <string name="dictionary_import_summary">Uno exportado aquí, el de Gboard o un texto con una palabra por línea; se añaden a tus palabras, no se quita ninguna</string>
+  <string name="dictionary_exported">Diccionario exportado: %1$s palabras</string>
+  <string name="dictionary_imported">%1$s palabras añadidas</string>
+  <string name="dictionary_file_failed">No se pudo leer o escribir el fichero: %1$s</string>
 </resources>

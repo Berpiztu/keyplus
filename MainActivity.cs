@@ -58,6 +58,8 @@ public sealed class MainActivity : Activity
     public const string AskMicrophoneExtra = "askMicrophone";
     private const int ExportRequest = 2;
     private const int ImportRequest = 3;
+    private const int DictionaryExportRequest = 4;
+    private const int DictionaryImportRequest = 5;
 
 #if KEYBOARD
     /// <summary>The keyboard as Android names it.</summary>
@@ -650,6 +652,15 @@ public sealed class MainActivity : Activity
                 new(GetString(Resource.String.dictionary_learn_chosen), GetString(Resource.String.dictionary_learn_chosen_summary), On: personal.LearnChosen,
                     Switched: on => personal.SetLearning(personal.LearnTyped, on)),
                 new(GetString(Resource.String.dictionary_forget_chosen), Tapped: personal.ForgetChosen),
+                new(GetString(Resource.String.dictionary_export), GetString(Resource.String.dictionary_export_summary), Tapped: () =>
+                    StartActivityForResult(new Intent(Intent.ActionCreateDocument)
+                        .AddCategory(Intent.CategoryOpenable)
+                        .SetType("application/json")
+                        .PutExtra(Intent.ExtraTitle, $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json"), DictionaryExportRequest)),
+                new(GetString(Resource.String.dictionary_import), GetString(Resource.String.dictionary_import_summary), Tapped: () =>
+                    StartActivityForResult(new Intent(Intent.ActionOpenDocument)
+                        .AddCategory(Intent.CategoryOpenable)
+                        .SetType("*/*"), DictionaryImportRequest)),
             ],
             [
                 new(GetString(Resource.String.dictionary_language), language.Name, Tapped: ChooseDictionaryLanguage),
@@ -677,6 +688,50 @@ public sealed class MainActivity : Activity
         }
 
         return new(GetString(Resource.String.dictionary), groups);
+    }
+
+    /// <summary>
+    /// The dictionary written to the file chosen (every language's words), or
+    /// a file read into it, its words added and none taken away; what came of
+    /// it told, a failure written to the log too.
+    /// </summary>
+    private void DictionaryFile(Android.Net.Uri file, bool exporting)
+    {
+        var personal = Personal();
+        try
+        {
+            if (exporting)
+            {
+                using (var stream = ContentResolver!.OpenOutputStream(file, "wt")!)
+                using (var writer = new StreamWriter(stream))
+                {
+                    writer.Write(personal.Export());
+                }
+
+                Toast.MakeText(this, GetString(Resource.String.dictionary_exported, new Java.Lang.String(personal.Count.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
+                return;
+            }
+
+            string text;
+            using (var stream = ContentResolver!.OpenInputStream(file)!)
+            using (var reader = new StreamReader(stream))
+            {
+                text = reader.ReadToEnd();
+            }
+
+            var added = personal.Import(text, dictionaryLanguage.Code);
+            settings?.Refresh(DictionaryPage());
+            Toast.MakeText(this, GetString(Resource.String.dictionary_imported, new Java.Lang.String(added.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
+        }
+        catch (Exception failure) when (failure is IOException or System.Text.Json.JsonException or InvalidDataException or Java.Lang.Exception)
+        {
+            Android.Util.Log.Warn("KeyPlus", $"Dictionary: the file could not be read or written: {failure.Message}");
+            new AlertDialog.Builder(this)
+                .SetTitle(Resource.String.dictionary)!
+                .SetMessage(GetString(Resource.String.dictionary_file_failed, new Java.Lang.String(failure.Message)))!
+                .SetPositiveButton(Resource.String.ok, (_, _) => { })!
+                .Show();
+        }
     }
 
     /// <summary>The dictionary's language chosen from the keyboard's, the page shown again with its words.</summary>
@@ -787,6 +842,12 @@ public sealed class MainActivity : Activity
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
+        if (resultCode == Result.Ok && data?.Data is { } chosen && requestCode is DictionaryExportRequest or DictionaryImportRequest)
+        {
+            DictionaryFile(chosen, exporting: requestCode == DictionaryExportRequest);
+            return;
+        }
+
         if (resultCode != Result.Ok || data?.Data is not { } file || requestCode is not (ExportRequest or ImportRequest))
         {
             return;

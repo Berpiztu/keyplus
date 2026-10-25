@@ -198,6 +198,13 @@ namespace Berpiztu.KeyPlus
             public const int update_current = 115;
             public const int update_failed = 116;
             public const int dictionary = 128;
+            public const int dictionary_export = 130;
+            public const int dictionary_export_summary = 131;
+            public const int dictionary_import = 132;
+            public const int dictionary_import_summary = 133;
+            public const int dictionary_exported = 134;
+            public const int dictionary_imported = 135;
+            public const int dictionary_file_failed = 136;
             public const int glide_delete_word = 117;
             public const int glide_delete_word_summary = 118;
             public const int dictionary_language = 119;

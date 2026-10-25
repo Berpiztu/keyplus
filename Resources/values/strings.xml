@@ -233,4 +233,11 @@
   <string name="dictionary_learn_chosen_summary">A word taken from the toolbar in place of a swiped one is typed first the next time that swipe is read</string>
   <string name="dictionary_forget_chosen">Forget the words chosen</string>
   <string name="dictionary_edit">Edit the word</string>
+  <string name="dictionary_export">Export the dictionary</string>
+  <string name="dictionary_export_summary">Every language\'s words in a file another device\'s keyboard imports</string>
+  <string name="dictionary_import">Import a dictionary</string>
+  <string name="dictionary_import_summary">One exported here, Gboard\'s, or a text with a word a line; added to your words, none taken away</string>
+  <string name="dictionary_exported">Dictionary exported: %1$s words</string>
+  <string name="dictionary_imported">%1$s words added</string>
+  <string name="dictionary_file_failed">The file could not be read or written: %1$s</string>
 </resources>

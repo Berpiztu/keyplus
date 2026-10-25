@@ -148,8 +148,11 @@ a window that does.
   letter by letter twice, joins them. **Learn from the words I choose**
   (on): a word taken from the toolbar in place of a swiped one is typed
   first the next time that swipe reads the same, so the keyboard follows
-  how you swipe; **Forget the words chosen** undoes it. On Windows and
-  Android alike.
+  how you swipe; **Forget the words chosen** undoes it. **Export the
+  dictionary** writes every language's words to a JSON file the keyboard of
+  another device takes with **Import a dictionary**, which also takes
+  Gboard's export or a text with a word a line; imported words are added,
+  none taken away. On Windows and Android alike.
 - **Settings › Glide typing › Delete a swiped word whole** (on, as Gboard's):
   ⌫ right after a swiped word deletes all the swipe typed, the word and the
   space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes
