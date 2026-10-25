@@ -177,6 +177,9 @@ public sealed class KeyboardSurface : FrameworkElement
         EndSwipe(letter: false);
         ForgetTyping();
         KeySender.Type(text);
+        sentence = null;
+        wordFix = null;
+        boundaryAt = Environment.TickCount64;
         lastTyped = text.Length > 0 ? text[^1] : lastTyped;
     }
 
@@ -226,6 +229,9 @@ public sealed class KeyboardSurface : FrameworkElement
         }
 
         KeySender.Type(wanted[same..]);
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
         spokenText = wanted;
         if (wanted.Length > 0)
         {
@@ -270,16 +276,386 @@ public sealed class KeyboardSurface : FrameworkElement
     private string? swipeRead;
 
     /// <summary>
+    /// A language's Spelling as it applies now (<see cref="LanguageSpelling"/>,
+    /// nothing with Spelling off from the toolbar): a sentence's accents
+    /// corrected by the model (<see cref="AccentModel"/>), its opening mark
+    /// put at its start (<see cref="SpanishMarks"/>), and Autocorrect, what
+    /// is corrected written at once; off, offered in the toolbar.
+    /// </summary>
+    public Func<StandardLanguage, LanguageSpelling> SpellingIn { get; set; } = _ => LanguageSpelling.Off;
+
+    /// <summary>The Spelling of the language typed in.</summary>
+    private LanguageSpelling Spelling => SpellingIn(language);
+
+    /// <summary>The accent model's sentence, at once, where it is loaded; none, not now. For Enter, which cannot wait for it.</summary>
+    public Func<string, string?>? CorrectNow { get; set; }
+
+    /// <summary>When the mouse, a finger or a pen last pressed outside the keyboard (<see cref="InputWatch.PressedAt"/>), and when a key of the computer's last went down (<see cref="InputWatch.KeyedAt"/>).</summary>
+    public Func<long>? PressedAt { get; set; }
+
+    public Func<long>? KeyedAt { get; set; }
+
+    /// <summary>
+    /// What these keys typed of the sentence being written, since it began
+    /// here (a field come to, Enter, or a . ? or ! typed): Windows tells a
+    /// keyboard nothing of the field, so Spelling mends a sentence closed with
+    /// ? or ! only from this, and only while nothing else touched the window
+    /// since (<see cref="SentenceKnown"/>); none, not known.
+    /// </summary>
+    private StringBuilder? sentence;
+    private long sentenceFrom;
+
+    /// <summary>A sentence begun here: a field come to, Enter, or one closed; or, blind, where a press put the caret, beside what these keys never saw.</summary>
+    public void BeginSentence() => BeginSentence(blind: false);
+
+    private void BeginSentence(bool blind)
+    {
+        sentence = new StringBuilder();
+        sentenceFrom = Environment.TickCount64;
+        sentenceBlind = blind;
+    }
+
+    /// <summary>Whether the sentence began where a press put the caret: what is before it, maybe a word's first letters, is not known.</summary>
+    private bool sentenceBlind;
+
+    private bool SentenceKnown => sentence is not null && (KeyedAt?.Invoke() ?? long.MaxValue) < sentenceFrom && (PressedAt?.Invoke() ?? long.MaxValue) < sentenceFrom;
+
+    /// <summary>
+    /// The sentence as these keys see it before they type in it again: a key
+    /// of the computer's since, and the text holds what they did not type, so
+    /// it is not known; a press since (the caret put somewhere, as one does
+    /// before typing), and it begins again here, for what they type from now
+    /// on is all they will write again.
+    /// </summary>
+    private void SentenceSeen()
+    {
+        if (sentence is null)
+        {
+            return;
+        }
+
+        if ((KeyedAt?.Invoke() ?? long.MaxValue) >= sentenceFrom)
+        {
+            sentence = null;
+        }
+        else if ((PressedAt?.Invoke() ?? long.MaxValue) >= sentenceFrom)
+        {
+            BeginSentence(blind: true);
+        }
+    }
+
+    /// <summary>Why the sentence is not known, for the log: Spelling says why it did not correct one.</summary>
+    private string SentenceUnknownWhy => sentence is null
+        ? "the keys did not type all of it (an arrow, a shortcut, an emoji or dictation moved or wrote in it)"
+        : "the mouse or the computer's keys touched the text since it began, after these keys typed in it";
+
+    /// <summary>A sentence Spelling would correct (the model on, in Spanish, not a lone sign) that it cannot: why, in the log.</summary>
+    private void NotCorrected(string why) => Log.Detail($"Spelling: a sentence was not corrected: {why}");
+
+    /// <summary>Text these keys typed, in the sentence; a . ? or ! or a new line closes it and begins the next.</summary>
+    private void SentenceTyped(string text)
+    {
+        // Anything typed after a word checked: what ended it is no longer the text's end.
+        wordFix = null;
+        SentenceSeen();
+        // Not known: the next sentence begins here once this one is closed by these keys.
+        if (sentence is null)
+        {
+            if (text.IndexOfAny(['.', '?', '!', '\n']) >= 0)
+            {
+                BeginSentence();
+            }
+
+            return;
+        }
+
+        sentence.Append(text);
+
+        // A sentence ends with . ? ! or a new line, and with two spaces in a row (for the accent model, which reads it then).
+        var twoSpaces = text == " " && sentence.Length >= 2 && sentence[^2] == ' ';
+        if (text.IndexOfAny(['.', '?', '!', '\n']) >= 0 || twoSpaces)
+        {
+            var whole = sentence.ToString();
+            var known = SentenceKnown;
+            BeginSentence();
+            if (Spelling.Accents && whole.Trim().Length > 1)
+            {
+                if (!known)
+                {
+                    NotCorrected(SentenceUnknownWhy);
+                    return;
+                }
+
+                closed = whole;
+                SentenceClosed?.Invoke(whole);
+            }
+        }
+    }
+
+    /// <summary>A sentence closed with . ? or !, in Spanish, typed whole by these keys: for the accent model to read (<see cref="AccentModel"/>).</summary>
+    public event Action<string>? SentenceClosed;
+
+    /// <summary>The last sentence closed, while what was typed after it is still known: a correction of it can take its place.</summary>
+    private string? closed;
+
+    /// <summary>
+    /// The accent model's sentence taken in place of the one closed, what
+    /// was typed after it written again behind it; only while nothing but
+    /// these keys has touched the window since. Whether it was.
+    /// </summary>
+    public bool ApplyCorrection(string original, string corrected, bool undoable)
+    {
+        if (closed != original || !SentenceKnown)
+        {
+            Log.Write(closed != original
+                ? "Spelling: the correction was not applied: another sentence was closed since"
+                : "Spelling: the correction was not applied: the mouse or the computer's keys touched the text since, so where it is is not known");
+            return false;
+        }
+
+        var after = sentence!.ToString();
+        for (var gone = original.Length + after.Length; gone > 0; gone--)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
+
+        KeySender.Type(corrected + after);
+        wordFix = null;
+
+        // Undoable once: the sentence written again as it was typed, from the toolbar.
+        closed = undoable ? corrected : null;
+        Log.Detail(undoable ? "Spelling: a sentence's accents corrected" : "Spelling: a sentence written again from the toolbar");
+        return true;
+    }
+
+    /// <summary>
+    /// Enter closing a sentence these keys typed whole, with Autocorrect on:
+    /// its accents corrected by the model before the line ends,
+    /// for after Enter the field may add what it likes (an editor's indent),
+    /// and where the sentence is would not be known; no ↶ for it.
+    /// </summary>
+    private void CorrectBeforeEnter()
+    {
+        if (Spelling is not { Accents: true, Autocorrect: true })
+        {
+            return;
+        }
+
+        if (!SentenceKnown)
+        {
+            NotCorrected(SentenceUnknownWhy);
+            return;
+        }
+
+        var typed = sentence!.ToString();
+        if (typed.Trim().Length < 2)
+        {
+            return;
+        }
+
+        if (CorrectNow?.Invoke(typed) is not { } corrected)
+        {
+            NotCorrected("the accent model is not loaded yet");
+            return;
+        }
+
+        if (corrected == typed)
+        {
+            Log.Detail("Spelling: the model changed nothing in a sentence");
+            return;
+        }
+
+        for (var gone = typed.Length; gone > 0; gone--)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
+
+        KeySender.Type(corrected);
+        Log.Detail("Spelling: a sentence's accents corrected before Enter");
+    }
+
+    /// <summary>Characters these keys deleted from the sentence; more than it has, and where the caret is is not known.</summary>
+    private void SentenceDeleted(int count)
+    {
+        wordFix = null;
+        SentenceSeen();
+        if (sentence is null)
+        {
+            return;
+        }
+
+        if (count > sentence.Length)
+        {
+            sentence = null;
+        }
+        else
+        {
+            sentence.Length -= count;
+        }
+    }
+
+    /// <summary>
+    /// A sentence about to be closed with ? or !, in Spanish, mended as
+    /// Spelling has it (<see cref="SpanishMarks.Opened"/>): its opening mark
+    /// put at its start; deleted and typed again from where it begins, only
+    /// when these keys typed all of it.
+    /// </summary>
+    private void MendSentence(char closing)
+    {
+        if (Spelling.OpenMark && SentenceKnown
+            && SpanishMarks.Opened(sentence!.ToString(), closing) is { } mended)
+        {
+            for (var gone = 0; gone < mended.Replaced; gone++)
+            {
+                KeySender.Press(Keycode.Del, KeySender.Held.None);
+            }
+
+            KeySender.Type(mended.Text);
+            SentenceDeleted(mended.Replaced);
+            SentenceTyped(mended.Text);
+        }
+    }
+
+    /// <summary>
     /// The word being typed letter by letter, as the keys typed it: Windows
     /// tells a keyboard nothing of the field, so it is the keys' own count,
     /// begun again by anything but a letter or ⌫.
     /// </summary>
     private string typingWord = "";
 
+    /// <summary>The word being typed letter by letter; empty, none.</summary>
+    public string TypingWord => typingWord;
+
+    /// <summary>When the word being typed began: it is where the keys think only while nothing else touched the window since (<see cref="WordKnown"/>).</summary>
+    private long wordFrom;
+
+    private bool WordKnown => wordStartKnown && (KeyedAt?.Invoke() ?? long.MaxValue) < wordFrom && (PressedAt?.Invoke() ?? long.MaxValue) < wordFrom;
+
+    /// <summary>
+    /// Whether the word being typed began where these keys know a word
+    /// begins: after a space or a sign they typed, or at the start of a
+    /// field, a line or a sentence they began; not where a press put the
+    /// caret, maybe in the middle of a word ("ka|sa"). Only then is it
+    /// offered words, corrected or learnt: they would take its part for it.
+    /// </summary>
+    private bool wordStartKnown;
+
+    /// <summary>
+    /// The word's first letters typed, already in the sentence's record:
+    /// whether what is before them is known to end a word, by the record, or
+    /// as a space or a sign these keys typed just before with nothing else
+    /// since (<see cref="boundaryAt"/>), for a sentence no longer known after
+    /// an arrow.
+    /// </summary>
+    private bool StartsKnown(string first)
+    {
+        if (boundaryAt > 0 && (KeyedAt?.Invoke() ?? long.MaxValue) < boundaryAt && (PressedAt?.Invoke() ?? long.MaxValue) < boundaryAt)
+        {
+            return true;
+        }
+
+        if (sentence is not { } typed || !SentenceKnown)
+        {
+            return false;
+        }
+
+        var before = typed.Length - first.Length - 1;
+        return before >= 0 ? !char.IsLetterOrDigit(typed[before]) : before == -1 && !sentenceBlind;
+    }
+
+    /// <summary>When these keys last typed what ends a word (a space, a sign, Enter, a word taken with its space), if nothing else was typed since; 0, none.</summary>
+    private long boundaryAt;
+
+    /// <summary>Spelling › Correct words: the words a word typed in a language may have meant, the likeliest first (<see cref="SpellingDictionary"/>, <see cref="CommonErrors"/>); none, it is left as it is.</summary>
+    public Func<StandardLanguage, string, WordFixes?>? Fixing { get; set; }
+
+    /// <summary>The words a word typed may have meant, and whether it is misspelled, so the first may be written in its place; a word that is a word too ("as": has, haz) only has them offered.</summary>
+    public sealed record WordFixes(IReadOnlyList<string> Words, bool Misspelled);
+
+    /// <summary>A misspelled word ended: the word as typed, the words it may have meant, and whether the first was written in its place (Autocorrect), for the toolbar to take it back or offer them (<see cref="ReplaceWord"/>).</summary>
+    public event Action<string, IReadOnlyList<string>, bool>? WordFixed;
+
+    /// <summary>The last word Spelling checked, while nothing has been typed after what ended it: what is written, the word as typed, what ended it, and since when.</summary>
+    private sealed record WordFix(string Written, string Typed, string Ending, long From);
+
+    private WordFix? wordFix;
+
+    /// <summary>
+    /// The word typed letter by letter, ended now, before what ends it is
+    /// typed: misspelled, with Autocorrect on, the likeliest word it may have
+    /// meant written in its place; the word as typed, those words and whether
+    /// one was written, for the toolbar. None when it is left as it is, or
+    /// where it is is not known.
+    /// </summary>
+    private (string Typed, IReadOnlyList<string> Fixes, bool Applied)? FixWord()
+    {
+        if (typingWord.Length < 2 || !WordKnown || Fixing?.Invoke(language, typingWord) is not { Words.Count: > 0 } fixes)
+        {
+            return null;
+        }
+
+        var typed = typingWord;
+        var applied = Spelling.Autocorrect && fixes.Misspelled;
+        if (applied)
+        {
+            Retype(typed.Length, fixes.Words[0]);
+            typingWord = fixes.Words[0];
+            Log.Detail("Spelling: a word corrected");
+        }
+
+        return (typed, fixes.Words, applied);
+    }
+
+    /// <summary>The word checked offered in the toolbar once what ended it is typed: taken back with ↶, or the words it may have meant.</summary>
+    private void OfferFix((string Typed, IReadOnlyList<string> Fixes, bool Applied) fixing, string ending)
+    {
+        wordFix = new WordFix(fixing.Applied ? fixing.Fixes[0] : fixing.Typed, fixing.Typed, ending, Environment.TickCount64);
+        WordFixed?.Invoke(fixing.Typed, fixing.Fixes, fixing.Applied);
+    }
+
+    /// <summary>
+    /// A word of the toolbar taken in place of the last word checked, what
+    /// ended it written again after it: the word as typed takes a correction
+    /// back, and counts towards learning it; only while nothing but these
+    /// keys touched the window and nothing was typed since.
+    /// </summary>
+    public void ReplaceWord(string word)
+    {
+        if (wordFix is not { } fix || (KeyedAt?.Invoke() ?? long.MaxValue) >= fix.From || (PressedAt?.Invoke() ?? long.MaxValue) >= fix.From)
+        {
+            Log.Detail("Spelling: the word was not replaced: something else touched the text since");
+            wordFix = null;
+            return;
+        }
+
+        Retype(fix.Written.Length + fix.Ending.Length, word + fix.Ending);
+        wordFix = null;
+        boundaryAt = Environment.TickCount64;
+        if (word == fix.Typed)
+        {
+            WordTyped?.Invoke(language, word);
+        }
+
+        Log.Detail(word == fix.Typed ? "Spelling: a word's correction taken back" : "Spelling: a word corrected from the toolbar");
+    }
+
+    /// <summary>The last characters these keys typed deleted and the text typed in their place, the sentence's record kept with them.</summary>
+    private void Retype(int gone, string text)
+    {
+        for (var left = gone; left > 0; left--)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
+
+        KeySender.Type(text);
+        SentenceDeleted(gone);
+        SentenceTyped(text);
+    }
+
     /// <summary>The word being typed changed: the words starting so offered, as Gboard's while a word is typed.</summary>
     private void OfferWords()
     {
-        IReadOnlyList<string> words = typingWord.Length > 0 && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
+        IReadOnlyList<string> words = typingWord.Length > 0 && wordStartKnown && swipedText is null && Suggesting is { } suggesting ? suggesting(language, typingWord) : [];
         Offered?.Invoke(words);
     }
 
@@ -296,13 +672,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A word offered taken in place of the one being typed, with a space after it, as Gboard's.</summary>
     public void TakeSuggestion(string word)
     {
-        foreach (var _ in typingWord)
-        {
-            KeySender.Press(Keycode.Del, KeySender.Held.None);
-        }
-
-        KeySender.Type(word + " ");
+        Retype(typingWord.Length, word + " ");
         lastTyped = ' ';
+        boundaryAt = Environment.TickCount64;
         typingWord = "";
         Offered?.Invoke([]);
     }
@@ -326,7 +698,9 @@ public sealed class KeyboardSurface : FrameworkElement
         var word = Cased(words[0], capital, capitals);
         var text = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? word : " " + word;
         KeySender.Type(text);
+        SentenceTyped(text);
         lastTyped = text[^1];
+        boundaryAt = 0;
         swipedText = text;
         Suggestions?.Invoke(words, words[0]);
     }
@@ -342,13 +716,9 @@ public sealed class KeyboardSurface : FrameworkElement
         var old = typed.Trim();
         var capital = old.Length > 0 && char.IsUpper(old[0]);
         var text = (typed.StartsWith(' ') ? " " : "") + Cased(word, capital, capitals: false);
-        foreach (var _ in typed)
-        {
-            KeySender.Press(Keycode.Del, KeySender.Held.None);
-        }
-
-        KeySender.Type(text);
+        Retype(typed.Length, text);
         lastTyped = text[^1];
+        boundaryAt = 0;
         swipedText = text;
         Suggestions?.Invoke([], null);
         if (swipeRead is { } read)
@@ -1111,11 +1481,20 @@ public sealed class KeyboardSurface : FrameworkElement
                 break;
             case StandardAction.Enter:
                 EndSwipe(letter: false);
+                // After Enter the field may add what it likes, so a word is corrected only before it, and offers nothing after.
+                if (Spelling.Autocorrect)
+                {
+                    FixWord();
+                }
+
                 EndWord();
                 ForgetTyping();
                 FlushDead();
+                CorrectBeforeEnter();
                 Press(Keycode.Enter);
+                BeginSentence();
                 lastTyped = '\n';
+                boundaryAt = Environment.TickCount64;
                 break;
         }
 
@@ -1214,10 +1593,26 @@ public sealed class KeyboardSurface : FrameworkElement
             typed = typed == " " ? accent : composed.Length == 1 ? composed : accent + typed;
         }
 
-        KeySender.Type(typed);
-        lastTyped = typed.Length > 0 ? typed[^1] : lastTyped;
-        if (typed.Length > 0 && typed.All(char.IsLetter))
+        var letters = typed.Length > 0 && typed.All(char.IsLetter);
+        var fixing = letters ? null : FixWord();
+        if (typed is "?" or "!")
         {
+            MendSentence(typed[0]);
+        }
+
+        KeySender.Type(typed);
+        SentenceTyped(typed);
+        lastTyped = typed.Length > 0 ? typed[^1] : lastTyped;
+        if (letters)
+        {
+            if (typingWord.Length == 0)
+            {
+                wordFrom = Environment.TickCount64;
+                wordStartKnown = StartsKnown(typed);
+            }
+
+            boundaryAt = 0;
+
             typingWord += typed;
             OfferWords();
         }
@@ -1225,13 +1620,18 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             EndWord();
             ForgetTyping();
+            boundaryAt = typed.Length > 0 && !char.IsLetterOrDigit(typed[^1]) ? Environment.TickCount64 : 0;
+            if (fixing is { } offered && typed.Length > 0)
+            {
+                OfferFix(offered, typed);
+            }
         }
     }
 
     /// <summary>A word typed letter by letter ended by a space, a sign or Enter: told, for the personal dictionary to learn one no word list has.</summary>
     private void EndWord()
     {
-        if (typingWord.Length > 0)
+        if (typingWord.Length > 0 && wordStartKnown)
         {
             WordTyped?.Invoke(language, typingWord);
         }
@@ -1243,11 +1643,13 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             deadKey = null;
             KeySender.Type(accent);
+            SentenceTyped(accent);
         }
     }
 
     private void DeleteOnce()
     {
+        boundaryAt = 0;
         // Right after a swipe, with Delete a swiped word whole on: the word and the space it put before it; held, ⌫ goes on letter by letter.
         if (DeletesSwipedWord && swipedText is { } typed && !Combining && deadKey is null)
         {
@@ -1256,6 +1658,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 KeySender.Press(Keycode.Del, KeySender.Held.None);
             }
 
+            SentenceDeleted(typed.Length);
             EndSwipe(letter: false);
             lastTyped = null;
             return;
@@ -1275,6 +1678,7 @@ public sealed class KeyboardSurface : FrameworkElement
         else
         {
             KeySender.Press(Keycode.Del, KeySender.Held.None);
+            SentenceDeleted(1);
             if (typingWord.Length > 0)
             {
                 typingWord = typingWord[..^1];
@@ -1283,7 +1687,13 @@ public sealed class KeyboardSurface : FrameworkElement
         }
     }
 
-    private void Press(Keycode code) => KeySender.Press(code, Held());
+    private void Press(Keycode code)
+    {
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        KeySender.Press(code, Held());
+    }
 
     /// <summary>A character's key with Ctrl, Alt or ⊞: its key code where it has one, else the key of the language's layout that types it (Spanish's ç); false when neither.</summary>
     private bool PressShortcut(string? text)

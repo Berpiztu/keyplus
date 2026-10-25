@@ -104,6 +104,7 @@ a window that does.
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
 | [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
 | [PersonalWords.cs](PersonalWords.cs) | The personal dictionary and the words chosen for swipes, on Android and Windows: kept by language in `personal-words.json`, a word no list has learnt when typed twice, a swipe's choice put first |
+| [SpanishMarks.cs](SpanishMarks.cs) | Spelling's opening marks, on Android and Windows: a sentence closed with ? or ! given its "¿" or "¡" at its start |
 | [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
 | [AndroidUpdates.cs](AndroidUpdates.cs) | Updates on Android: the day's check from the keyboard or the service, its notification, the app's question, Android's installer |
 | [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Voice typing's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
@@ -153,6 +154,30 @@ a window that does.
   another device takes with **Import a dictionary**, which also takes
   Gboard's export or a text with a word a line; imported words are added,
   none taken away. On Windows and Android alike.
+- **Spelling by language** (Windows): **Settings › Languages** lists each
+  language with **›**, which opens its page: its **Spelling** and its words.
+  **Correct words** (Spanish and English), off until turned on, when
+  LibreOffice's dictionary of that language is downloaded once (Hunspell,
+  0.9 MB Spanish, 0.55 MB English, checked by its SHA-256): a word typed
+  letter by letter that it lacks ("kasa", "helo") is corrected as it ends
+  with the word it most likely meant ("casa", "hello"), offered as it is
+  typed so you can choose; the keyboard's word list and your dictionary's
+  words are left as they are, and offered for a word near them
+  ("bidominoi": "bidominio"). **Autocorrect** (on) writes the corrections at
+  once, ↶ in the toolbar taking them back; off, they are offered with ✓ and
+  a tap writes them. Spanish also has: **Use the Wikipedia's common
+  misspellings** (its list, 21,000, downloaded once, 0.6 MB; the keyboard's
+  own few go first, "hai": hay, ahí, ay, and a word that is a word too but
+  commonly written for another, "as", has those offered, "has", "haz",
+  never written alone); **Correct accents with the model** (diactag, 38 MB,
+  downloaded once: when . ? or ! ends a sentence, a model on the computer
+  puts back its accents, "cómo estás"); and **Put ¿ and ¡ at the start**.
+  **Settings › Spelling** keeps what goes for every language: **Correct as
+  I type**, all of it on and off at once, as the toolbar's spellcheck button
+  does (off to write code), and **Download again**, which fetches what the
+  choices turned on downloaded again whole, for a file damaged. Windows
+  tells the keyboard nothing of the field, so Spelling mends only what the
+  keyboard typed whole, with no mouse or computer key since it began.
 - **Settings › Glide typing › Delete a swiped word whole** (on, as Gboard's):
   ⌫ right after a swiped word deletes all the swipe typed, the word and the
   space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes

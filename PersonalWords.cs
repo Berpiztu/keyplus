@@ -259,7 +259,7 @@ public sealed class PersonalWords(string path)
         return learnt;
     }
 
-    /// <summary>The dictionary's words that start as the typed one does, accents aside, cased as it is.</summary>
+    /// <summary>The dictionary's words that start as the typed one does, accents aside, and in Spanish as it sounds too ("mis": mysaasplace, <see cref="SpanishSounds.Key"/>), cased as it is.</summary>
     public IReadOnlyList<string> Starting(StandardLanguage language, string typed)
     {
         if (SwipeWords.Letters(typed, language.SwipeLetters) is not { } start)
@@ -269,8 +269,10 @@ public sealed class PersonalWords(string path)
 
         var capitals = typed.Length > 1 && typed.All(character => !char.IsLetter(character) || char.IsUpper(character));
         var capital = char.IsUpper(typed[0]);
+        var sounds = language.Code == StandardKeys.Spanish.Code ? SpanishSounds.Key(typed) : null;
         return [.. Words(language.Code)
-            .Where(word => SwipeWords.Letters(word, language.SwipeLetters) is { } letters && letters.StartsWith(start, StringComparison.Ordinal) && letters != start)
+            .Where(word => SwipeWords.Letters(word, language.SwipeLetters) is { } letters && letters != start
+                && (letters.StartsWith(start, StringComparison.Ordinal) || (sounds is not null && SpanishSounds.Key(word).StartsWith(sounds, StringComparison.Ordinal))))
             .Select(word => WordSuggestions.Cased(word, capital, capitals))];
     }
 

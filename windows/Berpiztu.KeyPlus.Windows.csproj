@@ -41,6 +41,10 @@
     <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
     <!-- The microphone, for 🎤 (NAudioMicrophone.cs): NAudio (MIT), its long-standing 2.2.1. -->
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
+    <!-- Spelling's accent model (diactag-1.0, AccentModel.cs) run on the device. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+    <!-- Spelling's word corrector (SpellingDictionary.cs): Hunspell ported to .NET, no native parts. -->
+    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -54,7 +58,9 @@
     <Compile Include="..\WordSuggestions.cs" Link="Shared\WordSuggestions.cs" />
     <Compile Include="..\Updates.cs" Link="Shared\Updates.cs" />
     <Compile Include="..\PersonalWords.cs" Link="Shared\PersonalWords.cs" />
-    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_keyplus.xml"
+    <Compile Include="..\SpanishMarks.cs" Link="Shared\SpanishMarks.cs" />
+    <Compile Include="..\SpanishSounds.cs" Link="Shared\SpanishSounds.cs" />
+    <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_tool_spellcheck.xml;..\Resources\drawable\ic_keyplus.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
     <!-- The words, the Android keyboard's, in English and Spanish (Texts.cs). -->
     <Content Include="..\Resources\values\strings.xml" Link="strings\values\strings.xml" CopyToOutputDirectory="PreserveNewest" />
@@ -67,6 +73,7 @@
     <Content Include="..\Assets\futo-swipe\honorable_sturgeon\*" LinkBase="futo-swipe\honorable_sturgeon" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Assets\futo-swipe\LICENSE.md" Link="futo-swipe\LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\Assets\dictionaries\*.gz" LinkBase="dictionaries" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Assets\spelling\*.txt" LinkBase="spelling" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

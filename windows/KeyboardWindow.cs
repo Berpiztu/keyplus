@@ -114,6 +114,9 @@ public sealed class KeyboardWindow : Window
     private readonly NAudioMicrophone microphone = new();
     private readonly VoiceTyping voice;
     private readonly SignButton mic;
+
+    /// <summary>The toolbar's Spelling on and off (<see cref="KeyboardPreferences.SpellingOn"/>), lit while on.</summary>
+    private readonly SignButton spellingButton;
     private readonly FocusWatch focus = new();
     private readonly IDisposable preferencesWatch;
     private readonly IDisposable keyboardsWatch;
@@ -172,8 +175,11 @@ public sealed class KeyboardWindow : Window
     /// <summary>Opened by hand (started, the clock's icon, ⌨, the settings) rather than by a text field: it stays until a text field takes the focus.</summary>
     private bool openedByHand = true;
 
-    /// <summary>Hidden by ✕: the presses watched until it shows again, for a tap on the text to bring it back (<see cref="ShowIfTapped"/>).</summary>
-    private PointerWatch? tapWatch;
+    /// <summary>The presses and the computer's keys, while the keyboard runs: a tap on the text after ✕ (<see cref="ShowIfTapped"/>), and Spelling's sentence touched by anything but the keys.</summary>
+    private readonly InputWatch input = new();
+
+    /// <summary>Hidden by ✕ while text has the focus: a tap on it brings the keyboard back.</summary>
+    private bool hiddenByCross;
 
     /// <summary>How soon after a press the caret moves for the press to be taken for a tap on the text.</summary>
     private static readonly TimeSpan TapToCaret = TimeSpan.FromMilliseconds(600);
@@ -217,7 +223,7 @@ public sealed class KeyboardWindow : Window
         {
             if (personal.Typed(language.Code, word, typed => Knows(language, typed)))
             {
-                Log.Write($"Dictionary: \"{word}\" learnt in {language.Code}");
+                Log.Detail($"Dictionary: a word learnt in {language.Code}");
                 swipe.Forget();
             }
         };
@@ -232,6 +238,37 @@ public sealed class KeyboardWindow : Window
         keys.Suggestions += ShowSuggestions;
         keys.Offered += words => ShowSuggestions(words, null);
         keys.Suggesting = Suggest;
+        keys.PressedAt = () => input.PressedAt;
+        keys.KeyedAt = () => input.KeyedAt;
+        commonErrors = new(() => (Wikipedia, Wikipedia && CommonErrors.Downloaded ? CommonErrors.Stamp : default), () => CommonErrors.Load(Wikipedia));
+        keys.SpellingIn = language => preferences.Applied(language.Code);
+        keys.Fixing = Fix;
+        keys.WordFixed += ShowWordFix;
+        keys.CorrectNow = sentence => accents.InUse()?.Restore(sentence);
+        keys.SentenceClosed += async sentence =>
+        {
+            if (await accents.Async() is not { } model)
+            {
+                return;
+            }
+
+            // Autocorrect: applied at once, what it was offered in the toolbar to take back; else the correction offered there.
+            var corrected = await Task.Run(() => model.Restore(sentence));
+            if (corrected == sentence)
+            {
+                Log.Detail("Spelling: the model changed nothing in a sentence");
+                return;
+            }
+
+            if (!preferences.Applied(keys.KeyLanguage.Code).Autocorrect)
+            {
+                ShowSentence(sentence, corrected, applied: false);
+            }
+            else if (keys.ApplyCorrection(sentence, corrected, undoable: true))
+            {
+                ShowSentence(sentence, corrected, applied: true);
+            }
+        };
         keys.EmojisAsked += ShowEmoji;
         emoji = new EmojiPanel(colors) { Visibility = Visibility.Collapsed };
         emoji.Typed += keys.TypeText;
@@ -255,6 +292,7 @@ public sealed class KeyboardWindow : Window
         FillResizeFrame();
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
         close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
+        spellingButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_spellcheck };
         mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
         mic.Clicked += Listen;
         voice = new VoiceTyping(microphone, Log.Write);
@@ -272,6 +310,8 @@ public sealed class KeyboardWindow : Window
         focus.MenuClosed += () => movedForMenu = false;
         focus.TextFocused += () =>
         {
+            // A field come to: the sentence typed from here is the keys' own, as far as Spelling can tell.
+            keys.BeginSentence();
             if (focus.App is { } typedIn)
             {
                 AppColors.Seen(typedIn);
@@ -287,7 +327,7 @@ public sealed class KeyboardWindow : Window
                 openedByHand = false;
                 if (!IsVisible)
                 {
-                    Log.Write("Keyboard: shown, a text field took the focus");
+                    Log.Detail("Keyboard: shown, a text field took the focus");
                 }
 
                 ShowKeyboard();
@@ -329,6 +369,10 @@ public sealed class KeyboardWindow : Window
             }
         };
         DockPanel.SetDock(smiley, Dock.Left);
+
+        // Spelling on and off at once, lit while on: off to write code, on again for a message.
+        spellingButton.Clicked += () => (KeyboardPreferences.Read() with { SpellingOn = !spellingButton.Lit }).Keep();
+        DockPanel.SetDock(spellingButton, Dock.Left);
         DockPanel.SetDock(close, Dock.Right);
         DockPanel.SetDock(mic, Dock.Right);
         DockPanel.SetDock(settings, Dock.Right);
@@ -337,6 +381,7 @@ public sealed class KeyboardWindow : Window
         DockPanel.SetDock(resize, Dock.Right);
         bar.Children.Add(switcher);
         bar.Children.Add(smiley);
+        bar.Children.Add(spellingButton);
         bar.Children.Add(close);
         bar.Children.Add(mic);
         bar.Children.Add(settings);
@@ -412,7 +457,7 @@ public sealed class KeyboardWindow : Window
         {
             voice.Dispose();
             focus.Dispose();
-            tapWatch?.Dispose();
+            input.Dispose();
             preferencesWatch.Dispose();
             keyboardsWatch.Dispose();
             appsWatch.Dispose();
@@ -470,7 +515,7 @@ public sealed class KeyboardWindow : Window
 
     private void OpenByHand()
     {
-        Log.Write("Keyboard: opened by hand");
+        Log.Detail("Keyboard: opened by hand");
         openedByHand = true;
         ShowKeyboard();
     }
@@ -478,8 +523,7 @@ public sealed class KeyboardWindow : Window
     /// <summary>The keyboard in sight, its icon gone; never activated, the focus stays where it is.</summary>
     private void ShowKeyboard()
     {
-        tapWatch?.Dispose();
-        tapWatch = null;
+        hiddenByCross = false;
         icon.Hide();
         if (!IsVisible)
         {
@@ -495,7 +539,7 @@ public sealed class KeyboardWindow : Window
             EndListening();
         }
 
-        Log.Write(asIcon ? "Keyboard: hidden as its icon" : "Keyboard: hidden");
+        Log.Detail(asIcon ? "Keyboard: hidden as its icon" : "Keyboard: hidden");
         HideEmoji();
         Hide();
         if (asIcon)
@@ -507,12 +551,11 @@ public sealed class KeyboardWindow : Window
 
     private void HideKeyboardByHand(bool asIcon)
     {
-        Log.Write("Keyboard: ✕");
+        Log.Detail("Keyboard: ✕");
         HideKeyboard(asIcon);
         if (preferences.ShowKeyboard)
         {
-            tapWatch?.Dispose();
-            tapWatch = new PointerWatch();
+            hiddenByCross = true;
         }
     }
 
@@ -525,9 +568,9 @@ public sealed class KeyboardWindow : Window
     /// </summary>
     private void ShowIfTapped()
     {
-        if (tapWatch is { } watch && !IsVisible && watch.PressedWithin(TapToCaret))
+        if (hiddenByCross && !IsVisible && input.PressedWithin(TapToCaret))
         {
-            Log.Write("Keyboard: shown, the text tapped again");
+            Log.Detail("Keyboard: shown, the text tapped again");
             openedByHand = false;
             ShowKeyboard();
         }
@@ -641,7 +684,7 @@ public sealed class KeyboardWindow : Window
         keyboardsWatch.Dispose();
         appsWatch.Dispose();
         personalWatch.Dispose();
-        Log.Write($"Keyboard: made again in its colours, {preferences.Look}{(app is null ? "" : $", typing in {app}")}");
+        Log.Detail($"Keyboard: made again in its colours, {preferences.Look}{(app is null ? "" : $", typing in {app}")}");
         Keep();
         var shown = show || IsVisible;
         dockedBar?.Undock();
@@ -744,6 +787,28 @@ public sealed class KeyboardWindow : Window
         keys.Glides = kept.Glide;
         keys.ShowsTrail = kept.GlideTrail;
         keys.DeletesSwipedWord = kept.GlideDeleteWord;
+        TakeSpelling(kept);
+    }
+
+    /// <summary>Spelling's choices given to the keys, and what they turned on loaded at once, away from the window's thread.</summary>
+    private void TakeSpelling(KeyboardPreferences kept)
+    {
+        // Off from the toolbar (writing code), nothing is corrected or offered (Applied); the choices stay as they are.
+        spellingButton.Lit = kept.SpellingOn;
+
+        // What words were found to mean may change with what is now turned on.
+        fixes.Clear();
+        var spelling = kept.Applied(keys.KeyLanguage.Code);
+        if (spelling.Accents)
+        {
+            _ = accents.Async();
+        }
+
+        if (spelling.Words)
+        {
+            _ = DictionaryFor(keys.KeyLanguage)?.Async();
+            _ = commonErrors.Async();
+        }
     }
 
     /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the window's thread.</summary>
@@ -770,7 +835,233 @@ public sealed class KeyboardWindow : Window
         }
 
         IReadOnlyList<string> listed = reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
-        return [.. personal.Starting(language, typed).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
+
+        // The user's own words first, so one being typed stays in its place as what the word may have meant comes in
+        // after it, once found; the word list's starting so only where room is left.
+        if (!fixes.TryGetValue(typed, out var found))
+        {
+            FindFixes(language, typed);
+            fixes.TryGetValue(typed, out found);
+        }
+
+        return [.. personal.Starting(language, typed).Concat(found?.Words ?? []).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
+    }
+
+    /// <summary>Spelling's accent model, loaded the first time a sentence asks for it; the one loaded before let go once the new one is, a sentence may still be reading it.</summary>
+    private readonly Loaded<AccentModel> accents = new(() => AccentModel.Downloaded ? AccentModel.Stamp : null, AccentModel.Load, old => old.Dispose());
+
+    /// <summary>Spelling's dictionaries, each language's loaded as Correct words is turned on in it, the keyboard starts in it or its first word is checked.</summary>
+    private readonly Dictionary<string, Loaded<SpellingDictionary>> dictionaries = [];
+
+    /// <summary>A language's dictionary, read the first time it is asked for; none for a language Spelling has none for.</summary>
+    private Loaded<SpellingDictionary>? DictionaryFor(StandardLanguage language)
+    {
+        var code = language.Code;
+        if (!SpellingDictionary.Has(code))
+        {
+            return null;
+        }
+
+        if (!dictionaries.TryGetValue(code, out var loaded))
+        {
+            dictionaries[code] = loaded = new(() => SpellingDictionary.DownloadedFor(code) ? SpellingDictionary.StampFor(code) : null, () => SpellingDictionary.Load(code));
+        }
+
+        return loaded;
+    }
+
+    /// <summary>The common misspellings, the keyboard's own and, turned on, the Wikipedia's; read again as that choice changes.</summary>
+    private readonly Loaded<CommonErrors> commonErrors;
+
+    /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
+    private bool Wikipedia => preferences.SpellingIn(StandardKeys.Spanish.Code).Wikipedia;
+
+    /// <summary>
+    /// The words a word typed may have meant, at most as many as the toolbar
+    /// shows, and whether it is misspelled; none for a word left as it is.
+    /// </summary>
+    private KeyboardSurface.WordFixes? Fix(StandardLanguage language, string word)
+    {
+        if (Checking(language, word) is not { } checking)
+        {
+            return null;
+        }
+
+        // Found already as it was typed, else looked for now: Hunspell's own limits keep the key waiting little.
+        if (!fixes.TryGetValue(word, out var found))
+        {
+            fixes[word] = found = Corrections(word, checking);
+        }
+
+        return found.Words.Count == 0 ? null : found with { Words = [.. found.Words.Take(WordSuggestions.Offered)] };
+    }
+
+    /// <summary>What a word is checked with, read on the window's thread: Correct words on, the language's dictionary loaded (Spanish's or English's), the common misspellings in Spanish; and whether the word is one (a list's, the accents aside, those being the accent model's; the user's; Hunspell's). None, it is not checked.</summary>
+    private sealed record Check(SpellingDictionary Spelling, CommonErrors? Common, WordSuggestions? Listed, IReadOnlyList<string> Personal, bool Known);
+
+    private Check? Checking(StandardLanguage language, string word)
+    {
+        if (!preferences.Applied(language.Code).Words || word.Length < 2 || DictionaryFor(language)?.InUse() is not { } spelling)
+        {
+            return null;
+        }
+
+        var listed = wordLists.TryGetValue(language, out var reading) && reading.IsCompletedSuccessfully ? reading.Result : null;
+        var own = personal.Words(language.Code);
+        var known = Knows(language, word) || own.Contains(word, StringComparer.OrdinalIgnoreCase) || spelling.Knows(word);
+        // The common misspellings are Spanish ones.
+        return new Check(spelling, language.Code == StandardKeys.Spanish.Code ? commonErrors.InUse() : null, listed, own, known);
+    }
+
+    /// <summary>
+    /// What the word may have meant: a common misspelling's words first, in
+    /// their list's order; then, for a word that is none, Hunspell's and the
+    /// nearest of the word list and of the user's dictionary ("bidominoi":
+    /// bidominio), the user's as common as swiping has them
+    /// (<see cref="PersonalWords.Frequency"/>). A word that is a word ("as") is only offered its
+    /// common ones, never corrected alone. Nothing for a word Hunspell fails
+    /// on, which is then not looked for again.
+    /// </summary>
+    private static KeyboardSurface.WordFixes Corrections(string word, Check checking)
+    {
+        IReadOnlyList<string> common = checking.Common?.For(word) ?? [];
+        if (checking.Known)
+        {
+            return new(common, Misspelled: false);
+        }
+
+        try
+        {
+            var listed = checking.Listed;
+            var own = checking.Personal.Where(mine => checking.Spelling.Close(word, mine)).ToList();
+            var near = own.Concat(listed?.Near(word, other => checking.Spelling.Close(word, other)) ?? []);
+            var suggested = checking.Spelling.Suggest(word, fix => own.Contains(fix) ? PersonalWords.Frequency : listed?.Frequency(fix) ?? 0, near);
+            return new([.. common.Concat(suggested).Distinct()], Misspelled: true);
+        }
+        catch (Exception failure)
+        {
+            Log.Write($"Spelling: a word's corrections could not be found: {failure.Message}");
+            return new(common, Misspelled: true);
+        }
+    }
+
+    /// <summary>What each word typed may have meant, found as it was typed, for its end; begun again past <see cref="FixesKept"/> words and as Spelling's choices change.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, KeyboardSurface.WordFixes> fixes = new();
+
+    private const int FixesKept = 200;
+
+    /// <summary>
+    /// A word being typed: what it may have meant, a word's at once (a list's
+    /// look-up), a misspelled one's away from the window's thread (Hunspell's
+    /// search) and offered once found, while that word is still being typed.
+    /// </summary>
+    private void FindFixes(StandardLanguage language, string word)
+    {
+        if (fixes.ContainsKey(word) || Checking(language, word) is not { } checking)
+        {
+            return;
+        }
+
+        if (fixes.Count > FixesKept)
+        {
+            fixes.Clear();
+        }
+
+        if (checking.Known)
+        {
+            fixes[word] = Corrections(word, checking);
+            return;
+        }
+
+        Task.Run(() => fixes[word] = Corrections(word, checking)).ContinueWith(_ =>
+        {
+            if (keys.TypingWord == word)
+            {
+                ShowSuggestions(Suggest(language, word), null);
+            }
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    /// <summary>
+    /// A misspelled word in the toolbar's middle, as a sentence's accents
+    /// are: written in its place (Autocorrect), the word as typed after ↶ in
+    /// the centre, a tap taking it back, the other words it may have meant on
+    /// each side; else those words, the likeliest in the centre after ✓. A
+    /// tap on one writes it. The next words offered take its place.
+    /// </summary>
+    private void ShowWordFix(string typed, IReadOnlyList<string> meant, bool applied)
+    {
+        suggestions.Children.Clear();
+        suggestions.ColumnDefinitions.Clear();
+        suggestions.Visibility = Visibility.Visible;
+
+        // Applied: ↶ and the word as typed in the centre, the other words it may have meant on each side.
+        string?[] shown = applied
+            ? [meant.ElementAtOrDefault(1), typed, meant.ElementAtOrDefault(2)]
+            : [meant.ElementAtOrDefault(1), meant.ElementAtOrDefault(0), meant.ElementAtOrDefault(2)];
+        for (var i = 0; i < shown.Length; i++)
+        {
+            suggestions.ColumnDefinitions.Add(new ColumnDefinition());
+            if (shown[i] is { } word)
+            {
+                var centre = i == 1;
+                var sign = centre ? (applied ? "↶ " : "✓ ") : "";
+                var place = SuggestionPlace(sign + word, bold: centre, () => keys.ReplaceWord(word));
+                Grid.SetColumn(place, i);
+                suggestions.Children.Add(place);
+            }
+        }
+    }
+
+    /// <summary>A word or a correction in the toolbar's middle, in its colours; a tap on it, where it takes one, does it and ends the toolbar's words when told to.</summary>
+    private Border SuggestionPlace(string text, bool bold, Action? taken, bool ends = true)
+    {
+        var label = new TextBlock
+        {
+            Text = text,
+            FontSize = SuggestionSize,
+            FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
+            Foreground = new SolidColorBrush(colors.Glyph),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        var place = new Border { Background = Brushes.Transparent, Child = label, Cursor = taken is null ? null : Cursors.Hand };
+        if (taken is not null)
+        {
+            place.MouseLeftButtonUp += (_, e) =>
+            {
+                taken();
+                if (ends)
+                {
+                    ShowSuggestions([], null);
+                }
+
+                e.Handled = true;
+            };
+            place.MouseLeftButtonDown += (_, e) => e.Handled = true;
+        }
+
+        return place;
+    }
+
+    /// <summary>
+    /// The accent model's sentence in the toolbar's middle, as a word offered
+    /// is: applied as it closed (Autocorrect), the words it changed as
+    /// they were typed after ↶, a tap writing the sentence again as it was;
+    /// else the words it would change after ✓, a tap writing them. The next
+    /// words offered take its place.
+    /// </summary>
+    private void ShowSentence(string original, string corrected, bool applied)
+    {
+        var shown = (applied ? original : corrected).Split(' ').Zip((applied ? corrected : original).Split(' '))
+            .Where(pair => pair.First != pair.Second).Select(pair => pair.First);
+        var place = SuggestionPlace((applied ? "↶ " : "✓ ") + string.Join(' ', shown), bold: true,
+            () => keys.ApplyCorrection(applied ? corrected : original, applied ? original : corrected, undoable: false));
+        suggestions.Children.Clear();
+        suggestions.ColumnDefinitions.Clear();
+        suggestions.Children.Add(place);
+        suggestions.Visibility = Visibility.Visible;
     }
 
     /// <summary>Whether the language's word list has the word; until the list is read, taken as known, so nothing is learnt by mistake.</summary>
@@ -808,36 +1099,8 @@ public sealed class KeyboardWindow : Window
             }
 
             var centre = i == 1;
-            var label = new TextBlock
-            {
-                Text = word,
-                FontSize = SuggestionSize,
-                FontWeight = centre ? FontWeights.Bold : FontWeights.Normal,
-                Foreground = new SolidColorBrush(colors.Glyph),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            var takes = typing || !centre;
-            var place = new Border { Background = Brushes.Transparent, Child = label, Cursor = takes ? Cursors.Hand : null };
-            if (takes)
-            {
-                place.MouseLeftButtonUp += (_, e) =>
-                {
-                    if (typing)
-                    {
-                        keys.TakeSuggestion(word);
-                    }
-                    else
-                    {
-                        keys.ReplaceSwiped(word);
-                    }
-
-                    e.Handled = true;
-                };
-                place.MouseLeftButtonDown += (_, e) => e.Handled = true;
-            }
-
+            Action? taken = typing ? () => keys.TakeSuggestion(word) : centre ? null : () => keys.ReplaceSwiped(word);
+            var place = SuggestionPlace(word, bold: centre, taken, ends: false);
             Grid.SetColumn(place, i);
             suggestions.Children.Add(place);
         }
@@ -851,9 +1114,9 @@ public sealed class KeyboardWindow : Window
     /// and its words take the place of those typed so far. While Windows may still ask whether the app can listen, the
     /// window leaves the top, so its question is not hidden under it.
     /// </summary>
-    private void Listen()
+    private async void Listen()
     {
-        if (transcribing)
+        if (transcribing || asking)
         {
             return;
         }
@@ -865,12 +1128,27 @@ public sealed class KeyboardWindow : Window
         }
 
         ShowSuggestions([], null);
+        var settings = VoiceSettings.Read();
+        var options = settings.Options(keys.KeyLanguage.Locale);
+
+        // The local network's or the remote service not answering (no network, the server down): this computer's instead.
+        if (settings.Choice != VoiceTyping.OnDevice)
+        {
+            asking = true;
+            var answers = await VoiceTyping.Answers(options.Service);
+            asking = false;
+            if (!answers)
+            {
+                Log.Write($"Voice typing: {settings.Choice} did not answer, so this computer's ia-voice listens");
+                options = options with { Service = VoiceTyping.LocalService, User = "", Password = "" };
+            }
+        }
+
         Topmost = false;
         try
         {
-            var settings = VoiceSettings.Read();
             microphone.Name = settings.Microphone;
-            voice.Start(settings.Options(keys.KeyLanguage.Locale));
+            voice.Start(options);
         }
         catch (Exception none)
         {
@@ -881,8 +1159,11 @@ public sealed class KeyboardWindow : Window
         }
 
         mic.Lit = true;
-        Notice(Texts.Get(Resource.String.voice_listening), lasting: true);
+        Notice(Texts.Get(options.Service == settings.Service ? Resource.String.voice_listening : Resource.String.voice_fallback_local), lasting: true);
     }
+
+    /// <summary>The chosen service being asked whether it answers, before listening: 🎤 again waits for it.</summary>
+    private bool asking;
 
     /// <summary>The voice's level on 🎤; the first sound heard, Windows' question answered and the window on top again.</summary>
     private void Heard(double level)
@@ -991,7 +1272,7 @@ public sealed class KeyboardWindow : Window
             : below + card.Height <= area.Bottom ? below
             : shown.Top - area.Top >= area.Bottom - shown.Bottom ? area.Top : area.Bottom - card.Height;
         movedForMenu = menu;
-        Log.Write($"Keyboard: moved out of the way of the {(menu ? "menu" : "text")} at {shown}, from {Top:0} to {cardTop - ShadowDp:0}");
+        Log.Detail($"Keyboard: moved out of the way of the {(menu ? "menu" : "text")} at {shown}, from {Top:0} to {cardTop - ShadowDp:0}");
         Top = cardTop - ShadowDp;
         Keep();
     }
@@ -1143,7 +1424,7 @@ public sealed class KeyboardWindow : Window
         }
 
         FitKeys(scale);
-        Log.Write(on ? "Keyboard: docked" : "Keyboard: floating");
+        Log.Detail(on ? "Keyboard: docked" : "Keyboard: floating");
     }
 
     /// <summary>Redimensionar, as Android's: its frame over the keyboard, the keyboard as it is kept for Cancelar; or the keyboard as it was left.</summary>
@@ -1405,7 +1686,7 @@ public sealed class KeyboardWindow : Window
         {
             var screen = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).Bounds;
             place = dockedBar.Dock(screen, height);
-            Log.Write($"Keyboard: docked bar at {place} on the screen {screen}, its work area {System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea}");
+            Log.Detail($"Keyboard: docked bar at {place} on the screen {screen}, its work area {System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(this).Handle).WorkingArea}");
         }
 
         dockedPlace = place;
@@ -1414,7 +1695,7 @@ public sealed class KeyboardWindow : Window
         (Left, Top, Width, Height) = (corner.X, corner.Y, size.X, size.Y);
         if (asked)
         {
-            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => Log.Write($"Keyboard: docked window at {Left:0},{Top:0} {Width:0}x{Height:0}"));
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => Log.Detail($"Keyboard: docked window at {Left:0},{Top:0} {Width:0}x{Height:0}"));
         }
     }
 
@@ -1433,6 +1714,8 @@ public sealed class KeyboardWindow : Window
         keys.Glides = preferences.Glide;
         keys.ShowsTrail = preferences.GlideTrail;
         keys.DeletesSwipedWord = preferences.GlideDeleteWord;
+        Log.Detailed = preferences.DetailedLog;
+        TakeSpelling(preferences);
         FitKeys(state?.RowScale ?? 1);
         if (state is not null && area.Contains(new Point(state.Left + 40, state.Top + 40)))
         {

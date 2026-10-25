@@ -490,6 +490,9 @@ public sealed class KeyPanel
     /// <summary>The text just before the caret, to tell whether a swiped word needs a space before it.</summary>
     public Func<string?>? TextBeforeCaret { get; set; }
 
+    /// <summary>The text just before the caret, the sentence being written, for Spelling to mend it (<see cref="SpanishMarks"/>).</summary>
+    public Func<string?>? RecentText { get; set; }
+
     /// <summary>
     /// The text right before the caret, so many characters, replaced with
     /// another in one edit of the field: ⌫ keys and the text typed after
@@ -2501,6 +2504,7 @@ public sealed class KeyPanel
         sounds = kept.GetBoolean(KeyPlusPreferences.SoundKey, false);
         showsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
         deletesSwipedWord = kept.GetBoolean(KeyPlusPreferences.SwipeDeleteWordKey, true);
+        openMarks = kept.GetBoolean(KeyPlusPreferences.SpellingOpenMarkKey, false);
         if (standard is not null)
         {
             standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
@@ -2517,6 +2521,9 @@ public sealed class KeyPanel
 
     /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed.</summary>
     private bool deletesSwipedWord = true;
+
+    /// <summary>Spelling's opening mark put at a sentence's start on closing it with ? or ! (<see cref="SpanishMarks"/>).</summary>
+    private bool openMarks;
 
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen, the kind of keyboard in sight kept in it (Estándar, Estándar PC); where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
     private void NextLanguage()
@@ -3102,6 +3109,11 @@ public sealed class KeyPanel
     {
         if (edited is null)
         {
+            if (text is "?" or "!")
+            {
+                MendSentence(text[0]);
+            }
+
             typeOut(text);
             return;
         }
@@ -4000,6 +4012,22 @@ public sealed class KeyPanel
 
     /// <summary>The last swipe's language and the word it read first, before what was learnt put another in its place.</summary>
     private (StandardLanguage Language, string Word)? swipeRead;
+
+    /// <summary>
+    /// A sentence about to be closed with ? or !, in Spanish, mended as
+    /// Spelling has it (<see cref="SpanishMarks.Opened"/>): its opening
+    /// mark put at its start, written again in the field from where it
+    /// begins.
+    /// </summary>
+    private void MendSentence(char closing)
+    {
+        if (openMarks && (standard?.Language ?? StandardKeys.Spanish) == StandardKeys.Spanish
+            && ReplaceBeforeCaret is { } replace && RecentText?.Invoke() is { } before
+            && SpanishMarks.Opened(before, closing) is { } mended)
+        {
+            replace(mended.Replaced, mended.Text);
+        }
+    }
 
     /// <summary>A word typed letter by letter ended, told with the language of the keyboard in sight; a swiped word is not one.</summary>
     private void EndWord()

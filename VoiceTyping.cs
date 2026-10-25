@@ -85,6 +85,35 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
         return host.Contains(':') ? address : $"{address}:{Port}";
     }
 
+    /// <summary>How long a service is waited for before a dictation is read locally instead.</summary>
+    private static readonly TimeSpan AnswerWithin = TimeSpan.FromSeconds(1.5);
+
+    private static readonly HttpClient Asking = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = AnswerWithin };
+
+    /// <summary>
+    /// Whether a service answers at all, before a dictation is sent to it:
+    /// any answer, a proxy's asking to sign in too, is one; none within
+    /// <see cref="AnswerWithin"/> (no network, the server down) and the
+    /// keyboard listens locally instead.
+    /// </summary>
+    public static async Task<bool> Answers(string service)
+    {
+        if (!Uri.TryCreate(service, UriKind.Absolute, out var address))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var answer = await Asking.GetAsync(address, HttpCompletionOption.ResponseHeadersRead);
+            return true;
+        }
+        catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>The level (0 to 1) taken for speech, IA-BotMsgs' chat's.</summary>
     public const double SpeakingLevel = 0.12;
 

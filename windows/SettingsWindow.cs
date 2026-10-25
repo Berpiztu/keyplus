@@ -55,6 +55,7 @@ public sealed class SettingsWindow : Window
             (Texts.Get(Resource.String.theme), ThemePage),
             (Texts.Get(Resource.String.glide), GlidePage),
             (Texts.Get(Resource.String.dictionary), DictionaryPage),
+            (Texts.Get(Resource.String.spelling), SpellingPage),
             (Texts.Get(Resource.String.voice_typing), VoicePage),
             (Texts.Get(Resource.String.troubleshooting), TroubleshootingPage),
             (Texts.Get(Resource.String.about), AboutPage),
@@ -78,6 +79,11 @@ public sealed class SettingsWindow : Window
         open.Click += (_, _) => System.Diagnostics.Process.Start(Environment.ProcessPath!);
         DockPanel.SetDock(open, Dock.Bottom);
         side.Children.Add(open);
+
+        // Over the pages' list, as Android's app has it: the box to try the keys in.
+        var trying = TryBox();
+        DockPanel.SetDock(trying, Dock.Top);
+        side.Children.Add(trying);
         side.Children.Add(list);
 
         var panes = new DockPanel();
@@ -87,24 +93,127 @@ public sealed class SettingsWindow : Window
         Content = panes;
     }
 
+    /// <summary>The lines the box to try the keys in shows, as Android's: room for the arrows, Home, End and the pages to move in.</summary>
+    private const int TryLines = 3;
+
+    /// <summary>
+    /// Over the pages' list, as Android's app has it: a box to try the keys in, and
+    /// what Spelling does, without another program. Its size is fixed: a long
+    /// text scrolls inside it and nothing under it moves.
+    /// </summary>
+    private static FrameworkElement TryBox()
+    {
+        var box = new TextBox
+        {
+            AcceptsReturn = true,
+            AcceptsTab = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinLines = TryLines,
+            MaxLines = TryLines,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            FontSize = 16,
+        };
+
+        // WPF's text box has no hint of its own: Android's words over it while it is empty.
+        var hint = new TextBlock
+        {
+            Text = Texts.Get(Resource.String.try_keys),
+            FontSize = 16,
+            Opacity = 0.6,
+            IsHitTestVisible = false,
+            Margin = new Thickness(12, 7, 0, 0),
+        };
+        box.TextChanged += (_, _) => hint.Visibility = box.Text.Length == 0 ? Visibility.Visible : Visibility.Hidden;
+        var place = new Grid { Margin = new Thickness(MarginDp / 2, MarginDp / 2, MarginDp / 2, 0) };
+        place.Children.Add(box);
+        place.Children.Add(hint);
+        return place;
+    }
+
     /// <summary>A page in the window's right, scrolling where it is taller.</summary>
     private void ShowPage(FrameworkElement shown) => page.Content = new ScrollViewer { Content = shown, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
     /// <summary>The settings started as a program of their own; where they run already, that one comes to the front.</summary>
     public static void Start() => System.Diagnostics.Process.Start(Environment.ProcessPath!, Argument);
 
-    /// <summary>Idiomas: the keyboard's languages, the one in use marked; one chosen, the keyboard types in it, as 🌐 changes it.</summary>
-    private static FrameworkElement LanguagesPage()
+    /// <summary>
+    /// Idiomas: the keyboard's languages, a line each: the one typed in
+    /// marked (one chosen, the keyboard types in it, as 🌐 changes it), and ›
+    /// opening the language's own page (<see cref="LanguagePage"/>), its
+    /// Spelling and its words; a language added comes with its line.
+    /// </summary>
+    private FrameworkElement LanguagesPage()
     {
         var preferences = KeyboardPreferences.Read();
         var form = Form(Resource.String.languages);
+
+        // A grid, so every › stands in one column whatever the names' lengths.
+        var lines = new Grid();
+        lines.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        lines.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         foreach (var language in StandardKeys.Languages)
         {
-            var option = new RadioButton { Content = language.Name, IsChecked = (preferences.Language ?? StandardKeys.Spanish.Code) == language.Code, GroupName = "language" };
+            var row = lines.RowDefinitions.Count;
+            lines.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var option = new RadioButton { Content = language.Name, IsChecked = (preferences.Language ?? StandardKeys.Spanish.Code) == language.Code, GroupName = "language", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, FieldGapDp / 2) };
             option.Checked += (_, _) => (preferences = KeyboardPreferences.Read() with { Language = language.Code }).Keep();
-            form.Children.Add(option);
+            var open = new Button { Content = "›", FontWeight = FontWeights.Bold, Padding = new Thickness(12, 0, 12, 0), Margin = new Thickness(FieldGapDp / 2, 0, 0, FieldGapDp / 2) };
+            open.Click += (_, _) => ShowPage(LanguagePage(language));
+            Grid.SetRow(option, row);
+            Grid.SetRow(open, row);
+            Grid.SetColumn(open, 1);
+            lines.Children.Add(option);
+            lines.Children.Add(open);
         }
 
+        form.Children.Add(lines);
+        return form;
+    }
+
+    /// <summary>
+    /// A language's own page, opened from Languages (← back to them): its
+    /// Spelling, only what Spelling has for it (<see cref="SpellingChoices"/>),
+    /// a choice that fetches files fetching them as it is turned on, its line
+    /// under it saying how much while it does; and its words, your
+    /// dictionary's (<see cref="WordsPart"/>).
+    /// </summary>
+    private FrameworkElement LanguagePage(StandardLanguage language)
+    {
+        var code = language.Code;
+        var form = new StackPanel { Margin = new Thickness(MarginDp) };
+        var back = new Button { Content = "←", Padding = new Thickness(10, 0, 10, 0), Margin = new Thickness(0, 0, FieldGapDp / 2, 0), VerticalAlignment = VerticalAlignment.Center };
+        back.Click += (_, _) => ShowPage(LanguagesPage());
+        var heading = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, FieldGapDp) };
+        heading.Children.Add(back);
+        heading.Children.Add(new TextBlock { Text = language.Name, FontSize = 20, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        form.Children.Add(heading);
+        form.Children.Add(Section(Resource.String.spelling));
+        foreach (var choice in SpellingChoices(code))
+        {
+            var box = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(KeyboardPreferences.Read().SpellingIn(code)) };
+            var state = choice.Fetches is { } fetched ? new TextBlock { Text = fetched.Downloaded() ? Texts.Get(fetched.Done) : "", Height = 20 } : null;
+            box.Click += async (_, _) =>
+            {
+                // Off until turned on, and then fetched once: the keyboard never carries them.
+                if (choice.Fetches is { } fetches && state is not null && box.IsChecked == true && !fetches.Downloaded())
+                {
+                    box.IsEnabled = false;
+                    box.IsChecked = await FetchAsync(fetches, state);
+                    box.IsEnabled = true;
+                }
+
+                var now = KeyboardPreferences.Read();
+                now.WithSpelling(code, choice.Set(now.SpellingIn(code), box.IsChecked == true)).Keep();
+            };
+            form.Children.Add(FieldSaying(null, box, choice.Summary));
+            if (state is not null)
+            {
+                form.Children.Add(state);
+            }
+        }
+
+        form.Children.Add(Section(Resource.String.dictionary));
+        form.Children.Add(WordsPart(code));
         return form;
     }
 
@@ -514,6 +623,132 @@ public sealed class SettingsWindow : Window
         return button;
     }
 
+    /// <summary>
+    /// Spelling, what goes for every language: all of it on and off at once
+    /// (the toolbar's button too), where each language's is (its page under
+    /// Languages), Download again, which fetches again whole what every
+    /// language's choices turned on fetched, and that on Windows only what the
+    /// keys typed whole is corrected.
+    /// </summary>
+    private static FrameworkElement SpellingPage()
+    {
+        var preferences = KeyboardPreferences.Read();
+        var form = Form(Resource.String.spelling);
+        var correcting = new CheckBox { Content = Texts.Get(Resource.String.spelling_on), IsChecked = preferences.SpellingOn };
+        correcting.Click += (_, _) => (KeyboardPreferences.Read() with { SpellingOn = correcting.IsChecked == true }).Keep();
+        form.Children.Add(Field(null, correcting, Resource.String.spelling_on_summary));
+        form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.spelling_by_language), TextWrapping = TextWrapping.Wrap }, null));
+
+        // What the languages' choices turned on fetched, each once, one after another in one line; with nothing turned on, hidden in its place.
+        var turnedOn = StandardKeys.Languages
+            .SelectMany(language => SpellingChoices(language.Code)
+                .Where(choice => choice.Fetches is not null && choice.Get(preferences.SpellingIn(language.Code)))
+                .Select(choice => choice.Fetches!))
+            .DistinctBy(fetched => fetched.Named)
+            .ToList();
+        var again = new Button
+        {
+            Content = Texts.Get(Resource.String.spelling_download_again),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(12, 2, 12, 2),
+            Visibility = turnedOn.Count > 0 ? Visibility.Visible : Visibility.Hidden,
+        };
+        var state = new TextBlock { Height = 20 };
+        again.Click += async (_, _) =>
+        {
+            again.IsEnabled = false;
+            foreach (var fetched in turnedOn)
+            {
+                await FetchAsync(fetched, state);
+            }
+
+            again.IsEnabled = true;
+        };
+        form.Children.Add(Field(null, again, Resource.String.spelling_download_again_summary));
+        form.Children.Add(state);
+        form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.spelling_windows_note), TextWrapping = TextWrapping.Wrap }, null));
+        return form;
+    }
+
+    /// <summary>What a Spelling choice fetches, never carried by the app: how it is named in the log, whether it is here, how it is fetched, and its line's words while it is, once it is and when it could not be.</summary>
+    private sealed record Fetched(string Named, Func<bool> Downloaded, Func<IProgress<(long Done, long Total)>, CancellationToken, Task> Download, int Downloading, int Done, int Failed);
+
+    private static Fetched DictionaryOf(string language) => new(
+        $"the {language} dictionary", () => SpellingDictionary.DownloadedFor(language), (progress, cancel) => SpellingDictionary.DownloadAsync(language, progress, cancel),
+        Resource.String.spelling_dictionary_downloading, Resource.String.spelling_dictionary_downloaded, Resource.String.spelling_dictionary_download_failed);
+
+    private static readonly Fetched Model = new(
+        "the accent model", () => AccentModel.Downloaded, AccentModel.DownloadAsync,
+        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
+
+    private static readonly Fetched WikipediaList = new(
+        "the Wikipedia's common misspellings", () => CommonErrors.Downloaded, CommonErrors.DownloadAsync,
+        Resource.String.spelling_wikipedia_downloading, Resource.String.spelling_wikipedia_downloaded, Resource.String.spelling_wikipedia_download_failed);
+
+    /// <summary>A language's Spelling choice: its name and what it says, what it fetches if anything, and how it reads and changes the language's Spelling.</summary>
+    private sealed record SpellingChoice(int Label, string Summary, Fetched? Fetches, Func<LanguageSpelling, bool> Get, Func<LanguageSpelling, bool, LanguageSpelling> Set);
+
+    /// <summary>
+    /// What Spelling has for a language, in its page's order: its words where
+    /// it has a dictionary, named with its size; Spanish's common
+    /// misspellings and its accents; Autocorrect; Spanish's ¿ and ¡.
+    /// </summary>
+    private static IEnumerable<SpellingChoice> SpellingChoices(string language)
+    {
+        var spanish = LanguageSpelling.Offers(language);
+        if (SpellingDictionary.Has(language))
+        {
+            var named = Texts.Get(language == StandardKeys.Spanish.Code ? Resource.String.spelling_dictionary_es : Resource.String.spelling_dictionary_en);
+            var size = SpellingDictionary.MegabytesFor(language).ToString("0.0#", CultureInfo.CurrentCulture);
+            yield return new(Resource.String.spelling_words, Texts.Get(Resource.String.spelling_words_summary, named, size), DictionaryOf(language),
+                spelling => spelling.Words, (spelling, on) => spelling with { Words = on });
+        }
+
+        if (spanish)
+        {
+            yield return new(Resource.String.spelling_wikipedia, Texts.Get(Resource.String.spelling_wikipedia_summary), WikipediaList,
+                spelling => spelling.Wikipedia, (spelling, on) => spelling with { Wikipedia = on });
+            yield return new(Resource.String.spelling_accent_closing, Texts.Get(Resource.String.spelling_accent_closing_summary), Model,
+                spelling => spelling.Accents, (spelling, on) => spelling with { Accents = on });
+        }
+
+        yield return new(Resource.String.spelling_autocorrect, Texts.Get(Resource.String.spelling_autocorrect_summary), null,
+            spelling => spelling.Autocorrect, (spelling, on) => spelling with { Autocorrect = on });
+        if (spanish)
+        {
+            yield return new(Resource.String.spelling_open_mark, Texts.Get(Resource.String.spelling_open_mark_summary), null,
+                spelling => spelling.OpenMark, (spelling, on) => spelling with { OpenMark = on });
+        }
+    }
+
+    /// <summary>
+    /// What a choice fetches fetched, how much shown in its line as it goes;
+    /// a failure in a window and the log, the files there before kept until
+    /// new ones are checked. Whether they are on this computer now.
+    /// </summary>
+    private static async Task<bool> FetchAsync(Fetched what, TextBlock state)
+    {
+        try
+        {
+            await what.Download(new Progress<(long Done, long Total)>(at =>
+                state.Text = Texts.Get(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)))), CancellationToken.None);
+            state.Text = Texts.Get(what.Done);
+            return true;
+        }
+        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or System.IO.InvalidDataException or TaskCanceledException)
+        {
+            Log.Write($"Spelling: {what.Named} could not be downloaded: {failure.Message}");
+            state.Text = what.Downloaded() ? Texts.Get(what.Done) : "";
+            MessageBox.Show(Texts.Get(what.Failed, failure.Message), Texts.Get(Resource.String.spelling), MessageBoxButton.OK, MessageBoxImage.Warning);
+            return what.Downloaded();
+        }
+    }
+
+    private static string Megabytes(long bytes) => (bytes / 1_000_000.0).ToString("0.0", CultureInfo.CurrentCulture);
+
+    /// <summary>How tall Troubleshooting's log viewer is, whatever the log holds.</summary>
+    private const double LogViewerDp = 220;
+
     /// <summary>How tall the dictionary's list of words is, whatever it holds, so nothing under it moves.</summary>
     private const double WordListDp = 110;
 
@@ -525,25 +760,70 @@ public sealed class SettingsWindow : Window
         (byte)((KeyboardLooks.DeleteRed >> 24) & 0xFF), (byte)((KeyboardLooks.DeleteRed >> 16) & 0xFF), (byte)((KeyboardLooks.DeleteRed >> 8) & 0xFF), (byte)(KeyboardLooks.DeleteRed & 0xFF)));
 
     /// <summary>
-    /// Dictionary (<see cref="PersonalWords"/>): by language, your words in a
-    /// box of one size that scrolls, each with ✏ that writes it again and a
-    /// red ✕ that deletes it on its line; a word added with Add or Enter; learning new words as you
-    /// type and from the words chosen for a swipe, each a choice; the words
-    /// chosen forgotten. Each change kept at once, the keyboard taking it
-    /// through the file.
+    /// Dictionary (<see cref="PersonalWords"/>), what goes for every language:
+    /// learning new words as you type and from the words chosen for a swipe,
+    /// each a choice; the words chosen forgotten; every language's words
+    /// exported; and where each language's words are (its page under
+    /// Languages, <see cref="WordsPart"/>). Each change kept at once, the
+    /// keyboard taking it through the file.
     /// </summary>
     private static FrameworkElement DictionaryPage()
     {
         var personal = new PersonalWords(KeyboardWindow.PersonalFile);
         personal.Reload();
         var form = Form(Resource.String.dictionary);
-        var languages = new ComboBox();
-        foreach (var language in StandardKeys.Languages)
+        var typed = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_typed), IsChecked = personal.LearnTyped };
+        var chosen = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_chosen), IsChecked = personal.LearnChosen };
+        typed.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
+        chosen.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
+        var forget = new Button { Content = Texts.Get(Resource.String.dictionary_forget_chosen), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        forget.Click += (_, _) => personal.ForgetChosen();
+        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
+        export.Click += (_, _) =>
         {
-            languages.Items.Add(language.Name);
-        }
+            var save = new Microsoft.Win32.SaveFileDialog { FileName = $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
+            if (save.ShowDialog() != true)
+            {
+                return;
+            }
 
-        languages.SelectedIndex = Math.Max(0, StandardKeys.Languages.ToList().IndexOf(KeyboardPreferences.Read().TypingLanguage));
+            try
+            {
+                System.IO.File.WriteAllText(save.FileName, personal.Export());
+                MessageBox.Show(Texts.Get(Resource.String.dictionary_exported, personal.Count), Texts.Get(Resource.String.dictionary));
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
+            {
+                DictionaryFailed(failure);
+            }
+        };
+
+        form.Children.Add(Field(null, typed, Resource.String.dictionary_learn_typed_summary));
+        form.Children.Add(Field(null, chosen, Resource.String.dictionary_learn_chosen_summary));
+        form.Children.Add(Field(null, forget, null));
+        form.Children.Add(Field(null, export, Resource.String.dictionary_export_summary));
+        form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.dictionary_by_language), TextWrapping = TextWrapping.Wrap }, null));
+        return form;
+    }
+
+    /// <summary>A dictionary's file that could not be read or written, or what it holds: told in a window and written to the log.</summary>
+    private static void DictionaryFailed(Exception failure)
+    {
+        Log.Write($"Dictionary: the file could not be read or written: {failure.Message}");
+        MessageBox.Show(Texts.Get(Resource.String.dictionary_file_failed, failure.Message), Texts.Get(Resource.String.dictionary), MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>
+    /// A language's words, on its page: a word added with Add or Enter; your
+    /// words in a box of one size that scrolls, each with ✏ that writes it
+    /// again and a red ✕ that deletes it on its line; and a dictionary
+    /// imported, its words without a language of their own into this one.
+    /// </summary>
+    private static FrameworkElement WordsPart(string code)
+    {
+        var personal = new PersonalWords(KeyboardWindow.PersonalFile);
+        personal.Reload();
+        var part = new StackPanel();
         var lines = new StackPanel();
         var words = new Border
         {
@@ -554,7 +834,6 @@ public sealed class SettingsWindow : Window
         };
         var word = new TextBox { VerticalContentAlignment = VerticalAlignment.Center };
         var add = new Button { Content = Texts.Get(Resource.String.dictionary_add), Padding = new Thickness(12, 2, 12, 2), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
-        string Code() => StandardKeys.Languages[languages.SelectedIndex].Code;
 
         static Button LineButton(string sign, Brush colour) => new()
         {
@@ -572,12 +851,12 @@ public sealed class SettingsWindow : Window
         void Fill()
         {
             lines.Children.Clear();
-            foreach (var kept in personal.Words(Code()))
+            foreach (var kept in personal.Words(code))
             {
                 var delete = LineButton("✕", DeleteRed);
                 delete.Click += (_, _) =>
                 {
-                    personal.Remove(Code(), kept);
+                    personal.Remove(code, kept);
                     Fill();
                 };
                 var edit = LineButton("✏", SystemColors.ControlTextBrush);
@@ -590,7 +869,7 @@ public sealed class SettingsWindow : Window
                     {
                         if (e.Key == System.Windows.Input.Key.Enter)
                         {
-                            personal.Rename(Code(), kept, editing.Text);
+                            personal.Rename(code, kept, editing.Text);
                             Fill();
                             e.Handled = true;
                         }
@@ -616,12 +895,11 @@ public sealed class SettingsWindow : Window
 
         void Add()
         {
-            personal.Add(Code(), word.Text);
+            personal.Add(code, word.Text);
             word.Clear();
             Fill();
         }
 
-        languages.SelectionChanged += (_, _) => Fill();
         add.Click += (_, _) => Add();
         word.KeyDown += (_, e) =>
         {
@@ -629,39 +907,6 @@ public sealed class SettingsWindow : Window
             {
                 Add();
                 e.Handled = true;
-            }
-        };
-        var typed = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_typed), IsChecked = personal.LearnTyped };
-        var chosen = new CheckBox { Content = Texts.Get(Resource.String.dictionary_learn_chosen), IsChecked = personal.LearnChosen };
-        typed.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
-        chosen.Click += (_, _) => personal.SetLearning(typed.IsChecked == true, chosen.IsChecked == true);
-        var forget = new Button { Content = Texts.Get(Resource.String.dictionary_forget_chosen), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
-        forget.Click += (_, _) => personal.ForgetChosen();
-
-        // A failure, in the file or in what it holds, told in a window and written to the log.
-        void Failed(Exception failure)
-        {
-            Log.Write($"Dictionary: the file could not be read or written: {failure.Message}");
-            MessageBox.Show(Texts.Get(Resource.String.dictionary_file_failed, failure.Message), Texts.Get(Resource.String.dictionary), MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-
-        var export = new Button { Content = Texts.Get(Resource.String.dictionary_export), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
-        export.Click += (_, _) =>
-        {
-            var save = new Microsoft.Win32.SaveFileDialog { FileName = $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
-            if (save.ShowDialog() != true)
-            {
-                return;
-            }
-
-            try
-            {
-                System.IO.File.WriteAllText(save.FileName, personal.Export());
-                MessageBox.Show(Texts.Get(Resource.String.dictionary_exported, personal.Count), Texts.Get(Resource.String.dictionary));
-            }
-            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
-            {
-                Failed(failure);
             }
         };
         var import = new Button { Content = Texts.Get(Resource.String.dictionary_import), Padding = new Thickness(12, 2, 12, 2), HorizontalAlignment = HorizontalAlignment.Left };
@@ -675,13 +920,13 @@ public sealed class SettingsWindow : Window
 
             try
             {
-                var added = personal.Import(System.IO.File.ReadAllText(open.FileName), Code());
+                var added = personal.Import(System.IO.File.ReadAllText(open.FileName), code);
                 Fill();
                 MessageBox.Show(Texts.Get(Resource.String.dictionary_imported, added), Texts.Get(Resource.String.dictionary));
             }
             catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException or System.Text.Json.JsonException or System.IO.InvalidDataException)
             {
-                Failed(failure);
+                DictionaryFailed(failure);
             }
         };
 
@@ -689,17 +934,11 @@ public sealed class SettingsWindow : Window
         DockPanel.SetDock(add, Dock.Right);
         adding.Children.Add(add);
         adding.Children.Add(word);
-        // The choices first, the words last: a list at the top would push them out of the page.
-        form.Children.Add(Field(null, typed, Resource.String.dictionary_learn_typed_summary));
-        form.Children.Add(Field(null, chosen, Resource.String.dictionary_learn_chosen_summary));
-        form.Children.Add(Field(null, forget, null));
-        form.Children.Add(Field(null, export, Resource.String.dictionary_export_summary));
-        form.Children.Add(Field(null, import, Resource.String.dictionary_import_summary));
-        form.Children.Add(Field(Resource.String.dictionary_language, languages, null));
-        form.Children.Add(Field(Resource.String.dictionary_words, adding, Resource.String.dictionary_words_summary));
-        form.Children.Add(Field(null, words, null));
+        part.Children.Add(Field(Resource.String.dictionary_words, adding, Resource.String.dictionary_words_summary));
+        part.Children.Add(Field(null, words, null));
+        part.Children.Add(Field(null, import, Resource.String.dictionary_import_summary));
         Fill();
-        return form;
+        return part;
     }
 
     /// <summary>Glide typing, as Android's: swiping over the letters, its trail and ⌫ deleting a swiped word whole; FUTO Swipe's notice in sight, as its licence asks.</summary>
@@ -740,6 +979,47 @@ public sealed class SettingsWindow : Window
         vscode.Children.Add(done);
         form.Children.Add(Field(Resource.String.troubleshooting_vscode, vscode, null));
         form.Children.Add(Field(Resource.String.troubleshooting_log, new TextBox { Text = Log.File, IsReadOnly = true }, Resource.String.troubleshooting_log_summary));
+        var detailed = new CheckBox { Content = Texts.Get(Resource.String.troubleshooting_detailed_log), IsChecked = KeyboardPreferences.Read().DetailedLog };
+        detailed.Click += (_, _) =>
+        {
+            Log.Detailed = detailed.IsChecked == true;
+            (KeyboardPreferences.Read() with { DetailedLog = Log.Detailed }).Keep();
+        };
+        form.Children.Add(Field(null, detailed, Resource.String.troubleshooting_detailed_log_summary));
+
+        // What the log keeps, word for word, in a box of one size: what would be sent is what is seen.
+        var viewer = new TextBox
+        {
+            IsReadOnly = true,
+            Height = LogViewerDp,
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 11,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        void ShowLog()
+        {
+            viewer.Text = Log.Read();
+            viewer.ScrollToEnd();
+        }
+
+        var refresh = new Button { Content = Texts.Get(Resource.String.troubleshooting_log_refresh), Padding = new Thickness(12, 2, 12, 2) };
+        refresh.Click += (_, _) => ShowLog();
+        var clear = new Button { Content = Texts.Get(Resource.String.troubleshooting_log_clear), Padding = new Thickness(12, 2, 12, 2), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        clear.Click += (_, _) =>
+        {
+            Log.Clear();
+            ShowLog();
+        };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, FieldGapDp / 4, 0, 0) };
+        buttons.Children.Add(refresh);
+        buttons.Children.Add(clear);
+        var logPart = new StackPanel();
+        logPart.Children.Add(viewer);
+        logPart.Children.Add(buttons);
+        form.Children.Add(Field(Resource.String.troubleshooting_log_view, logPart, Resource.String.troubleshooting_log_view_summary));
+        ShowLog();
         return form;
     }
 
@@ -776,9 +1056,18 @@ public sealed class SettingsWindow : Window
         var form = Form(Resource.String.preferences);
         var showing = new StackPanel();
 
+        // Every change made on what is kept now: the copy read as the page opened would undo what another page changed since.
         void Change(KeyboardPreferences changed)
         {
-            preferences = changed;
+            var now = KeyboardPreferences.Read();
+            preferences = now with
+            {
+                ShowKeyboard = changed.ShowKeyboard,
+                FocusLost = changed.FocusLost,
+                KeyboardIcon = changed.KeyboardIcon,
+                AvoidCaret = changed.AvoidCaret,
+                AvoidMenus = changed.AvoidMenus,
+            };
             preferences.Keep();
             Showing();
         }
@@ -925,7 +1214,11 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>A field: its name over it, if it has one, and, under it, what it does.</summary>
-    private static FrameworkElement Field(int? name, FrameworkElement control, int? hint, double gapAbove = 0)
+    private static FrameworkElement Field(int? name, FrameworkElement control, int? hint, double gapAbove = 0) =>
+        FieldSaying(name, control, hint is { } said ? Texts.Get(said) : null, gapAbove);
+
+    /// <summary>A field whose hint is a text made for it (one with a language's dictionary named in it).</summary>
+    private static FrameworkElement FieldSaying(int? name, FrameworkElement control, string? hint, double gapAbove = 0)
     {
         var field = new StackPanel { Margin = new Thickness(0, gapAbove, 0, gapAbove > 0 ? 0 : FieldGapDp) };
         if (name is { } named)
@@ -936,9 +1229,13 @@ public sealed class SettingsWindow : Window
         field.Children.Add(control);
         if (hint is { } said)
         {
-            field.Children.Add(new TextBlock { Text = Texts.Get(said), Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), FontSize = 12 });
+            field.Children.Add(new TextBlock { Text = said, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0), FontSize = 12 });
         }
 
         return field;
     }
+
+    /// <summary>A part of a page under its own heading: Spelling and Dictionary on a language's page.</summary>
+    private static TextBlock Section(int name) =>
+        new() { Text = Texts.Get(name), FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, FieldGapDp / 2, 0, FieldGapDp / 2) };
 }

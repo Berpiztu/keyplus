@@ -82,6 +82,7 @@ namespace Berpiztu.KeyPlus
             public const int ic_grid_floating = 25;
             public const int ic_grid_floating_off = 26;
             public const int ic_tool_resize = 27;
+            public const int ic_tool_spellcheck = 28;
         }
 
         public static class String
@@ -205,9 +206,45 @@ namespace Berpiztu.KeyPlus
             public const int dictionary_exported = 134;
             public const int dictionary_imported = 135;
             public const int dictionary_file_failed = 136;
+            public const int spelling = 137;
+            public const int spelling_accent_closing = 140;
+            public const int spelling_accent_closing_summary = 141;
+            public const int spelling_open_mark = 142;
+            public const int spelling_open_mark_summary = 143;
+            public const int spelling_windows_note = 144;
+            public const int spelling_downloading = 145;
+            public const int spelling_downloaded = 146;
+            public const int spelling_download_failed = 147;
+            public const int spelling_autocorrect = 148;
+            public const int spelling_autocorrect_summary = 149;
+            public const int spelling_words = 158;
+            public const int spelling_words_summary = 159;
+            public const int spelling_dictionary_downloading = 160;
+            public const int spelling_dictionary_downloaded = 161;
+            public const int spelling_dictionary_download_failed = 162;
+            public const int spelling_download_again = 163;
+            public const int spelling_download_again_summary = 164;
+            public const int try_keys = 165;
+            public const int spelling_wikipedia = 166;
+            public const int spelling_wikipedia_summary = 167;
+            public const int spelling_wikipedia_downloading = 168;
+            public const int spelling_wikipedia_downloaded = 169;
+            public const int spelling_wikipedia_download_failed = 170;
+            public const int spelling_on = 171;
+            public const int spelling_on_summary = 172;
+            public const int voice_fallback_local = 173;
+            public const int spelling_by_language = 174;
+            public const int spelling_dictionary_es = 175;
+            public const int spelling_dictionary_en = 176;
+            public const int dictionary_by_language = 177;
+            public const int troubleshooting_detailed_log = 152;
+            public const int troubleshooting_detailed_log_summary = 153;
+            public const int troubleshooting_log_view = 154;
+            public const int troubleshooting_log_view_summary = 155;
+            public const int troubleshooting_log_refresh = 156;
+            public const int troubleshooting_log_clear = 157;
             public const int glide_delete_word = 117;
             public const int glide_delete_word_summary = 118;
-            public const int dictionary_language = 119;
             public const int dictionary_words = 120;
             public const int dictionary_words_summary = 121;
             public const int dictionary_add = 122;

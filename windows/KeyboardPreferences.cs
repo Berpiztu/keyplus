@@ -25,6 +25,22 @@ namespace Berpiztu.KeyPlus;
 /// <summary>Personalizado's keyboard and accent colours.</summary>
 public sealed record KeyboardColors(string? KeyColor, string? AccentColor);
 
+/// <summary>
+/// A language's Spelling, chosen on its page under Languages: its words
+/// corrected (its dictionary), what is corrected written at once
+/// (Autocorrect), and, where the language has them
+/// (<see cref="Offers"/>), its accents by the model, the Wikipedia's common
+/// misspellings and the opening marks.
+/// </summary>
+public sealed record LanguageSpelling(bool Words = false, bool Autocorrect = true, bool Accents = false, bool Wikipedia = false, bool OpenMark = false)
+{
+    /// <summary>Nothing corrected: Spelling off from the toolbar.</summary>
+    public static LanguageSpelling Off { get; } = new(Words: false, Autocorrect: false);
+
+    /// <summary>What Spelling has for a language beyond its words and Autocorrect: Spanish its accent model, the Wikipedia's list and ¿ ¡; another, nothing more.</summary>
+    public static bool Offers(string language) => language == StandardKeys.Spanish.Code;
+}
+
 public sealed record KeyboardPreferences(
     bool ShowKeyboard = true,
     string FocusLost = KeyboardPreferences.FocusLostHide,
@@ -36,6 +52,14 @@ public sealed record KeyboardPreferences(
     bool Glide = true,
     bool GlideTrail = true,
     bool GlideDeleteWord = true,
+    bool SpellingOn = true,
+    // Spelling as an older file had it, one for every language: read for a language not chosen yet (SpellingIn).
+    bool SpellingAccentClosing = false,
+    bool SpellingAutocorrect = true,
+    bool DetailedLog = false,
+    bool SpellingOpenMark = false,
+    bool SpellingWords = false,
+    bool SpellingWikipedia = false,
     string? Keyboard = null,
     Dictionary<string, string>? Chosen = null,
     bool Docked = false,
@@ -43,8 +67,27 @@ public sealed record KeyboardPreferences(
     string? KeyColor = null,
     string? AccentColor = null,
     KeyboardColors? Before = null,
-    bool PerApp = false)
+    bool PerApp = false,
+    Dictionary<string, LanguageSpelling>? Spelling = null)
 {
+    /// <summary>
+    /// A language's Spelling (<see cref="LanguageSpelling"/>); one not chosen
+    /// yet as an older file had them for every language, Spanish's whole and
+    /// another's words and Autocorrect.
+    /// </summary>
+    public LanguageSpelling SpellingIn(string language) =>
+        Spelling?.GetValueOrDefault(language)
+        ?? (LanguageSpelling.Offers(language)
+            ? new(SpellingWords, SpellingAutocorrect, SpellingAccentClosing, SpellingWikipedia, SpellingOpenMark)
+            : new(SpellingWords, SpellingAutocorrect));
+
+    /// <summary>The preferences with a language's Spelling changed.</summary>
+    public KeyboardPreferences WithSpelling(string language, LanguageSpelling changed) =>
+        this with { Spelling = new Dictionary<string, LanguageSpelling>(Spelling ?? []) { [language] = changed } };
+
+    /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off from the toolbar.</summary>
+    public LanguageSpelling Applied(string language) => SpellingOn ? SpellingIn(language) : LanguageSpelling.Off;
+
     /// <summary>
     /// The colours the keyboard takes typing in an application: Tema's, or,
     /// with Personalizado's Por app, the application's own: its colours, or

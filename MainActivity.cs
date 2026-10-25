@@ -337,7 +337,7 @@ public sealed class MainActivity : Activity
             new(GetString(Resource.String.theme), Icon: Resource.Drawable.ic_grid_theme, Tapped: () => settings!.Open(ThemePage()), Opens: true),
         ],
         [
-            NotMadeRow(Resource.String.corrections, Resource.Drawable.ic_settings_spellcheck),
+            new(GetString(Resource.String.spelling), Icon: Resource.Drawable.ic_settings_spellcheck, Tapped: () => settings!.Open(SpellingPage()), Opens: true),
             new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage()), Opens: true),
             new(GetString(Resource.String.voice_typing), Icon: Resource.Drawable.ic_tool_mic, Tapped: () => settings!.Open(VoicePage()), Opens: true),
             NotMadeRow(Resource.String.write_fields, Resource.Drawable.ic_settings_stylus),
@@ -621,6 +621,14 @@ public sealed class MainActivity : Activity
         return new(GetString(title), summary is { } line ? GetString(line) : null, On: kept.GetBoolean(key, byDefault),
             Switched: on => kept.Edit()!.PutBoolean(key, on)!.Apply());
     }
+
+    /// <summary>Spelling, as Windows': the opening mark put at a sentence's start on closing it with ? or ! (<see cref="SpanishMarks"/>); the accent model comes with Android's part of it.</summary>
+    private SettingsPage SpellingPage() => new(GetString(Resource.String.spelling),
+    [
+        [
+            Switch(Resource.String.spelling_open_mark, Resource.String.spelling_open_mark_summary, KeyPlusPreferences.SpellingOpenMarkKey, byDefault: false),
+        ],
+    ]);
 
     /// <summary>The language the dictionary page shows the words of.</summary>
     private StandardLanguage dictionaryLanguage = StandardKeys.Spanish;

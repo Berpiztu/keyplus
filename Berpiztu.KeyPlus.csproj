@@ -92,6 +92,11 @@
     <None Remove="windows\**;packaging\windows-install\**" />
     <EmbeddedResource Remove="windows\**;packaging\windows-install\**" />
   </ItemGroup>
+  <!-- Nothing under windows\ is gathered by Android's own globs either: the Windows build's output carries ONNX Runtime
+       for every platform (an .aar, Linux .so files), never Android's libraries. -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);windows\**;packaging\windows-install\**</DefaultItemExcludes>
+  </PropertyGroup>
 
   <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
     <ApplicationId>ai.berpiztu.keyboard</ApplicationId>

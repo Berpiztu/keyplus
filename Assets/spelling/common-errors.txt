@@ -1,0 +1,24 @@
+Spanish words commonly written for others, in the format of the Spanish Wikipedia's
+list (Wikipedia:Corrector ortográfico/Listado): each entry a line starting with a
+space, "written|parameter|meant, meant", the likeliest first; cs as the parameter
+matches the case too. Those its list lacks, or lists with fewer of the words meant.
+A word written that is a word too (as, tubo) is only offered, never corrected alone.
+
+ abia||había
+ ahi||ahí, hay
+ ai||hay, ahí, ay
+ aki||aquí
+ aora||ahora
+ as||has, haz
+ asta||hasta
+ aver||a ver, haber
+ balla||vaya, valla
+ bamos||vamos
+ echo||hecho
+ haci||así, hacia
+ hai||hay, ahí, ay
+ hiba||iba
+ ke||que
+ ola||hola
+ ora||hora
+ tubo||tuvo

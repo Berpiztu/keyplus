@@ -105,12 +105,12 @@ public sealed class FocusWatch : IDisposable
             // focused; told as text, so a keyboard that hid shows again and one in sight stays.
             if (CaretInForeground())
             {
-                Log.Write("Focus: no caret came, but the window still shows one: still writing");
+                Log.Detail("Focus: no caret came, but the window still shows one: still writing");
                 TellTextFocused(FrontApp());
                 return;
             }
 
-            Log.Write("Focus: left the text");
+            Log.Detail("Focus: left the text");
             Tell(() => TextLeft?.Invoke());
         };
         menuSettling.Tick += (_, _) =>
@@ -119,7 +119,7 @@ public sealed class FocusWatch : IDisposable
             if (inMenu)
             {
                 inMenu = false;
-                Log.Write("Menu: closed");
+                Log.Detail("Menu: closed");
                 Tell(() => MenuClosed?.Invoke());
             }
         };
@@ -189,7 +189,7 @@ public sealed class FocusWatch : IDisposable
 
         if (kind is MenuPopupStart or MenuPopupEnd)
         {
-            Log.Write($"Menu: {(kind == MenuPopupStart ? "a popup started" : "a popup ended")} in {ProcessOf(window)}, object {objectId}");
+            Log.Detail($"Menu: {(kind == MenuPopupStart ? "a popup started" : "a popup ended")} in {ProcessOf(window)}, object {objectId}");
         }
 
         if (kind == MenuPopupEnd)
@@ -209,7 +209,7 @@ public sealed class FocusWatch : IDisposable
             // What the focus or a menu told but could not be read, for the log to say where it was lost.
             if (kind is ObjectFocus or MenuPopupStart)
             {
-                Log.Write($"Focus: {(kind == ObjectFocus ? "a focus" : "a popup")} in {ProcessOf(window)} could not be read");
+                Log.Detail($"Focus: {(kind == ObjectFocus ? "a focus" : "a popup")} in {ProcessOf(window)} could not be read");
             }
 
             return;
@@ -228,7 +228,7 @@ public sealed class FocusWatch : IDisposable
                 if (focusSettling.IsEnabled)
                 {
                     focusSettling.Stop();
-                    Log.Write($"Focus: a caret showed in {ProcessOf(window)}: writing");
+                    Log.Detail($"Focus: a caret showed in {ProcessOf(window)}: writing");
                     TellTextFocused(AppOf(window));
                 }
 
@@ -253,7 +253,8 @@ public sealed class FocusWatch : IDisposable
                 }
 
                 var editable = role == TextRole && (accessible.get_accState(child) is not int state || (state & ReadOnlyState) == 0);
-                Log.Write($"Focus: {RoleName(role)} \"{Named(accessible, child)}\" in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
+                // The role only, never its name: the log names nothing on the screen (a window's title, an item's text).
+                Log.Detail($"Focus: {RoleName(role)} in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
                 if (editable)
                 {
                     TellTextFocused(AppOf(window));
@@ -271,7 +272,7 @@ public sealed class FocusWatch : IDisposable
                 {
                     if (!inMenu)
                     {
-                        Log.Write($"Menu: open in {ProcessOf(window)} at {shown}");
+                        Log.Detail($"Menu: open in {ProcessOf(window)} at {shown}");
                     }
 
                     menuSettling.Stop();
@@ -331,7 +332,7 @@ public sealed class FocusWatch : IDisposable
 
         if (asked)
         {
-            Log.Write($"Focus: {ProcessOf(window)} asked for its accessibility");
+            Log.Detail($"Focus: {ProcessOf(window)} asked for its accessibility");
         }
     }
 
@@ -422,19 +423,6 @@ public sealed class FocusWatch : IDisposable
     {
         var text = new StringBuilder(64);
         return GetRoleText((uint)role, text, (uint)text.Capacity) > 0 ? text.ToString() : $"role {role}";
-    }
-
-    private static string Named(IAccessible accessible, object child)
-    {
-        try
-        {
-            var name = accessible.get_accName(child) ?? "";
-            return name.Length > 40 ? name[..40] + "…" : name;
-        }
-        catch (Exception gone) when (gone is COMException or ArgumentException)
-        {
-            return "";
-        }
     }
 
     /// <summary>The application in front, before any focus is told: where a keyboard starting is about to type.</summary>

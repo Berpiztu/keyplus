@@ -99,6 +99,38 @@ public sealed class WordSuggestions
     public bool Knows(string word) =>
         SwipeWords.Letters(word, language.SwipeLetters) is { } key && Array.BinarySearch(letters, key, StringComparer.Ordinal) >= 0;
 
+    /// <summary>
+    /// The list's words close to a typed one, as <paramref name="close"/>
+    /// judges them, cased as it is: what a misspelled word may have meant
+    /// that a spelling dictionary does not offer ("hai": "ahí"). Only words
+    /// within a letter of its length are judged.
+    /// </summary>
+    public IEnumerable<string> Near(string typed, Func<string, bool> close)
+    {
+        var length = SwipeWords.Letters(typed, language.SwipeLetters)?.Length ?? typed.Length;
+        var capitals = typed.Length > 1 && typed.All(character => !char.IsLetter(character) || char.IsUpper(character));
+        var capital = typed.Length > 0 && char.IsUpper(typed[0]);
+        for (var at = 0; at < letters.Length; at++)
+        {
+            if (Math.Abs(letters[at].Length - length) > 1)
+            {
+                continue;
+            }
+
+            foreach (var spelled in spellings[at])
+            {
+                if (close(spelled))
+                {
+                    yield return Cased(spelled, capital, capitals);
+                }
+            }
+        }
+    }
+
+    /// <summary>How common the word is, by its letters alone; 0 for one the list lacks.</summary>
+    public int Frequency(string word) =>
+        SwipeWords.Letters(word, language.SwipeLetters) is { } key && Array.BinarySearch(letters, key, StringComparer.Ordinal) is >= 0 and var at ? frequencies[at] : 0;
+
     internal static string Cased(string word, bool capital, bool capitals) =>
         capitals ? word.ToUpperInvariant()
         : capital ? char.ToUpperInvariant(word[0]) + word[1..]

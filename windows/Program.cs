@@ -35,6 +35,9 @@ public static class Program
             return;
         }
 
+        // The detailed log only where the user turned it on: it names what is on the screen.
+        Log.Detailed = KeyboardPreferences.Read().DetailedLog;
+
         // An error that ends the program written to the log first, for Windows' own report keeps no trace of it.
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"Ended by an error: {e.ExceptionObject}");
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };

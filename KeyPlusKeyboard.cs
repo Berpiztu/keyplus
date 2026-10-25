@@ -101,6 +101,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>How far back the field is read for the word being typed.</summary>
     private const int WordReach = 48;
 
+    /// <summary>How far back the field is read for the sentence being typed (Spelling's sentence closed with ? or !).</summary>
+    private const int SentenceReach = 240;
+
     /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the main thread.</summary>
     private readonly Dictionary<StandardLanguage, Task<WordSuggestions?>> suggestions = [];
 
@@ -253,15 +256,20 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>The space a dictation's words need before them: none after a space or nothing.</summary>
     private string spokenLead = "";
 
+    /// <summary>The chosen service being asked whether it answers, before listening: 🎤 again waits for it.</summary>
+    private bool asking;
+
     /// <summary>
     /// 🎤 tapped: a dictation started, its words written in the field as they
     /// are heard (Android's composing text, underlined as Gboard's), or the
     /// one going on stopped and its words written for good. Without the
-    /// microphone's permission, the app asks for it.
+    /// microphone's permission, the app asks for it. The local network's or
+    /// the remote service not answering (no network, the server down),
+    /// Android's own recognizer listens instead, and says so.
     /// </summary>
-    private void Dictate()
+    private async void Dictate()
     {
-        if (transcribing)
+        if (transcribing || asking)
         {
             return;
         }
@@ -281,6 +289,19 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         var locale = panel?.DictationLocale ?? StandardKeys.Spanish.Locale;
         var local = VoicePreferences.Local(this);
+        if (!local)
+        {
+            asking = true;
+            var answers = await VoiceTyping.Answers(VoicePreferences.Options(this, locale).Service);
+            asking = false;
+            if (!answers)
+            {
+                LogVoice($"Voice typing: {VoicePreferences.Choice(this)} did not answer, so Android's recognizer listens");
+                Toast.MakeText(this, Resource.String.voice_fallback_local, ToastLength.Short)!.Show();
+                local = true;
+            }
+        }
+
         dictation?.Dispose();
         IDictation made;
         VoiceOptions options;
@@ -503,6 +524,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 return before[start..];
             };
             panel.TextBeforeCaret = () => CurrentInputConnection?.GetTextBeforeCursorFormatted(1, 0)?.ToString();
+            panel.RecentText = () => CurrentInputConnection?.GetTextBeforeCursor(SentenceReach, 0)?.ToString();
             panel.ReplaceBeforeCaret = (length, text) =>
             {
                 if (CurrentInputConnection is not { } field)
