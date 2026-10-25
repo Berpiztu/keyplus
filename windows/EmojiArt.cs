@@ -46,7 +46,38 @@ public static class EmojiArt
         File.WriteAllText(RecentFile, EmojiList.Used(File.Exists(RecentFile) ? File.ReadAllText(RecentFile) : null, emoji));
     }
 
-    /// <summary>An emoji drawn in colour in a square so many pixels wide, kept for the next time.</summary>
+    private const string EmojiFont = "Segoe UI Emoji";
+
+    /// <summary>"😀"'s drawing in Segoe UI Emoji, its larger side, of the font's size, measured once.</summary>
+    private static float? emojiWidthPerSize;
+
+    /// <summary>
+    /// What "😀" draws, its larger side, of the font's size, so an emoji fills its square as Gboard's and Android's do:
+    /// at three quarters of the square it drew four fifths of it, and the panel had room for another emoji between four.
+    /// Its ink, not its advance, which in Segoe UI Emoji has as much room around it.
+    /// </summary>
+    private static float EmojiWidthPerSize()
+    {
+        if (emojiWidthPerSize is { } known)
+        {
+            return known;
+        }
+
+        const float size = 100;
+        const float box = 1000;
+        using var format = directWrite!.CreateTextFormat(EmojiFont, FontWeight.Normal, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, size);
+        using var layout = directWrite.CreateTextLayout("😀", format, box, box);
+        var ink = layout.OverhangMetrics;
+        var drawn = Math.Max(box + ink.Left + ink.Right, box + ink.Top + ink.Bottom);
+        emojiWidthPerSize = drawn > 0 ? drawn / size : 1;
+        return emojiWidthPerSize.Value;
+    }
+
+    /// <summary>
+    /// An emoji drawn in colour in a square so many pixels wide, filling it as "😀" does, its drawing in the middle,
+    /// kept for the next time. DirectWrite centres the line, not the drawing, which stood some 2.5 px low in 30, so the
+    /// emoji panel's names seemed further from their own emoji than from the row above.
+    /// </summary>
     public static BitmapSource Draw(string emoji, int pixels)
     {
         if (Drawn.TryGetValue((emoji, pixels), out var kept))
@@ -57,7 +88,7 @@ public static class EmojiArt
         direct2D ??= D2D1.D2D1CreateFactory<ID2D1Factory>();
         directWrite ??= DWrite.DWriteCreateFactory<IDWriteFactory>();
         imaging ??= new IWICImagingFactory();
-        using var format = directWrite.CreateTextFormat("Segoe UI Emoji", FontWeight.Normal, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, pixels * 0.75f);
+        using var format = directWrite.CreateTextFormat(EmojiFont, FontWeight.Normal, Vortice.DirectWrite.FontStyle.Normal, FontStretch.Normal, pixels / EmojiWidthPerSize());
         format.TextAlignment = TextAlignment.Center;
         format.ParagraphAlignment = ParagraphAlignment.Center;
         using var bitmap = imaging.CreateBitmap((uint)pixels, (uint)pixels, Vortice.WIC.PixelFormat.Format32bppPBGRA, BitmapCreateCacheOption.CacheOnLoad);
@@ -65,7 +96,10 @@ public static class EmojiArt
         using var brush = target.CreateSolidColorBrush(new Vortice.Mathematics.Color4(0, 0, 0, 1));
         target.BeginDraw();
         target.Clear(new Vortice.Mathematics.Color4(0, 0, 0, 0));
-        target.DrawText(emoji, format, new Vortice.RawRectF(0, 0, pixels, pixels), brush, DrawTextOptions.EnableColorFont);
+        using var layout = directWrite.CreateTextLayout(emoji, format, pixels, pixels);
+        var ink = layout.OverhangMetrics;
+        var middle = new System.Numerics.Vector2((ink.Left - ink.Right) / 2, (ink.Top - ink.Bottom) / 2);
+        target.DrawTextLayout(middle, layout, brush, DrawTextOptions.EnableColorFont);
         target.EndDraw();
         var bytes = new byte[pixels * pixels * 4];
         bitmap.CopyPixels((uint)(pixels * 4), bytes);

@@ -1157,6 +1157,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             {
                 FillHeadsetWindow(width, room.Height - raised);
             }
+
+            // The keys' height as they are about to be laid out, not as they were: made again they had none yet, the
+            // ground beside narrower keys stood under them alone, and for a frame the app showed beside them.
+            var tall = Tall(width);
             keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Bottom | GravityFlags.Left)
             {
                 LeftMargin = Math.Clamp(placed.DockedX, 0, room.Width - width),
@@ -1166,9 +1170,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
             {
                 LeftMargin = gap,
                 RightMargin = gap,
-                BottomMargin = raised + box.Height + gap,
+                BottomMargin = raised + tall + gap,
             };
-            under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, raised + box.Height, GravityFlags.Bottom);
+            under = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, raised + tall, GravityFlags.Bottom);
             Hold(0, 0);
             panel.InWindow = false;
         }

@@ -58,6 +58,20 @@ the owner's whole keyboard (rows of different lengths, margins). What
 stayed: a shaped Enter's top is sized after its lower part
 (`KeyWidths`). Equal keys across rows (↑ and ↓) is still open.
 
+## Later: another language or keyboard without making the keyboard again
+
+Asked by the owner on 2026-10-25, on Android. Today 🌐 in Standard PC (each
+language its own design) and the toolbar's switch between Standard XR or
+Standard and Standard PC make the whole keyboard again
+(`KeyPlusKeyboard.OnCreateInputView`: a new `KeyPanel`, its toolbar and
+views): measured on the Galaxy XR (Debug), 380–430 ms with the popup's keys
+made only when shown, where Standard XR's language and the emoji are
+instant. To do: change only the keys (`StandardKeyboard`'s design and
+language) in the panel in sight, the toolbar and the rest kept, so only the
+keys that change are drawn again. Windows already does so
+(`KeyboardWindow.ChooseKeyboard`). The owner wants it done and will watch
+how it behaves (2026-10-25).
+
 ## Colours (Tema › Colores)
 
 Asked by the owner on 2026-10-23. On Windows, tried by the owner: Sistema,

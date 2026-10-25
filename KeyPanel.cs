@@ -1529,8 +1529,8 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// The emoji in the keys' place and the toolbar's, as Gboard's: those
-    /// typed lately first; ABC or ← the keys again. The window keeps its size.
+    /// The emoji in the keys' place, the toolbar over it, as on Windows: those
+    /// typed lately first; ← or the toolbar's ✕ the keys again. The window keeps its size.
     /// </summary>
     public void ShowEmojis()
     {
@@ -1539,11 +1539,10 @@ public sealed class KeyPanel
             return;
         }
 
-        var bars = standardBar.Height + (emojiRow.Visibility == ViewStates.Visible ? emojiRow.Height : 0);
+        // In the keys' place, the toolbar and the row of those typed lately kept over it, as on Windows: the keyboard
+        // keeps its height.
         emojiPanel.Fill();
         Cover(emojiPanel, settingsButton);
-        emojiPanel.LayoutParameters!.Height += bars;
-        emojiPanel.RequestLayout();
     }
 
     /// <summary>An emoji typed, from the panel or the row of those typed lately.</summary>
@@ -2042,7 +2041,7 @@ public sealed class KeyPanel
             var standardShown = covered?.Keys == standard || standard is { Visibility: ViewStates.Visible };
             menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             toolbar.Visibility = asking is null && !small && covered is null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
-            standardBar.Visibility = asking is null && standardShown && (emojiPanel is null || covered?.Cover != emojiPanel) ? ViewStates.Visible : ViewStates.Gone;
+            standardBar.Visibility = asking is null && standardShown ? ViewStates.Visible : ViewStates.Gone;
             ShowEmojiRow();
             if (toolbar.Visibility == ViewStates.Visible)
             {

@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -9,11 +8,11 @@ using System.Windows.Threading;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The emoji on Windows, in the keys' place, as the Android keyboard's
-/// (EmojiPanel.cs): over them ← in a grey circle and a tab for each group,
-/// the one in sight marked; the emoji under each group's grey name, those
-/// typed lately first, scrolling; under them ABC, the emoji (in use) and ⌫.
-/// Sizes are the Android panel's, one dp a WPF unit; colours <see cref="Palette"/>'s.
+/// The emoji on Windows, in the keys' place, the toolbar over it: a bar with ← in a grey circle, a tab for each group,
+/// the one in sight marked, and ⌫ at its right; the emoji under each group's grey name, those typed lately first,
+/// scrolling. No bar under them, as Gboard's ABC, ☺ and ⌫: ← is ABC and the toolbar has ☺, and that bar's height kept
+/// a keyboard of a window's height from showing a row of emoji whole. Sizes are the Android panel's, one dp a WPF unit;
+/// colours <see cref="Palette"/>'s.
 /// </summary>
 public sealed class EmojiPanel : DockPanel
 {
@@ -22,11 +21,6 @@ public sealed class EmojiPanel : DockPanel
     private const double BackDp = 70 / PixelsPerDp;
     private const double TabDp = 72 / PixelsPerDp;
     private const double TabIconDp = 35.0 / (800.0 / 960) / PixelsPerDp;
-    private const double BottomDp = 114 / PixelsPerDp;
-    private const double PillWidthDp = 122 / PixelsPerDp;
-    private const double PillHeightDp = 82 / PixelsPerDp;
-    private const double PillIconDp = 43.0 / (800.0 / 960) / PixelsPerDp;
-    private const double AbcSize = 24 / 0.711 / PixelsPerDp;
 
     private readonly Palette colors;
     private readonly EmojiSheet sheet;
@@ -50,13 +44,13 @@ public sealed class EmojiPanel : DockPanel
         back.Margin = new Thickness(8, 0, 6, 0);
         DockPanel.SetDock(back, Dock.Left);
         top.Children.Add(back);
+        var delete = Delete();
+        delete.Margin = new Thickness(6, 0, 8, 0);
+        DockPanel.SetDock(delete, Dock.Right);
+        top.Children.Add(delete);
         top.Children.Add(new ScrollViewer { Content = tabs, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalContentAlignment = VerticalAlignment.Center, Focusable = false });
         SetDock(top, Dock.Top);
         Children.Add(top);
-
-        var bottom = BottomBar();
-        SetDock(bottom, Dock.Bottom);
-        Children.Add(bottom);
         Children.Add(sheet);
 
         repeat.Tick += (_, _) =>
@@ -70,7 +64,7 @@ public sealed class EmojiPanel : DockPanel
 
     public event Action? Deleted;
 
-    /// <summary>← or ABC: the keys again.</summary>
+    /// <summary>←: the keys again.</summary>
     public event Action? Closed;
 
     /// <summary>The emoji as they are now, those typed lately first, from the top.</summary>
@@ -113,20 +107,10 @@ public sealed class EmojiPanel : DockPanel
         return round;
     }
 
-    /// <summary>ABC, the emoji in use on the modifiers' tone, ⌫; spread across.</summary>
-    private UniformGrid BottomBar()
+    /// <summary>⌫ as ←, a circle of its size: held, it deletes again and again.</summary>
+    private SignCircle Delete()
     {
-        var bar = new UniformGrid { Rows = 1, Height = BottomDp };
-        var abc = new TextBlock { Text = "ABC", FontSize = AbcSize, Foreground = new SolidColorBrush(colors.Glyph), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent };
-        abc.MouseLeftButtonUp += (_, e) =>
-        {
-            Closed?.Invoke();
-            e.Handled = true;
-        };
-        abc.MouseLeftButtonDown += (_, e) => e.Handled = true;
-        bar.Children.Add(abc);
-        bar.Children.Add(new SignCircle { Sign = Resource.Drawable.ic_key_emoji, Ground = colors.On, Glyph = colors.Glyph, SignSize = PillIconDp, Width = PillWidthDp, Height = PillHeightDp, Pill = true });
-        var delete = new SignCircle { Sign = Resource.Drawable.ic_key_backspace, Ground = Colors.Transparent, Glyph = colors.Glyph, SignSize = PillIconDp, Width = PillWidthDp, Height = PillHeightDp };
+        var delete = new SignCircle { Sign = Resource.Drawable.ic_key_backspace, Ground = Colors.Transparent, Glyph = colors.Glyph, SignSize = TabIconDp, Width = BackDp, Height = BackDp };
         delete.MouseLeftButtonDown += (_, e) =>
         {
             Deleted?.Invoke();
@@ -144,8 +128,7 @@ public sealed class EmojiPanel : DockPanel
 
         // Let go of without its release (the panel hidden, the window gone): ⌫ deletes no more.
         delete.LostMouseCapture += (_, _) => repeat.Stop();
-        bar.Children.Add(delete);
-        return bar;
+        return delete;
     }
 }
 
@@ -193,19 +176,54 @@ public sealed class SignCircle : FrameworkElement
 
 /// <summary>
 /// The emoji's list, drawn on one element, only the rows in sight: each
-/// section's grey name, then its emoji across in cells of at least 100 px of
-/// the Fold, rows 113 px apart, each emoji 85 px wide; the wheel or a drag
-/// scrolls it, a click types one.
+/// section's grey name, then its emoji across, 4 apart across and down; the wheel
+/// or a drag scrolls it, a click types one.
 /// </summary>
 public sealed class EmojiSheet : FrameworkElement
 {
     private const double PixelsPerDp = 2.25;
-    private const double CellDp = 100 / PixelsPerDp;
-    private const double RowDp = 113 / PixelsPerDp;
-    private const double HeaderDp = 87 / PixelsPerDp;
     private const double HeaderSize = 20 / 0.711 / PixelsPerDp;
     private const double SideDp = 12 / PixelsPerDp;
-    private const double EmojiShare = 85.0 / 100;
+
+    /// <summary>An emoji's size, the owner's (2026-10-25): Gboard's 37 dp left two rows in a keyboard of a window's height, this three.</summary>
+    private const double EmojiDp = 30;
+
+    /// <summary>The room between two emoji, across and down, the owner's (2026-10-25): Gboard's left 9 between them.</summary>
+    private const double EmojiGapDp = 4;
+
+    /// <summary>A row's height, and a column's least width.</summary>
+    private const double RowDp = EmojiDp + EmojiGapDp;
+    private const double CellDp = EmojiDp + EmojiGapDp;
+
+    /// <summary>
+    /// A section's name nearer its own emoji than the row above it, so each name is read with its emoji: 6 from a row's
+    /// emoji to the next name's capitals and 3 from the name's lowest letters to its emoji, as drawn (the owner's,
+    /// 2026-10-25; Gboard's, measured on the Fold, is the other way round).
+    /// </summary>
+    private const double AboveNameDp = 6;
+    private const double UnderNameDp = 3;
+
+    /// <summary>The room a row leaves above and under its emoji.</summary>
+    private const double RowGapDp = (RowDp - EmojiDp) / 2;
+
+    private const double HeaderCapTopDp = AboveNameDp - RowGapDp;
+    private const double HeaderGapUnderDp = UnderNameDp - RowGapDp;
+
+    private static readonly Typeface HeaderFont = new(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
+    /// <summary>A name's ink: its capitals' height over the baseline and its lowest letters' depth under it, as drawn, not the font's line.</summary>
+    private static readonly (double Caps, double Descent) NameInk = MeasureNameInk();
+
+    /// <summary>A section's name's box: its room above, its ink and its room under.</summary>
+    private static readonly double HeaderDp = HeaderCapTopDp + NameInk.Caps + NameInk.Descent + HeaderGapUnderDp;
+
+    private static (double Caps, double Descent) MeasureNameInk()
+    {
+        FormattedText Text(string text) => new(text, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, HeaderFont, HeaderSize, Brushes.Black, 1.0);
+        var caps = Text("H");
+        var low = Text("gjpqy");
+        return (caps.Baseline - caps.BuildGeometry(new Point()).Bounds.Top, low.BuildGeometry(new Point()).Bounds.Bottom - low.Baseline);
+    }
 
     private readonly Palette colors;
     private IReadOnlyList<(string Title, IReadOnlyList<string> Items)> sections = [];
@@ -293,9 +311,9 @@ public sealed class EmojiSheet : FrameworkElement
     {
         context.DrawRectangle(new SolidColorBrush(colors.Ground), null, new Rect(RenderSize));
         var dpi = VisualTreeHelper.GetDpi(this);
-        var pixels = (int)Math.Round(cell * EmojiShare * dpi.DpiScaleX);
-        var size = cell * EmojiShare;
-        if (pixels < 1)
+        var pixels = (int)Math.Round(EmojiDp * dpi.DpiScaleX);
+        const double size = EmojiDp;
+        if (cell <= 0)
         {
             // Not laid out yet: no room to draw in.
             return;
@@ -312,8 +330,11 @@ public sealed class EmojiSheet : FrameworkElement
             var top = tops[s] - offset;
             if (top + HeaderDp >= 0 && top <= ActualHeight)
             {
-                var header = new FormattedText(title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), HeaderSize, new SolidColorBrush(colors.Outline), dpi.PixelsPerDip);
-                context.DrawText(header, new Point(SideDp + 8, top + ((HeaderDp - header.Height) / 2)));
+                var header = new FormattedText(title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, HeaderFont, HeaderSize, new SolidColorBrush(colors.Outline), dpi.PixelsPerDip);
+
+                // The capitals' top at its room above: the baseline under it by the capitals' ink.
+                var baseline = top + HeaderCapTopDp + NameInk.Caps;
+                context.DrawText(header, new Point(SideDp + 8, baseline - header.Baseline));
             }
 
             var rowsTop = top + HeaderDp;

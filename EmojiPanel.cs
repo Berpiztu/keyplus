@@ -12,14 +12,15 @@ using Orientation = Android.Widget.Orientation;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The standard keyboard's emoji, Gboard's as the owner's Fold has it
-/// (a long press on the comma): over them ← in a grey circle, Buscar and a
-/// tab for each group, the one in sight in a blue circle, all scrolling
-/// across; the emoji under a grey name for each group, those typed lately
-/// first, in rows that scroll, a tap typing one; under them ABC, the emoji
-/// (in use), GIF, stickers, :-) and ⌫. Its sizes are Gboard's on the Fold,
-/// pixels measured there over 2.25; its colours the device's
-/// (<see cref="StandardColors"/>).
+/// The standard keyboard's emoji (a long press on the comma, or ☺), in the
+/// keys' place, the toolbar over it, as the Windows keyboard's: a bar with ←
+/// in a grey circle, Buscar and a tab for each group, the one in sight in a
+/// blue circle, scrolling across, and ⌫ at its right; the emoji under a grey
+/// name for each group, those typed lately first, in rows that scroll, a tap
+/// typing one. No bar under them, as Gboard's ABC, ☺, GIF, stickers, :-) and
+/// ⌫: ← is ABC, the toolbar has ☺, and that bar's height kept a keyboard from
+/// showing rows of emoji. The bar's sizes are Gboard's on the Fold, pixels
+/// measured there over 2.25; its colours the device's (<see cref="StandardColors"/>).
 /// </summary>
 public sealed class EmojiPanel : LinearLayout
 {
@@ -32,13 +33,6 @@ public sealed class EmojiPanel : LinearLayout
 
     /// <summary>A tab's sign: 35 px drawn, Material's 800 of its 960.</summary>
     private const float TabIconDp = 35f / (800f / 960) / PixelsPerDp;
-
-    /// <summary>The bottom bar: 114 px tall, its pills 122 × 82 px, its signs 43 px drawn, ABC's capitals 24 px.</summary>
-    private const float BottomDp = 114 / PixelsPerDp;
-    private const float PillWidthDp = 122 / PixelsPerDp;
-    private const float PillHeightDp = 82 / PixelsPerDp;
-    private const float PillIconDp = 43f / (800f / 960) / PixelsPerDp;
-    private const float AbcSp = 24 / 0.711f / PixelsPerDp;
     private const float SmallSp = 20 / 0.711f / PixelsPerDp;
 
     private readonly StandardColors colors;
@@ -65,7 +59,6 @@ public sealed class EmojiPanel : LinearLayout
 
         AddView(TopBar(context), new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(BarDp)));
         AddView(scroller, new LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
-        AddView(BottomBar(context), new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(BottomDp)));
     }
 
     /// <summary>An emoji tapped: to be typed.</summary>
@@ -73,10 +66,10 @@ public sealed class EmojiPanel : LinearLayout
 
     public Action? Deleted { get; set; }
 
-    /// <summary>← or ABC: the keys again.</summary>
+    /// <summary>←: the keys again.</summary>
     public Action? Closed { get; set; }
 
-    /// <summary>A part not made yet (Buscar, GIF, stickers, :-)): what it is, to say so.</summary>
+    /// <summary>A part not made yet (Buscar): what it is, to say so.</summary>
     public Action<string>? NotMade { get; set; }
 
     /// <summary>The emoji as they are now, those typed lately first, from the top.</summary>
@@ -113,6 +106,7 @@ public sealed class EmojiPanel : LinearLayout
         row.AddView(tabs, new LayoutParams(ViewGroup.LayoutParams.WrapContent, Dp(TabDp)));
         across.AddView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         bar.AddView(across, new LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        bar.AddView(DeleteButton(context), new LayoutParams(Dp(BackDp), Dp(BackDp)) { LeftMargin = Dp(6), RightMargin = Dp(8) });
         return bar;
     }
 
@@ -168,63 +162,13 @@ public sealed class EmojiPanel : LinearLayout
         shownTab = section;
     }
 
-    /// <summary>ABC, the emoji in use, GIF, stickers and :-) on grey pills, ⌫; spread across.</summary>
-    private LinearLayout BottomBar(Context context)
-    {
-        var bar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        bar.SetGravity(GravityFlags.CenterVertical);
-        var abc = new TextView(context) { Text = "ABC", Gravity = GravityFlags.Center, Clickable = true };
-        abc.SetTextColor(colors.Glyph);
-        abc.SetTextSize(ComplexUnitType.Sp, AbcSp);
-        abc.Click += (_, _) => Closed?.Invoke();
-        View[] parts =
-        [
-            abc,
-            PillButton(Resource.Drawable.ic_key_emoji, null, colors.GridCircle, () => { }),
-            PillButton(Resource.Drawable.ic_grid_gif, "GIF", colors.High, () => NotMade?.Invoke("GIF")),
-            PillButton(Resource.Drawable.ic_tool_stickers, context.GetString(Resource.String.stickers), colors.High, () => NotMade?.Invoke(context.GetString(Resource.String.stickers))),
-            PillButton(0, ":-)", colors.High, () => NotMade?.Invoke(":-)")),
-            DeleteButton(context),
-        ];
-        foreach (var part in parts)
-        {
-            var place = new FrameLayout(context);
-            place.AddView(part, new FrameLayout.LayoutParams(part is TextView ? ViewGroup.LayoutParams.WrapContent : Dp(PillWidthDp), Dp(PillHeightDp), GravityFlags.Center));
-            bar.AddView(place, new LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-        }
-
-        return bar;
-    }
-
-    /// <summary>A pill with a sign, or with its words where it has no sign (:-)).</summary>
-    private FrameLayout PillButton(int icon, string? words, Color ground, Action pressed)
-    {
-        var pill = new FrameLayout(Context!) { Background = new RippleDrawable(ColorStateList.ValueOf(colors.Function), Pill(ground), null), Clickable = true, ContentDescription = words };
-        pill.Click += (_, _) => pressed();
-        if (icon != 0)
-        {
-            var sign = new ImageView(Context) { ImageTintList = ColorStateList.ValueOf(colors.Glyph) };
-            sign.SetImageResource(icon);
-            pill.AddView(sign, new FrameLayout.LayoutParams(Dp(PillIconDp), Dp(PillIconDp), GravityFlags.Center));
-        }
-        else
-        {
-            var text = new TextView(Context) { Text = words, Gravity = GravityFlags.Center };
-            text.SetTextColor(colors.Glyph);
-            text.SetTextSize(ComplexUnitType.Sp, AbcSp);
-            pill.AddView(text, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        }
-
-        return pill;
-    }
-
-    /// <summary>⌫, once on the touch and again while held, as a key's.</summary>
+    /// <summary>⌫ as ←, a circle of its size, once on the touch and again while held, as a key's.</summary>
     private FrameLayout DeleteButton(Context context)
     {
         var button = new FrameLayout(context) { ContentDescription = "⌫" };
         var sign = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(colors.Glyph) };
         sign.SetImageResource(Resource.Drawable.ic_key_backspace);
-        button.AddView(sign, new FrameLayout.LayoutParams(Dp(PillIconDp), Dp(PillIconDp), GravityFlags.Center));
+        button.AddView(sign, new FrameLayout.LayoutParams(Dp(TabIconDp), Dp(TabIconDp), GravityFlags.Center));
         button.Touch += (_, touch) =>
         {
             switch (touch.Event!.ActionMasked)
@@ -271,35 +215,55 @@ public sealed class EmojiPanel : LinearLayout
     {
         var shape = new GradientDrawable();
         shape.SetColor(ground);
-        shape.SetCornerRadius(Dp(PillHeightDp) / 2f);
+        shape.SetCornerRadius(Dp(SearchHeightDp) / 2f);
         return shape;
     }
 }
 
 /// <summary>
 /// The emoji panel's list, drawn on one view, only the rows in sight: each
-/// section's grey name, then its emoji across in cells of at least 100 px
-/// of the Fold (eight on its keyboard held in one hand), rows 113 px apart,
-/// each emoji 85 px wide; a tap types one.
+/// section's grey name, then its emoji across, 4 apart across and down, as
+/// the Windows keyboard's; a tap types one.
 /// </summary>
 public sealed class EmojiGrid : View
 {
     private const float PixelsPerDp = 2.25f;
-    private const float CellDp = 100 / PixelsPerDp;
-    private const float RowDp = 113 / PixelsPerDp;
-    private const float HeaderDp = 87 / PixelsPerDp;
     private const float HeaderSp = 20 / 0.711f / PixelsPerDp;
     private const float SideDp = 12 / PixelsPerDp;
 
-    /// <summary>An emoji's width, of its cell.</summary>
-    private const float EmojiShare = 85f / 100;
+    /// <summary>An emoji's size and the room between two, across and down, the owner's (2026-10-25), as on Windows: Gboard's 37 dp emoji 9 apart left two rows in a keyboard of a window's height.</summary>
+    private const float EmojiDp = 30;
+    private const float EmojiGapDp = 4;
+
+    /// <summary>A row's height, and a column's least width.</summary>
+    private const float RowDp = EmojiDp + EmojiGapDp;
+    private const float CellDp = EmojiDp + EmojiGapDp;
+
+    /// <summary>
+    /// A section's name nearer its own emoji than the row above it, so each name is read with its emoji: 6 from a row's
+    /// emoji to the next name's capitals and 3 from the name's lowest letters to its emoji, as drawn (the owner's,
+    /// 2026-10-25, as on Windows).
+    /// </summary>
+    private const float AboveNameDp = 6;
+    private const float UnderNameDp = 3;
+
+    /// <summary>The room a row leaves above and under its emoji.</summary>
+    private const float RowGapDp = (RowDp - EmojiDp) / 2;
 
     private readonly StandardColors colors;
     private readonly float density;
     private readonly float scaledDensity;
     private readonly int touchSlop;
-    private readonly Paint emoji = new(PaintFlags.AntiAlias) { TextAlign = Paint.Align.Center };
+    private readonly Paint emoji = new(PaintFlags.AntiAlias);
     private readonly Paint header = new(PaintFlags.AntiAlias);
+
+    /// <summary>A name's ink, in pixels: its capitals' height over the baseline and its lowest letters' depth under it.</summary>
+    private readonly float nameCaps;
+    private readonly float nameDescent;
+
+    /// <summary>"😀"'s ink, in pixels from where it is drawn: its middle, across and down, to draw each emoji in the middle of its place.</summary>
+    private readonly float emojiMiddleX;
+    private readonly float emojiMiddleY;
     private IReadOnlyList<(string Title, IReadOnlyList<string> Items)> sections = [];
     private List<int> tops = [];
     private int columns = 1;
@@ -315,7 +279,25 @@ public sealed class EmojiGrid : View
         touchSlop = ViewConfiguration.Get(context)!.ScaledTouchSlop;
         header.Color = colors.Outline;
         header.TextSize = HeaderSp * scaledDensity;
+        var ink = new Rect();
+        header.GetTextBounds("H", 0, 1, ink);
+        nameCaps = -ink.Top;
+        header.GetTextBounds("gjpqy", 0, 5, ink);
+        nameDescent = ink.Bottom;
+
+        // Sized by what "😀" draws, its larger side, not by its advance, and drawn by its middle: the font centres its
+        // line, not its drawing.
+        const string probe = "😀";
+        emoji.TextSize = 100;
+        emoji.GetTextBounds(probe, 0, probe.Length, ink);
+        emoji.TextSize = 100 * Dp(EmojiDp) / Math.Max(1, Math.Max(ink.Width(), ink.Height()));
+        emoji.GetTextBounds(probe, 0, probe.Length, ink);
+        emojiMiddleX = ink.ExactCenterX();
+        emojiMiddleY = ink.ExactCenterY();
     }
+
+    /// <summary>A section's name's box, in pixels: its room above, its ink and its room under.</summary>
+    private float HeaderHeight => Dp(AboveNameDp - RowGapDp) + nameCaps + nameDescent + Dp(UnderNameDp - RowGapDp);
 
     public Action<string>? Chosen { get; set; }
 
@@ -355,8 +337,6 @@ public sealed class EmojiGrid : View
         var width = MeasureSpec.GetSize(widthMeasureSpec);
         columns = Math.Max(1, (int)((width - (2 * Dp(SideDp))) / Dp(CellDp)));
         cell = (width - (2 * Dp(SideDp))) / columns;
-        emoji.TextSize = 100;
-        emoji.TextSize = 100 * cell * EmojiShare / Math.Max(1, emoji.MeasureText("😀"));
         tops = [];
         var height = 0f;
         foreach (var (_, items) in sections)
@@ -364,7 +344,7 @@ public sealed class EmojiGrid : View
             tops.Add((int)height);
             if (items.Count > 0)
             {
-                height += Dp(HeaderDp) + (((items.Count + columns - 1) / columns) * Dp(RowDp));
+                height += HeaderHeight + (((items.Count + columns - 1) / columns) * Dp(RowDp));
             }
         }
 
@@ -374,7 +354,6 @@ public sealed class EmojiGrid : View
     protected override void OnDraw(Canvas canvas)
     {
         var shown = canvas.ClipBounds;
-        var middle = (emoji.Ascent() + emoji.Descent()) / 2;
         for (var s = 0; s < sections.Count; s++)
         {
             var (title, items) = sections[s];
@@ -384,8 +363,8 @@ public sealed class EmojiGrid : View
             }
 
             var top = tops[s];
-            canvas.DrawText(title, Dp(SideDp) + Dp(8), top + (Dp(HeaderDp) / 2) - ((header.Ascent() + header.Descent()) / 2), header);
-            var rowsTop = top + Dp(HeaderDp);
+            canvas.DrawText(title, Dp(SideDp) + Dp(8), top + Dp(AboveNameDp - RowGapDp) + nameCaps, header);
+            var rowsTop = top + HeaderHeight;
             for (var i = 0; i < items.Count; i++)
             {
                 var y = rowsTop + ((i / columns) * Dp(RowDp));
@@ -394,7 +373,7 @@ public sealed class EmojiGrid : View
                     continue;
                 }
 
-                canvas.DrawText(items[i], Dp(SideDp) + ((i % columns) + 0.5f) * cell, y + (Dp(RowDp) / 2) - middle, emoji);
+                canvas.DrawText(items[i], Dp(SideDp) + (((i % columns) + 0.5f) * cell) - emojiMiddleX, y + (Dp(RowDp) / 2) - emojiMiddleY, emoji);
             }
         }
     }
@@ -425,7 +404,7 @@ public sealed class EmojiGrid : View
     {
         for (var s = sections.Count - 1; s >= 0; s--)
         {
-            var rowsTop = tops[s] + Dp(HeaderDp);
+            var rowsTop = tops[s] + HeaderHeight;
             if (sections[s].Items.Count == 0 || y < tops[s])
             {
                 continue;
