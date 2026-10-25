@@ -85,6 +85,12 @@ public static class KeyPlusPreferences
     /// <summary>Whether Berpiztu AI Keyboard is the headset's own here: a headset, its box asked for in Preferencias.</summary>
     public static bool HeadsetKeyboard(Context context) => IsHeadset(context) && Global(context).GetBoolean(HeadsetBoxKey, false);
 
+    /// <summary>Spelling's Capital at the start of a sentence, as on Windows: off unless turned on; Shift on by itself where the field says a sentence begins.</summary>
+    public const string CapitalizeSentencesKey = "capitalizeSentences";
+
+    /// <summary>Troubleshooting › Detailed log, as on Windows: off unless turned on, for it names what the user looks at (<see cref="Log.Detail"/>).</summary>
+    public const string DetailedLogKey = "detailedLog";
+
     /// <summary>Apartarse también de los menús, as on Windows: on by default, seen where the menu watch (MenuWatchService) is turned on.</summary>
     public const string AvoidMenusKey = "avoidMenus";
 

@@ -97,13 +97,25 @@ public enum StandardPage
 /// A language of the standard keyboard, as Gboard has it: its code, its
 /// name on the space bar, its letters' rows and the symbols in their corners,
 /// the second row of its ?123 and =\&lt; pages, the word list a swipe is
-/// read with (Assets/dictionaries, AOSP LatinIME's), and its locale, as the
-/// speech service (ia-voice) asks for a language.
+/// read with (AOSP LatinIME's, downloaded with its Glide typing), and its
+/// locale, as the speech service (ia-voice) asks for a language.
 /// </summary>
 public sealed record StandardLanguage(string Code, string Name, string[] LetterRows, string[] Hints, string Symbols, string MoreSymbols, string WordList, string Locale)
 {
     /// <summary>The letters a swipe is read over, in the order their centres are handed with it: the language's own, in Unicode's order.</summary>
     public string SwipeLetters { get; } = string.Concat(LetterRows.SelectMany(row => row).Order());
+
+    /// <summary>
+    /// The letters a letter's long press offers after its corner's symbol, as
+    /// Gboard's popup has them, each a character, the commonest first: AOSP
+    /// LatinIME's more keys for the language
+    /// (tools/make-keyboard-text/res/values-*/donottranslate-more-keys.xml),
+    /// which Gboard's are; none for a letter without them.
+    /// </summary>
+    public IReadOnlyDictionary<char, string> MoreLetters { get; init; } = new Dictionary<char, string>();
+
+    /// <summary>Words the language writes only with a capital that its spelling dictionary also has in small letters, as Gboard writes them: English's "i", which Hunspell knows as the letter.</summary>
+    public IReadOnlySet<string> Capitals { get; init; } = new HashSet<string>();
 }
 
 /// <summary>
@@ -128,7 +140,19 @@ public static class StandardKeys
         "@#€_&-+()/",
         "£¥$¢^°={}\\",
         "dictionaries/es_wordlist.combined.gz",
-        "es-ES");
+        "es-ES")
+    {
+        MoreLetters = new Dictionary<char, string>
+        {
+            ['a'] = "áàäâãåąæāª",
+            ['e'] = "éèëêęėē",
+            ['i'] = "íïìîįī",
+            ['o'] = "óòöôõøœōº",
+            ['u'] = "úüùûū",
+            ['n'] = "ñń",
+            ['c'] = "çćč",
+        },
+    };
 
     public static readonly StandardLanguage English = new(
         "en",
@@ -138,7 +162,21 @@ public static class StandardKeys
         "@#$_&-+()/",
         "£¢€¥^°={}\\",
         "dictionaries/en_US_wordlist.combined.gz",
-        "en-US");
+        "en-US")
+    {
+        MoreLetters = new Dictionary<char, string>
+        {
+            ['a'] = "àáâäæãåā",
+            ['e'] = "éèêëē",
+            ['i'] = "íîïīì",
+            ['o'] = "óôöòœøōõ",
+            ['u'] = "úûüùū",
+            ['s'] = "ß",
+            ['n'] = "ñ",
+            ['c'] = "ç",
+        },
+        Capitals = new HashSet<string> { "i" },
+    };
 
     public static readonly IReadOnlyList<StandardLanguage> Languages = [Spanish, English];
 

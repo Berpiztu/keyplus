@@ -60,6 +60,11 @@ public sealed class MainActivity : Activity
     private const int ImportRequest = 3;
     private const int DictionaryExportRequest = 4;
     private const int DictionaryImportRequest = 5;
+    private const int LogSaveRequest = 6;
+
+    /// <summary>The log's box, Windows': as tall whatever it holds, its type small and of one width.</summary>
+    private const int LogViewerDp = 220;
+    private const float LogSp = 11;
 
 #if KEYBOARD
     /// <summary>The keyboard as Android names it.</summary>
@@ -153,7 +158,7 @@ public sealed class MainActivity : Activity
         if (Intent?.GetBooleanExtra(AskMicrophoneExtra, false) == true)
         {
             Intent.RemoveExtra(AskMicrophoneExtra);
-            settings!.Open(VoicePage());
+            settings!.OpenSection(VoicePage);
             AskMicrophone();
         }
 #endif
@@ -332,27 +337,27 @@ public sealed class MainActivity : Activity
             new(GetString(Resource.String.wireless_debugging), GetString(Resource.String.wireless_debugging_summary), Resource.Drawable.ic_settings_adb, PairWithWirelessDebugging),
         ],
         [
-            new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage()), Opens: true),
-            new(GetString(Resource.String.preferences), Icon: Resource.Drawable.ic_settings_tune, Tapped: () => settings!.Open(PreferencesPage()), Opens: true),
-            new(GetString(Resource.String.theme), Icon: Resource.Drawable.ic_grid_theme, Tapped: () => settings!.Open(ThemePage()), Opens: true),
+            new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage), Opens: true),
+            new(GetString(Resource.String.preferences), Icon: Resource.Drawable.ic_settings_tune, Tapped: () => settings!.Open(PreferencesPage), Opens: true),
+            new(GetString(Resource.String.theme), Icon: Resource.Drawable.ic_grid_theme, Tapped: () => settings!.Open(ThemePage), Opens: true),
         ],
         [
-            new(GetString(Resource.String.spelling), Icon: Resource.Drawable.ic_settings_spellcheck, Tapped: () => settings!.Open(SpellingPage()), Opens: true),
-            new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage()), Opens: true),
-            new(GetString(Resource.String.voice_typing), Icon: Resource.Drawable.ic_tool_mic, Tapped: () => settings!.Open(VoicePage()), Opens: true),
+            new(GetString(Resource.String.spelling), Icon: Resource.Drawable.ic_settings_spellcheck, Tapped: () => settings!.Open(SpellingPage), Opens: true),
+            new(GetString(Resource.String.glide), Icon: Resource.Drawable.ic_settings_gesture, Tapped: () => settings!.Open(GlidePage), Opens: true),
+            new(GetString(Resource.String.voice_typing), Icon: Resource.Drawable.ic_tool_mic, Tapped: () => settings!.Open(VoicePage), Opens: true),
             NotMadeRow(Resource.String.write_fields, Resource.Drawable.ic_settings_stylus),
             NotMadeRow(Resource.String.emoji_settings, Resource.Drawable.ic_key_emoji),
         ],
         [
-            new(GetString(Resource.String.clipboard), Icon: Resource.Drawable.ic_clipboard, Tapped: () => settings!.Open(ClipboardPage()), Opens: true),
-            new(GetString(Resource.String.dictionary), Icon: Resource.Drawable.ic_settings_dictionary, Tapped: () => settings!.Open(DictionaryPage()), Opens: true),
-            new(GetString(Resource.String.designs), Icon: Resource.Drawable.ic_settings_dashboard_customize, Tapped: () => settings!.Open(DesignsPage()), Opens: true),
+            new(GetString(Resource.String.clipboard), Icon: Resource.Drawable.ic_clipboard, Tapped: () => settings!.Open(ClipboardPage), Opens: true),
+            new(GetString(Resource.String.dictionary), Icon: Resource.Drawable.ic_settings_dictionary, Tapped: () => settings!.Open(DictionaryPage), Opens: true),
+            new(GetString(Resource.String.designs), Icon: Resource.Drawable.ic_settings_dashboard_customize, Tapped: () => settings!.Open(DesignsPage), Opens: true),
         ],
         [
             NotMadeRow(Resource.String.privacy, Resource.Drawable.ic_settings_shield),
             NotMadeRow(Resource.String.share, Resource.Drawable.ic_grid_share),
-            new(GetString(Resource.String.about), Icon: Resource.Drawable.ic_settings_info, Tapped: () => settings!.Open(AboutPage()), Opens: true),
-            new(GetString(Resource.String.troubleshooting), Icon: Resource.Drawable.ic_settings_help, Tapped: () => settings!.Open(TroubleshootingPage()), Opens: true),
+            new(GetString(Resource.String.about), Icon: Resource.Drawable.ic_settings_info, Tapped: () => settings!.Open(AboutPage), Opens: true),
+            new(GetString(Resource.String.troubleshooting), Icon: Resource.Drawable.ic_settings_help, Tapped: () => settings!.Open(TroubleshootingPage), Opens: true),
             NotMadeRow(Resource.String.help, Resource.Drawable.ic_settings_help),
         ],
     ]);
@@ -389,7 +394,7 @@ public sealed class MainActivity : Activity
             ?
             [
                 VoiceSwitch(),
-                new(GetString(Resource.String.voice_silence), $"{VoicePreferences.Silence(this):0.#} s", Tapped: () => ChooseVoiceStep(Resource.String.voice_silence, VoicePreferences.SilenceKey, VoicePreferences.Silences, VoicePreferences.SilenceDefault, step => $"{step:0.#} s")),
+                new(GetString(Resource.String.voice_silence), $"{VoicePreferences.Silence(this):0.#} s\n{GetString(Resource.String.voice_silence_hint)}", Tapped: () => ChooseVoiceStep(Resource.String.voice_silence, VoicePreferences.SilenceKey, VoicePreferences.Silences, VoicePreferences.SilenceDefault, step => $"{step:0.#} s")),
             ]
             : [VoiceSwitch()]);
         groups.Add(
@@ -399,7 +404,10 @@ public sealed class MainActivity : Activity
             new(GetString(Resource.String.voice_lan), Chosen: choice == VoiceTyping.OnLan, Tapped: () => ChooseVoiceService(VoiceTyping.OnLan)),
             new(GetString(Resource.String.voice_remote), Chosen: choice == VoiceTyping.Remote, Tapped: () => ChooseVoiceService(VoiceTyping.Remote)),
         ]);
-        var gainRow = new SettingsRow(GetString(Resource.String.voice_gain), $"×{VoicePreferences.Gain(this):0.#}",
+        // What ia-voice hears by, on the local network or remote: Android's own recognizer listens by the system's.
+        var microphoneRow = new SettingsRow(GetString(Resource.String.voice_microphone),
+            VoicePreferences.Microphone(this) is { Length: > 0 } microphone ? microphone : GetString(Resource.String.voice_microphone_default), Tapped: ChooseMicrophone);
+        var gainRow = new SettingsRow(GetString(Resource.String.voice_gain), $"×{VoicePreferences.Gain(this):0.#}\n{GetString(Resource.String.voice_gain_hint)}",
             Tapped: () => ChooseVoiceStep(Resource.String.voice_gain, VoicePreferences.GainKey, VoicePreferences.Gains, 1, step => $"×{step:0.#}"));
         if (choice == VoiceTyping.OnLan)
         {
@@ -407,6 +415,7 @@ public sealed class MainActivity : Activity
             [
                 new(GetString(Resource.String.voice_lan), VoicePreferences.LanAddress(this) is { Length: > 0 } ip ? ip : GetString(Resource.String.voice_lan_hint),
                     Tapped: () => AskText(Resource.String.voice_lan, VoicePreferences.LanAddress(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.LanAddressKey, text.Trim())!.Apply())),
+                microphoneRow,
                 gainRow,
             ]);
         }
@@ -421,6 +430,7 @@ public sealed class MainActivity : Activity
                     Tapped: () => AskText(Resource.String.voice_user, VoicePreferences.User(this), secret: false, text => kept.Edit()!.PutString(VoicePreferences.UserKey, text.Trim())!.Apply())),
                 new(GetString(Resource.String.voice_password), password.Length > 0 ? new string('•', 8) : notSet,
                     Tapped: () => AskText(Resource.String.voice_password, "", secret: true, text => VoicePreferences.SetPassword(this, text))),
+                microphoneRow,
                 gainRow,
             ]);
         }
@@ -457,6 +467,22 @@ public sealed class MainActivity : Activity
             .Show();
     }
 
+    /// <summary>The microphone chosen, as Windows': the system's default or one of those connected now, the one in use marked.</summary>
+    private void ChooseMicrophone()
+    {
+        string[] names = [GetString(Resource.String.voice_microphone_default), .. AndroidMicrophone.Names(this)];
+        var kept = KeyPlusPreferences.Global(this);
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.voice_microphone)!
+            .SetSingleChoiceItems(names, Math.Max(0, Array.IndexOf(names, VoicePreferences.Microphone(this))), (sender, chosen) =>
+            {
+                kept.Edit()!.PutString(VoicePreferences.MicrophoneKey, chosen.Which == 0 ? "" : names[chosen.Which])!.Apply();
+                (sender as AlertDialog)?.Dismiss();
+                settings!.Refresh(VoicePage());
+            })!
+            .Show();
+    }
+
     /// <summary>The microphone's permission asked, for 🎤.</summary>
     private void AskMicrophone() => RequestPermissions([Android.Manifest.Permission.RecordAudio], MicrophoneRequest);
 
@@ -487,9 +513,10 @@ public sealed class MainActivity : Activity
             .Show();
     }
 
+    /// <summary>Idiomas: the keyboard's languages, each opening its page with More options (its Spelling, its Glide typing, its words).</summary>
     private SettingsPage LanguagesPage() => new(GetString(Resource.String.languages),
     [
-        [new("Español (España)", "QWERTY (Ñ)"), new("English (US)", "QWERTY")],
+        LanguageRows(),
         [NotMadeRow(Resource.String.add_keyboard, Resource.Drawable.ic_settings_add)],
     ]);
 
@@ -622,16 +649,54 @@ public sealed class MainActivity : Activity
             Switched: on => kept.Edit()!.PutBoolean(key, on)!.Apply());
     }
 
-    /// <summary>Spelling, as Windows': the opening mark put at a sentence's start on closing it with ? or ! (<see cref="SpanishMarks"/>); the accent model comes with Android's part of it.</summary>
-    private SettingsPage SpellingPage() => new(GetString(Resource.String.spelling),
-    [
+    /// <summary>
+    /// Spelling, what goes for every language, as Windows': all of it on and
+    /// off at once (the keyboard's spellcheck tool too), off while no
+    /// language has anything downloaded to correct with and saying so then;
+    /// Download again, for what every language's choices turned on fetched;
+    /// and the languages, each opening its page, where its Spelling is.
+    /// </summary>
+    private SettingsPage SpellingPage()
+    {
+        bool AnyCorrects() => StandardKeys.Languages.Any(language => LanguageChoices.CanCorrect(this, language.Code));
+        var turnedOn = StandardKeys.Languages
+            .SelectMany(language => LanguageOptions.SpellingChoices(language.Code, Text)
+                .Where(choice => choice.Fetches is not null && choice.Get(LanguageChoices.SpellingIn(this, language.Code)))
+                .Select(choice => choice.Fetches!))
+            .Concat(StandardKeys.Languages.Where(language => LanguageChoices.GlidesIn(this, language.Code)).Select(LanguageOptions.GlideOf))
+            .DistinctBy(fetched => fetched.Named)
+            .ToList();
+        var again = turnedOn.Select(fetched => downloading.GetValueOrDefault(fetched.Named)).FirstOrDefault(state => state is not null);
+        List<SettingsRow> general =
         [
-            Switch(Resource.String.spelling_open_mark, Resource.String.spelling_open_mark_summary, KeyPlusPreferences.SpellingOpenMarkKey, byDefault: false),
-        ],
-    ]);
+            new(GetString(Resource.String.spelling_on), GetString(Resource.String.spelling_on_summary), On: LanguageChoices.SpellingOn(this) && AnyCorrects(),
+                Switched: on =>
+                {
+                    if (on && !AnyCorrects())
+                    {
+                        Log.Write("Spelling: nothing downloaded to correct with, so Correct as I type stays off");
+                        Told(Resource.String.spelling, GetString(Resource.String.spelling_nothing_downloaded));
+                        settings!.Refresh(SpellingPage());
+                        return;
+                    }
 
-    /// <summary>The language the dictionary page shows the words of.</summary>
-    private StandardLanguage dictionaryLanguage = StandardKeys.Spanish;
+                    LanguageChoices.SetSpellingOn(this, on);
+                }),
+            Switch(Resource.String.spelling_capitalize, Resource.String.spelling_capitalize_summary, KeyPlusPreferences.CapitalizeSentencesKey, byDefault: false),
+        ];
+        if (turnedOn.Count > 0)
+        {
+            general.Add(new(GetString(Resource.String.spelling_download_again), again ?? GetString(Resource.String.spelling_download_again_summary), Tapped: async () =>
+            {
+                foreach (var fetched in turnedOn)
+                {
+                    await FetchAsync(fetched, SpellingPage);
+                }
+            }));
+        }
+
+        return new(GetString(Resource.String.spelling), [general, LanguageRows(Resource.String.spelling_by_language)]);
+    }
 
     private PersonalWords Personal()
     {
@@ -641,18 +706,15 @@ public sealed class MainActivity : Activity
     }
 
     /// <summary>
-    /// Dictionary (<see cref="PersonalWords"/>), as Windows': learning new
-    /// words as you type and from the words chosen for a swipe, the words
-    /// chosen forgotten; the language looked at and a word added; last, your
-    /// words, each with ✏ that writes it again and a red ✕ that deletes it on
-    /// its line, so a longer list moves nothing above it. The keyboard reads the changes as a field opens.
+    /// Dictionary (<see cref="PersonalWords"/>), what goes for every language,
+    /// as Windows': offering new words to learn and learning from the words
+    /// chosen for a swipe, the words chosen forgotten, every language's words
+    /// exported; and the languages, each opening its page, where its words are.
     /// </summary>
     private SettingsPage DictionaryPage()
     {
         var personal = Personal();
-        var language = dictionaryLanguage;
-        var words = personal.Words(language.Code);
-        List<IReadOnlyList<SettingsRow>> groups =
+        return new(GetString(Resource.String.dictionary),
         [
             [
                 new(GetString(Resource.String.dictionary_learn_typed), GetString(Resource.String.dictionary_learn_typed_summary), On: personal.LearnTyped,
@@ -665,38 +727,180 @@ public sealed class MainActivity : Activity
                         .AddCategory(Intent.CategoryOpenable)
                         .SetType("application/json")
                         .PutExtra(Intent.ExtraTitle, $"berpiztu-dictionary-{DateTime.Now:yyyy-MM-dd_HHmm}.json"), DictionaryExportRequest)),
-                new(GetString(Resource.String.dictionary_import), GetString(Resource.String.dictionary_import_summary), Tapped: () =>
-                    StartActivityForResult(new Intent(Intent.ActionOpenDocument)
-                        .AddCategory(Intent.CategoryOpenable)
-                        .SetType("*/*"), DictionaryImportRequest)),
             ],
+            LanguageRows(Resource.String.dictionary_by_language),
+        ]);
+    }
+
+    /// <summary>The language whose page a dictionary is being imported from, its words without a language of their own going into it.</summary>
+    private StandardLanguage dictionaryLanguage = StandardKeys.Spanish;
+
+    /// <summary>The keyboard's languages, each a row with More options opening its page (<see cref="LanguagePage"/>), under a line saying what is there; on Languages, Spelling, Dictionary and Glide typing alike, so a language added comes with its own.</summary>
+    private IReadOnlyList<SettingsRow> LanguageRows(int? said = null) =>
+        [
+            .. said is { } line ? [new SettingsRow(GetString(line))] : Array.Empty<SettingsRow>(),
+            .. StandardKeys.Languages.Select(language => new SettingsRow(language.Name, GetString(Resource.String.more_options),
+                Tapped: () => settings!.Open(() => LanguagePage(language)), Opens: true)),
+        ];
+
+    /// <summary>
+    /// A language's own page, as Windows': its Spelling, only what Spelling
+    /// has for it (<see cref="LanguageOptions.SpellingChoices"/>); its Glide
+    /// typing; and its words, a word added, a dictionary imported into it,
+    /// then each word with ✏ and a red ✕. A choice that fetches files fetches
+    /// them as it is turned on, the row under it saying how much while they
+    /// come, or, turned on without them, that they are missing, tapped to
+    /// download them; nothing is fetched otherwise.
+    /// </summary>
+    private SettingsPage LanguagePage(StandardLanguage language)
+    {
+        var code = language.Code;
+        SettingsPage Again() => LanguagePage(language);
+        List<SettingsRow> spelling = [new(GetString(Resource.String.spelling))];
+        foreach (var choice in LanguageOptions.SpellingChoices(code, Text))
+        {
+            spelling.AddRange(ChoiceRows(choice.Label, choice.Summary, choice.Get(LanguageChoices.SpellingIn(this, code)), choice.Fetches,
+                on => LanguageChoices.SetSpelling(this, code, choice.Set(LanguageChoices.SpellingIn(this, code), on)), Again));
+        }
+
+        List<SettingsRow> glide =
+        [
+            new(GetString(Resource.String.glide)),
+            .. ChoiceRows(Resource.String.glide, LanguageOptions.GlideSummary(language, Text), LanguageChoices.GlidesIn(this, code), LanguageOptions.GlideOf(language),
+                on => LanguageChoices.SetGlide(this, code, on), Again),
+        ];
+        var personal = Personal();
+        List<IReadOnlyList<SettingsRow>> groups =
+        [
+            spelling,
+            glide,
             [
-                new(GetString(Resource.String.dictionary_language), language.Name, Tapped: ChooseDictionaryLanguage),
+                new(GetString(Resource.String.dictionary)),
                 new(GetString(Resource.String.dictionary_add), GetString(Resource.String.dictionary_words_summary), Tapped: () =>
                     AskText(Resource.String.dictionary_add, "", secret: false, written =>
                     {
-                        personal.Add(language.Code, written);
-                        settings!.Refresh(DictionaryPage());
+                        personal.Add(code, written);
+                        settings!.Refresh(Again());
                     })),
+                new(GetString(Resource.String.dictionary_import), GetString(Resource.String.dictionary_import_summary), Tapped: () =>
+                {
+                    dictionaryLanguage = language;
+                    StartActivityForResult(new Intent(Intent.ActionOpenDocument)
+                        .AddCategory(Intent.CategoryOpenable)
+                        .SetType("*/*"), DictionaryImportRequest);
+                }),
             ],
         ];
+        var words = personal.Words(code);
         if (words.Count > 0)
         {
             groups.Add([.. words.Select(word => new SettingsRow(word,
                 Removed: () =>
                 {
-                    personal.Remove(language.Code, word);
-                    settings!.Refresh(DictionaryPage());
+                    personal.Remove(code, word);
+                    settings!.Refresh(Again());
                 },
                 Edited: () => AskText(Resource.String.dictionary_edit, word, secret: false, written =>
                 {
-                    personal.Rename(language.Code, word, written);
-                    settings!.Refresh(DictionaryPage());
+                    personal.Rename(code, word, written);
+                    settings!.Refresh(Again());
                 })))]);
         }
 
-        return new(GetString(Resource.String.dictionary), groups);
+        return new(language.Name, groups);
     }
+
+    /// <summary>What is being downloaded now, by its name, and how much: its row says so while it comes.</summary>
+    private readonly Dictionary<string, string> downloading = [];
+
+    /// <summary>
+    /// A choice's rows: its switch, kept as it is turned (<paramref name="keep"/>);
+    /// where it fetches files, fetched as it is turned on, and under it a row
+    /// saying how much while they come, that they are here, or, turned on
+    /// without them, that they are missing, tapped to download them.
+    /// </summary>
+    private IEnumerable<SettingsRow> ChoiceRows(int label, string summary, bool on, Fetched? fetches, Action<bool> keep, Func<SettingsPage> page)
+    {
+        yield return new(GetString(label), summary, On: on, Switched: async turned =>
+        {
+            if (turned && fetches is not null && !fetches.Downloaded())
+            {
+                await FetchAsync(fetches, page);
+                turned = fetches.Downloaded();
+            }
+
+            keep(turned);
+            settings?.Refresh(page());
+        });
+        if (fetches is null)
+        {
+            yield break;
+        }
+
+        if (downloading.TryGetValue(fetches.Named, out var coming))
+        {
+            yield return new(coming);
+        }
+        else if (fetches.Downloaded())
+        {
+            yield return new(GetString(fetches.Done));
+        }
+        else if (on)
+        {
+            yield return new(GetString(Resource.String.download), GetString(Resource.String.spelling_not_downloaded), Tapped: async () => await FetchAsync(fetches, page));
+        }
+    }
+
+    /// <summary>
+    /// What a choice fetches fetched, how much said in its row as it comes (the
+    /// page made again a few times a second at most); a failure said in a
+    /// window and the log, the files there before kept until new ones are checked.
+    /// </summary>
+    private async Task FetchAsync(Fetched what, Func<SettingsPage> page)
+    {
+        var shown = 0L;
+        downloading[what.Named] = Said(what.Downloading, Megabytes(0), "…");
+        settings?.Refresh(page());
+        try
+        {
+            await what.Download(new Progress<(long Done, long Total)>(at =>
+            {
+                downloading[what.Named] = Said(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)));
+                if (System.Environment.TickCount64 - shown > 300)
+                {
+                    shown = System.Environment.TickCount64;
+                    settings?.Refresh(page());
+                }
+            }), CancellationToken.None);
+        }
+        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+        {
+            Log.Write($"Downloads: {what.Named} could not be downloaded: {failure.Message}");
+            Told(Resource.String.spelling, Said(what.Failed, failure.Message));
+        }
+        finally
+        {
+            downloading.Remove(what.Named);
+            settings?.Refresh(page());
+        }
+    }
+
+    /// <summary>Megabytes as a row says them.</summary>
+    private static string Megabytes(long bytes) => (bytes / 1_000_000.0).ToString("0.0", System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>A string by its id, filled with the values given: the words the shared language options are made with.</summary>
+    private string Text(int id, object[] values) => GetString(id, [.. values.Select(value => (Java.Lang.Object)new Java.Lang.String(value.ToString() ?? ""))]);
+
+    /// <summary>A string by its id, filled with the values given, each as text.</summary>
+    private string Said(int id, params object[] values) => Text(id, values);
+
+    /// <summary>Something said in a window with OK: a failure, or why a choice stays as it was.</summary>
+    private void Told(int title, string said) =>
+        new AlertDialog.Builder(this)
+            .SetTitle(title)!
+            .SetMessage(said)!
+            .SetPositiveButton(Resource.String.ok, (_, _) => { })!
+            .Show();
 
     /// <summary>
     /// The dictionary written to the file chosen (every language's words), or
@@ -728,12 +932,12 @@ public sealed class MainActivity : Activity
             }
 
             var added = personal.Import(text, dictionaryLanguage.Code);
-            settings?.Refresh(DictionaryPage());
+            settings?.Refresh(LanguagePage(dictionaryLanguage));
             Toast.MakeText(this, GetString(Resource.String.dictionary_imported, new Java.Lang.String(added.ToString(System.Globalization.CultureInfo.CurrentCulture))), ToastLength.Long)!.Show();
         }
         catch (Exception failure) when (failure is IOException or System.Text.Json.JsonException or InvalidDataException or Java.Lang.Exception)
         {
-            Android.Util.Log.Warn("KeyPlus", $"Dictionary: the file could not be read or written: {failure.Message}");
+            Log.Write($"Dictionary: the file could not be read or written: {failure.Message}");
             new AlertDialog.Builder(this)
                 .SetTitle(Resource.String.dictionary)!
                 .SetMessage(GetString(Resource.String.dictionary_file_failed, new Java.Lang.String(failure.Message)))!
@@ -742,28 +946,14 @@ public sealed class MainActivity : Activity
         }
     }
 
-    /// <summary>The dictionary's language chosen from the keyboard's, the page shown again with its words.</summary>
-    private void ChooseDictionaryLanguage()
-    {
-        var languages = StandardKeys.Languages;
-        new AlertDialog.Builder(this)
-            .SetTitle(Resource.String.dictionary_language)!
-            .SetSingleChoiceItems([.. languages.Select(language => language.Name)], languages.ToList().IndexOf(dictionaryLanguage), (dialog, chosen) =>
-            {
-                dictionaryLanguage = languages[chosen.Which];
-                (dialog as AlertDialog)?.Dismiss();
-                settings!.Refresh(DictionaryPage());
-            })!
-            .Show();
-    }
-
+    /// <summary>Glide typing, what goes for every language (its trail, deleting a swiped word whole); each language's own on its page.</summary>
     private SettingsPage GlidePage() => new(GetString(Resource.String.glide),
     [
         [
-            Switch(Resource.String.glide, Resource.String.glide_summary, KeyPlusPreferences.SwipeTypingKey),
             Switch(Resource.String.glide_trail, Resource.String.glide_trail_summary, KeyPlusPreferences.SwipeTrailKey),
             Switch(Resource.String.glide_delete_word, Resource.String.glide_delete_word_summary, KeyPlusPreferences.SwipeDeleteWordKey),
         ],
+        LanguageRows(Resource.String.glide_by_language),
         // FUTO Swipe's model weights license asks for this notice in sight.
         [new(GetString(Resource.String.futo))],
     ]);
@@ -793,11 +983,79 @@ public sealed class MainActivity : Activity
         ],
     ]);
 
-    /// <summary>Solución de problemas, as Windows': what Android needs for the keyboard to work as asked.</summary>
+    /// <summary>
+    /// Solución de problemas, as Windows': what Android needs for the keyboard
+    /// to work as asked; the keyboard's log (<see cref="Log"/>), Detailed log,
+    /// what it keeps word for word in a box of one size, Refresh, Clear the
+    /// log, and, for it cannot be opened where Android keeps it, a copy saved
+    /// where one chooses, to send it.
+    /// </summary>
     private SettingsPage TroubleshootingPage() => new(GetString(Resource.String.troubleshooting),
     [
         [new(GetString(Resource.String.troubleshooting_menus), GetString(Resource.String.troubleshooting_menus_summary))],
+        [
+            new(GetString(Resource.String.troubleshooting_log), GetString(Resource.String.troubleshooting_log_summary)),
+            Switch(Resource.String.troubleshooting_detailed_log, Resource.String.troubleshooting_detailed_log_summary, KeyPlusPreferences.DetailedLogKey, byDefault: false),
+            new(GetString(Resource.String.troubleshooting_log_view), GetString(Resource.String.troubleshooting_log_view_summary), Below: LogViewer()),
+            new(GetString(Resource.String.troubleshooting_log_refresh), Tapped: () => settings!.Refresh(TroubleshootingPage())),
+            new(GetString(Resource.String.troubleshooting_log_clear), Tapped: () =>
+            {
+                Log.Clear();
+                settings!.Refresh(TroubleshootingPage());
+            }),
+            new(GetString(Resource.String.troubleshooting_log_save), GetString(Resource.String.troubleshooting_log_save_summary), Tapped: () =>
+                StartActivityForResult(new Intent(Intent.ActionCreateDocument)
+                    .AddCategory(Intent.CategoryOpenable)
+                    .SetType("text/plain")
+                    .PutExtra(Intent.ExtraTitle, $"keyboard-log-{DateTime.Now:yyyy-MM-dd_HHmm}.txt"), LogSaveRequest)),
+        ],
     ]);
+
+    /// <summary>
+    /// What the log keeps, word for word, at its end, in a box of one size
+    /// that scrolls both ways, as Windows': its lines are never wrapped. The
+    /// page's list lets it have the finger while it scrolls.
+    /// </summary>
+    private View LogViewer()
+    {
+        var shown = new TextView(this) { Text = Log.Read(), Typeface = Android.Graphics.Typeface.Monospace };
+        shown.SetTextSize(Android.Util.ComplexUnitType.Sp, LogSp);
+        shown.SetTextColor(settings!.Words);
+        var across = new HorizontalScrollView(this);
+        across.AddView(shown);
+        var down = new ScrollView(this)
+        {
+            LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, (int)Math.Round(LogViewerDp * Resources!.DisplayMetrics!.Density)) { TopMargin = (int)Math.Round(8 * Resources.DisplayMetrics.Density) },
+        };
+        down.AddView(across);
+        down.Touch += (_, touched) =>
+        {
+            down.Parent?.RequestDisallowInterceptTouchEvent(true);
+            touched.Handled = false;
+        };
+        down.Post(() => down.FullScroll(FocusSearchDirection.Down));
+        return down;
+    }
+
+    /// <summary>A copy of the log written to the file chosen; what came of it told, a failure written to the log too.</summary>
+    private void SaveLog(Android.Net.Uri file)
+    {
+        try
+        {
+            using (var stream = ContentResolver!.OpenOutputStream(file, "wt")!)
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(Log.Read());
+            }
+
+            Toast.MakeText(this, Resource.String.troubleshooting_log_saved, ToastLength.Long)!.Show();
+        }
+        catch (Exception failure) when (failure is IOException or Java.Lang.Exception)
+        {
+            Log.Write($"Troubleshooting: the copy of the log could not be written: {failure.Message}");
+            Told(Resource.String.troubleshooting, Said(Resource.String.troubleshooting_log_save_failed, failure.Message));
+        }
+    }
 
     private SettingsPage AboutPage() => new(GetString(Resource.String.about),
     [
@@ -850,6 +1108,12 @@ public sealed class MainActivity : Activity
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
+        if (resultCode == Result.Ok && data?.Data is { } logFile && requestCode == LogSaveRequest)
+        {
+            SaveLog(logFile);
+            return;
+        }
+
         if (resultCode == Result.Ok && data?.Data is { } chosen && requestCode is DictionaryExportRequest or DictionaryImportRequest)
         {
             DictionaryFile(chosen, exporting: requestCode == DictionaryExportRequest);
@@ -875,7 +1139,7 @@ public sealed class MainActivity : Activity
         }
         catch (Exception failure)
         {
-            Android.Util.Log.Warn("KeyPlusDesigns", $"Designs not {(exporting ? "exported" : "imported")}: {failure}");
+            Log.Write($"Designs not {(exporting ? "exported" : "imported")}: {failure}");
             Toast.MakeText(this, $"The designs could not be {(exporting ? "exported" : "imported")}: {failure.Message}", ToastLength.Long)!.Show();
         }
     }
@@ -1083,7 +1347,7 @@ public sealed class MainActivity : Activity
         var box = new EditText(this)
         {
             Hint = GetString(Resource.String.try_keys),
-            InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagMultiLine,
+            InputType = Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagMultiLine | Android.Text.InputTypes.TextFlagCapSentences,
             Gravity = GravityFlags.Top | GravityFlags.Left,
             VerticalScrollBarEnabled = true,
         };

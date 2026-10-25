@@ -3,9 +3,6 @@ using WeCantSpell.Hunspell;
 
 namespace Berpiztu.KeyPlus;
 
-/// <summary>The words a word typed may have meant, the likeliest first, and whether it is misspelled, so the first may be written in its place; a word that is a word too ("as": has, haz) only has them offered.</summary>
-public sealed record WordFixes(IReadOnlyList<string> Words, bool Misspelled);
-
 /// <summary>
 /// A language's words spelled right, and the words a misspelled one may have
 /// meant ("kasa": "casa", "helo": "hello"), as LibreOffice checks them:
@@ -69,7 +66,7 @@ public sealed class SpellingDictionary
     {
         if (!DownloadedFor(language))
         {
-            Android.Util.Log.Warn("KeyPlus", $"Spelling: no {language} dictionary in {Folder}");
+            Log.Write($"Spelling: no {language} dictionary in {Folder}");
             return null;
         }
 
@@ -78,13 +75,13 @@ public sealed class SpellingDictionary
         {
             var dictionary = new SpellingDictionary(
                 WordList.CreateFromFiles(Path.Combine(Folder, name + ".dic"), Path.Combine(Folder, name + ".aff")), language == StandardKeys.Spanish.Code);
-            Android.Util.Log.Warn("KeyPlus", $"Spelling: the {language} dictionary loaded");
+            Log.Write($"Spelling: the {language} dictionary loaded");
             return dictionary;
         }
         // Any failure of a file Hunspell cannot read leaves the keyboard without a dictionary, never ended.
         catch (Exception failure)
         {
-            Android.Util.Log.Warn("KeyPlus", $"Spelling: the {language} dictionary could not be loaded: {failure.Message}");
+            Log.Write($"Spelling: the {language} dictionary could not be loaded: {failure.Message}");
             return null;
         }
     }

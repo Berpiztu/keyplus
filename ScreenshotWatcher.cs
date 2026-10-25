@@ -91,7 +91,7 @@ public sealed class ScreenshotWatcher(Context context, ClipboardHistory clipboar
                 catch (Exception unreadable) when (unreadable is Java.Lang.SecurityException or Java.IO.IOException or IOException)
                 {
                     // A screenshot still being written is read again at its next change.
-                    Android.Util.Log.Warn("KeyPlus", $"Screenshot {id} could not be read yet: {unreadable.Message}");
+                    Log.Write($"Screenshot {id} could not be read yet: {unreadable.Message}");
                     break;
                 }
             }

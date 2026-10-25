@@ -8,7 +8,7 @@ namespace Berpiztu.KeyPlus;
 /// read last stays in use, so nothing goes unchecked while it is read, and
 /// it is let go once the new one is in. A version of none: nothing to read.
 /// </summary>
-internal sealed class Loaded<T>(Func<object?> version, Func<T?> load, Action<T>? letGo = null)
+public sealed class Loaded<T>(Func<object?> version, Func<T?> load, Action<T>? letGo = null)
     where T : class
 {
     private Task<T?>? reading;

@@ -78,7 +78,7 @@ public sealed class MenuWatchService : AccessibilityService
     {
         public void OnSuccess(ScreenshotResult screenshot) => taken(screenshot);
 
-        public void OnFailure(int errorCode) => Android.Util.Log.Info("KeyPlus", $"Screenshot refused: {errorCode}");
+        public void OnFailure(int errorCode) => Log.Write($"Screenshot refused: {errorCode}");
     }
 
     /// <summary>Whether the service is turned on, as Android's secure setting of the accessibility services on has it (written at once, where Android's manager tells it a moment later).</summary>
@@ -99,7 +99,7 @@ public sealed class MenuWatchService : AccessibilityService
         if (menuWindow is { } open && Window(open) is null)
         {
             menuWindow = null;
-            Android.Util.Log.Info("KeyPlus", "Menu: closed");
+            Log.Detail("Menu: closed");
             MenuClosed?.Invoke();
         }
 
@@ -115,7 +115,7 @@ public sealed class MenuWatchService : AccessibilityService
 
             if (menuWindow != e.WindowId)
             {
-                Android.Util.Log.Info("KeyPlus", $"Menu: open at {place.ToShortString()}");
+                Log.Detail($"Menu: open at {place.ToShortString()}");
             }
 
             menuWindow = e.WindowId;

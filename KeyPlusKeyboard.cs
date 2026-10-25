@@ -87,6 +87,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
         personal = new PersonalWords(Path.Combine(FilesDir!.AbsolutePath, PersonalWords.FileName));
         personal.Reload();
         swipeTyping = new SwipeTyping(this, language => personal.Words(language.Code));
+        spelling = new SpellingEngine(personal, code => LanguageChoices.Applied(this, code),
+            () => LanguageChoices.SpellingIn(this, StandardKeys.Spanish.Code).Wikipedia,
+            () => Assets!.Open(CommonErrors.OwnList), message => Log.Write(message));
+        spelling.FixesFound += (_, _) => panel?.OfferWords();
 
         MenuWatchService.MenuOpened += AvoidMenu;
         MenuWatchService.MenuClosed += MenuGone;
@@ -104,40 +108,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>How far back the field is read for the sentence being typed (Spelling's sentence closed with ? or !).</summary>
     private const int SentenceReach = 240;
 
-    /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the main thread.</summary>
-    private readonly Dictionary<StandardLanguage, Task<WordSuggestions?>> suggestions = [];
+    /// <summary>What the keyboard knows of words as they are typed (<see cref="SpellingEngine"/>), shared with Windows: the words offered, whether a word is one, what it may have meant.</summary>
+    private SpellingEngine spelling = null!;
 
-    /// <summary>The words offered for a word being typed; none until the language's word list is read.</summary>
-    private IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
-    {
-        if (!suggestions.TryGetValue(language, out var reading))
-        {
-            suggestions[language] = reading = Task.Run(() =>
-            {
-                try
-                {
-                    using var wordList = Assets!.Open(language.WordList);
-                    return WordSuggestions.Read(wordList, language);
-                }
-                catch (Exception failure)
-                {
-                    Android.Util.Log.Warn("KeyPlus", $"The {language.Code} words to offer could not be read: {failure.Message}");
-                    return null;
-                }
-            });
-        }
-
-        IReadOnlyList<string> listed = reading.IsCompletedSuccessfully && reading.Result is { } ready ? ready.For(typed) : [];
-        return [.. personal.Starting(language, typed).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
-    }
-
-    /// <summary>Whether the language's word list has the word; until the list is read, taken as known, so nothing is learnt by mistake.</summary>
-    private bool Knows(StandardLanguage language, string word) =>
-        !suggestions.TryGetValue(language, out var reading) || !reading.IsCompletedSuccessfully || reading.Result is not { } ready || ready.Knows(word);
-
-    /// <summary>Swipes read as words, where the app's settings have it on (Escritura deslizando el dedo); none, the letters only tapped.</summary>
-    private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() =>
-        KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.SwipeTypingKey, true) && swipeTyping is { } swiping ? swiping.Words : null;
+    /// <summary>Swipes read as words; whether a language is swiped in is its own (its Glide typing, <see cref="LanguageChoices.Glides"/>).</summary>
+    private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() => swipeTyping is { } swiping ? swiping.Words : null;
 
     /// <summary>
     /// Whether the keyboard shows for the field: as Android decides (not
@@ -164,7 +139,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         var choice = KeyPlusPreferences.Global(this).GetString(KeyPlusPreferences.FocusLostKey, KeyPlusPreferences.FocusLostHide);
         if (!asked && choice != KeyPlusPreferences.FocusLostHide)
         {
-            Android.Util.Log.Info("KeyPlus", $"Its field let it go: kept on screen ({choice})");
+            Log.Detail($"Its field let it go: kept on screen ({choice})");
             if (choice == KeyPlusPreferences.FocusLostIcon)
             {
                 panel?.ShowAsIcon(true);
@@ -194,6 +169,62 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>The keyboard opening: the screenshots watched, if the user has let it read the photos since.</summary>
+    /// <summary>The caret moved (a key typed, a tap in the text): Shift on where a sentence begins.</summary>
+    public override void OnUpdateSelection(int oldSelStart, int oldSelEnd, int newSelStart, int newSelEnd, int candidatesStart, int candidatesEnd)
+    {
+        base.OnUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd);
+        selection = (Math.Min(newSelStart, newSelEnd), Math.Max(newSelStart, newSelEnd));
+        SentenceShift();
+    }
+
+    /// <summary>The field's selection as Android last told it, its start and end.</summary>
+    private (int Start, int End) selection;
+
+    /// <summary>
+    /// Shift tapped twice with text selected, the owner's: the selection
+    /// turned to the next case, all in capitals, then in small letters, then
+    /// its first letter a capital, and round again, from the one it is in
+    /// now (in another, capitals first); it stays selected, to turn again.
+    /// False where nothing is selected.
+    /// </summary>
+    private bool TurnSelectionCase()
+    {
+        if (CurrentInputConnection is not { } field || selection.End <= selection.Start
+            || field.GetSelectedTextFormatted(0)?.ToString() is not { Length: > 0 } selected)
+        {
+            return false;
+        }
+
+        var culture = new System.Globalization.CultureInfo(KeyPlusPreferences.Language(this).Locale);
+        var upper = selected.ToUpper(culture);
+        var lower = selected.ToLower(culture);
+        var first = lower.Length > 0 ? char.ToUpper(lower[0], culture) + lower[1..] : lower;
+        var turned = selected == upper ? lower : selected == lower ? first : upper;
+        field.BeginBatchEdit();
+        field.CommitText(turned, 1);
+        field.SetSelection(selection.Start, selection.Start + turned.Length);
+        field.EndBatchEdit();
+        return true;
+    }
+
+    /// <summary>
+    /// Spelling's Capital at the start of a sentence, on: Shift on by itself
+    /// where the field says a sentence begins, as Gboard's; Android's own
+    /// reading of it (after . ? or ! and a space, a new line, the field's
+    /// start), only in a field that asks for capitals there (CAP_SENTENCES:
+    /// never an address, a password or a number).
+    /// </summary>
+    private void SentenceShift()
+    {
+        if (panel is null || CurrentInputEditorInfo is not { } info)
+        {
+            return;
+        }
+
+        var on = KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.CapitalizeSentencesKey, false);
+        panel.SentenceStart(on && CurrentInputConnection?.GetCursorCapsMode((Android.Text.CapitalizationMode)(int)info.InputType) is { } mode && mode != 0);
+    }
+
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
@@ -212,6 +243,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.ReadSettings();
             panel.Swiping = SwipeOn();
             panel.ForgetTyping();
+            spelling.Forget();
+            spelling.Prepare(KeyPlusPreferences.Language(this));
+            panel.GridTiles = GridTiles();
+            SentenceShift();
 
             // Not shown, for another keyboard in use: its ⌨ icon in its place, which a tap opens. Made its
             // icon as the last field let it go, whole again for this one.
@@ -229,7 +264,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // The caret's place on the screen, now and as it moves, for a keyboard in a window to keep clear of it.
             var followed = CurrentInputConnection?.RequestCursorUpdates((int)(CursorUpdate.Immediate | CursorUpdate.Monitor)) == true;
             caretSkipLogged = null;
-            Android.Util.Log.Info("KeyPlus", $"Field of {info?.PackageName}: its caret {(followed ? "followed" : "not told by the app")}");
+            Log.Detail($"Field of {info?.PackageName}: its caret {(followed ? "followed" : "not told by the app")}");
         }
 
         screenshots?.Start();
@@ -296,7 +331,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             asking = false;
             if (!answers)
             {
-                LogVoice($"Voice typing: {VoicePreferences.Choice(this)} did not answer, so Android's recognizer listens");
+                Log.Write($"Voice typing: {VoicePreferences.Choice(this)} did not answer, so Android's recognizer listens");
                 Toast.MakeText(this, Resource.String.voice_fallback_local, ToastLength.Short)!.Show();
                 local = true;
             }
@@ -307,7 +342,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         VoiceOptions options;
         if (local)
         {
-            var speech = new AndroidSpeech(this, LogVoice);
+            var speech = new AndroidSpeech(this, Log.Write);
             if (!speech.Available)
             {
                 Toast.MakeText(this, Resource.String.voice_unavailable, ToastLength.Short)!.Show();
@@ -319,7 +354,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         else
         {
-            made = new VoiceTyping(new AndroidMicrophone(), LogVoice);
+            made = new VoiceTyping(new AndroidMicrophone(this), Log.Write);
             options = VoicePreferences.Options(this, locale);
         }
 
@@ -340,7 +375,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         catch (Exception none) when (none is InvalidOperationException or Java.Lang.Exception)
         {
-            LogVoice($"The microphone could not listen: {none.Message}");
+            Log.Write($"The microphone could not listen: {none.Message}");
             Toast.MakeText(this, Resource.String.voice_no_microphone, ToastLength.Short)!.Show();
             made.Dispose();
             return;
@@ -375,13 +410,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         catch (VoiceTyping.SignInRefused)
         {
-            LogVoice("ia-voice's proxy did not take the user and password.");
+            Log.Write("ia-voice's proxy did not take the user and password.");
             CurrentInputConnection?.FinishComposingText();
             Toast.MakeText(this, Resource.String.voice_sign_in_refused, ToastLength.Long)!.Show();
         }
         catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
-            LogVoice($"ia-voice did not answer: {failure.Message}");
+            Log.Write($"ia-voice did not answer: {failure.Message}");
             CurrentInputConnection?.FinishComposingText();
             Toast.MakeText(this, Resource.String.voice_unavailable, ToastLength.Short)!.Show();
         }
@@ -404,8 +439,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
         CurrentInputConnection?.FinishComposingText();
         panel?.ShowListening(false, 0);
     }
-
-    private static void LogVoice(string line) => Android.Util.Log.Info("KeyPlus", line);
 
     /// <summary>
     /// Something copied, in any app, kept in the copied list: an image, read
@@ -431,7 +464,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             }
             catch (Exception unreadable) when (unreadable is Java.Lang.SecurityException or Java.IO.IOException or IOException)
             {
-                Android.Util.Log.Warn("KeyPlus", $"The image copied could not be read: {unreadable.Message}");
+                Log.Write($"The image copied could not be read: {unreadable.Message}");
             }
 
             return;
@@ -481,6 +514,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
             Settings = [new(GetString(Resource.String.switch_keyboard)!, ShowKeyboardPicker)],
         };
         placed.Mode = panel.Mode;
+        placed.Pc = panel.Keyboard?.Base == Keyboards.StandardPcBase;
+        placed.Landscape = Resources!.Configuration!.Orientation == Android.Content.Res.Orientation.Landscape;
         panel.Scale = placed.Scale;
         if (OnHeadset)
         {
@@ -500,10 +535,37 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
             // Words swiped over the letters, as Gboard's (FUTO Swipe).
             panel.Swiping = SwipeOn();
+            panel.GlidesFor = language => LanguageChoices.Glides(this, language);
+            panel.Fixing = (language, word) => spelling.Fix(language, word);
+            panel.SpellingIn = language => LanguageChoices.Applied(this, language.Code);
+            panel.CorrectSentence = async sentence => await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
+            panel.CorrectSentenceNow = sentence => spelling.Accents.InUse()?.Restore(sentence);
+            panel.TextAfterCaret = () => CurrentInputConnection?.GetTextAfterCursor(1, 0)?.ToString();
+            panel.SelectionCase = TurnSelectionCase;
+
+            // Nothing learnt by itself, nor while Autocorrect or Spelling is off (writing code): a word no list has offered to learn with a tap.
+            panel.Learnable = (language, word) => personal.LearnTyped && Learns(language) && spelling.Unknown(language, word);
+            panel.Learn = (language, word) =>
+            {
+                personal.Learn(language.Code, word);
+                Log.Write($"Dictionary: a word learnt in {language.Code}, from the toolbar");
+                swipeTyping?.Forget();
+            };
+            panel.LanguageChanged += language =>
+            {
+                spelling.Prepare(language);
+                panel!.GridTiles = GridTiles();
+            };
             panel.VoiceTapped += Dictate;
-            panel.Suggesting = Suggest;
+            panel.Suggesting = (language, typed) => spelling.Suggest(language, typed);
             panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
-            panel.SwipeChosen = (language, read, word) => personal.Chose(language.Code, read, word);
+            panel.SwipeChosen = (language, read, word) =>
+            {
+                if (Learns(language))
+                {
+                    personal.Chose(language.Code, read, word);
+                }
+            };
             panel.WordBeforeCaret = () =>
             {
                 var before = CurrentInputConnection?.GetTextBeforeCursor(WordReach, 0)?.ToString() ?? "";
@@ -622,19 +684,75 @@ public sealed class KeyPlusKeyboard : InputMethodService
             placed?.Floating == true
                 ? new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating_off, () => SetWindowed(false))
                 : new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating, () => SetWindowed(true)),
-            new("gif", "GIF", Resource.Drawable.ic_grid_gif, () => panel?.NotMadeYet("GIF"), More: true),
-            new("split", GetString(Resource.String.split), Resource.Drawable.ic_grid_split, () => NotMade(Resource.String.split)),
-            new("translate", GetString(Resource.String.translate), Resource.Drawable.ic_grid_translate, () => NotMade(Resource.String.translate)),
-            new("theme", GetString(Resource.String.theme), Resource.Drawable.ic_grid_theme, () => NotMade(Resource.String.theme), More: true),
             new("share", GetString(Resource.String.share), Resource.Drawable.ic_grid_share, () => NotMade(Resource.String.share)),
             new("emojis", "Emojis", Resource.Drawable.ic_key_emoji, () => panel?.ShowEmojis(), More: true),
             new("undo", GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
-            new("nextLanguage", GetString(Resource.String.next_language), Resource.Drawable.ic_key_language, () => NotMade(Resource.String.next_language)),
-            new("textEditing", GetString(Resource.String.text_editing), Resource.Drawable.ic_grid_text_editing, () => NotMade(Resource.String.text_editing), More: true),
             new("move", GetString(Resource.String.move), Resource.Drawable.ic_grid_move, () => ShowFrame(resizing: false)),
             new("switchKeyboard", GetString(Resource.String.switch_keyboard), Resource.Drawable.ic_grid_keyboard, ShowKeyboardPicker),
+            new("spelling", GetString(Resource.String.spelling), Resource.Drawable.ic_tool_spellcheck, SpellingTapped,
+                On: LanguageChoices.SpellingOn(this) && LanguageChoices.CanCorrect(this, KeyPlusPreferences.Language(this).Code)),
+            new("glide", GetString(Resource.String.glide), Resource.Drawable.ic_settings_gesture, GlideTapped,
+                On: LanguageChoices.Glides(this, KeyPlusPreferences.Language(this))),
         ];
     }
+
+    /// <summary>Whether the dictionary learns from what is typed in a language: only while its Autocorrect is on and Spelling is not off.</summary>
+    private bool Learns(StandardLanguage language) => LanguageChoices.Applied(this, language.Code).Autocorrect;
+
+    /// <summary>
+    /// The Spelling tool, as Windows' button: Spelling on and off at once
+    /// (off to write code); the language typed in without a dictionary, said
+    /// in the toolbar with Download beside it, which fetches its Correct
+    /// words' files and turns them on. Nothing is fetched but by that tap.
+    /// </summary>
+    private void SpellingTapped()
+    {
+        var language = KeyPlusPreferences.Language(this);
+        if (!LanguageChoices.CanCorrect(this, language.Code))
+        {
+            Log.Write($"Spelling: nothing downloaded to correct {language.Code} with, so the tool stays off");
+            if (SpellingDictionary.Has(language.Code))
+            {
+                var fetched = LanguageOptions.DictionaryOf(language);
+                OfferDownload(GetString(Resource.String.spelling_no_dictionary, new Java.Lang.String(language.Name)), fetched, () =>
+                {
+                    LanguageChoices.SetSpelling(this, language.Code, LanguageChoices.SpellingIn(this, language.Code) with { Words = true });
+                    LanguageChoices.SetSpellingOn(this, true);
+                });
+            }
+
+            return;
+        }
+
+        LanguageChoices.SetSpellingOn(this, !LanguageChoices.SpellingOn(this));
+        panel!.GridTiles = GridTiles();
+    }
+
+    /// <summary>The Glide typing tool: the language typed in swiped or not; without its word list or the model, said in the toolbar with Download beside it for that language alone.</summary>
+    private void GlideTapped()
+    {
+        var language = KeyPlusPreferences.Language(this);
+        if (!SwipeData.ReadyFor(language))
+        {
+            Log.Write($"Glide typing: {language.Code}'s word list or the model is not downloaded, so the tool stays off");
+            OfferDownload(GetString(Resource.String.glide_not_downloaded, new Java.Lang.String(language.Name)), LanguageOptions.GlideOf(language),
+                () => LanguageChoices.SetGlide(this, language.Code, true));
+            return;
+        }
+
+        LanguageChoices.SetGlide(this, language.Code, !LanguageChoices.GlidesIn(this, language.Code));
+        panel!.GridTiles = GridTiles();
+    }
+
+    /// <summary>What a tool lacks, offered in the toolbar with Download (<see cref="KeyPanel.OfferDownload"/>); once fetched, what it is for turned on and the tools lit again.</summary>
+    private void OfferDownload(string missing, Fetched fetched, Action turnOn) =>
+        panel?.OfferDownload(missing, failure => GetString(fetched.Failed, new Java.Lang.String(failure.Message)),
+            progress => fetched.Download(progress, CancellationToken.None), () =>
+            {
+                turnOn();
+                spelling.Prepare(KeyPlusPreferences.Language(this));
+                panel!.GridTiles = GridTiles();
+            });
 
     /// <summary>Android's keyboard picker, to change for another keyboard.</summary>
     private void ShowKeyboardPicker() => ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker();
@@ -665,9 +783,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         if (lift - liftBefore > box.Height / 2)
         {
+            // The docked layout's lift as before the drag; then, floating, which keeps its own, where it was let go.
+            placed.Lift = liftBefore;
+            placed.Floating = true;
             (placed.Width, placed.X) = (box.Width, box.Left);
             placed.Y = room.Height - room.Below - lift - box.Height;
-            placed.Lift = liftBefore;
             SetWindowed(true);
         }
     }
@@ -695,7 +815,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             if (skipped != caretSkipLogged)
             {
                 caretSkipLogged = skipped;
-                Android.Util.Log.Info("KeyPlus", $"Caret: not avoided, {skipped}");
+                Log.Detail($"Caret: not avoided, {skipped}");
             }
 
             return;
@@ -729,14 +849,14 @@ public sealed class KeyPlusKeyboard : InputMethodService
             if (caretSkipLogged != "clear")
             {
                 caretSkipLogged = "clear";
-                Android.Util.Log.Info("KeyPlus", $"Text at {avoided.ToShortString()}, clear of the keyboard at {at[0]},{at[1]} ({box.Width}x{box.Height}), window from {origin[1]}");
+                Log.Detail($"Text at {avoided.ToShortString()}, clear of the keyboard at {at[0]},{at[1]} ({box.Width}x{box.Height}), window from {origin[1]}");
             }
 
             return;
         }
 
         caretSkipLogged = null;
-        Android.Util.Log.Info("KeyPlus", $"Text at {avoided.ToShortString()} under the keyboard at {at[0]},{at[1]} ({box.Width}x{box.Height}): moved");
+        Log.Detail($"Text at {avoided.ToShortString()} under the keyboard at {at[0]},{at[1]} ({box.Width}x{box.Height}): moved");
         var above = (int)avoided.Top - gap - box.Height;
         var below = (int)avoided.Bottom + gap;
         placed.Y = above >= 0 ? above
@@ -831,6 +951,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         placed.Floating = windowed;
         placed.Save();
+        panel.Scale = placed.Scale;
 
         // The same keyboard in the other mode; designed in it, with that mode's own design: the keyboard made again with it.
         panel.ShowsFloating = windowed;
@@ -1353,7 +1474,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             return;
         }
 
-        Android.Util.Log.Info("KeyPlus", $"Box {box}px: {rows:0.#} rows of keys and one of copied texts, scale {panel.Scale:0.###} to {scale:0.###}, copied texts {above}px");
+        Log.Detail($"Box {box}px: {rows:0.#} rows of keys and one of copied texts, scale {panel.Scale:0.###} to {scale:0.###}, copied texts {above}px");
 
         // Not in the middle of the layout pass that told the sizes.
         panel.Root.Post(() =>
@@ -1388,7 +1509,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             return;
         }
 
-        Android.Util.Log.Info("KeyPlus", $"Headset's window {room}px: Estándar XR's keys {keys}px of {tall}px, scale {panel.Scale:0.###} to {scale:0.###}");
+        Log.Detail($"Headset's window {room}px: Estándar XR's keys {keys}px of {tall}px, scale {panel.Scale:0.###} to {scale:0.###}");
 
         // Not in the middle of the layout pass that told the sizes.
         panel.Root.Post(() => panel.Scale = scale);

@@ -54,7 +54,9 @@ public sealed record KeyboardPreferences(
     KeyboardColors? Before = null,
     bool PerApp = false,
     Dictionary<string, LanguageSpelling>? Spelling = null,
-    Dictionary<string, bool>? GlideBy = null)
+    Dictionary<string, bool>? GlideBy = null,
+    // Spelling's Capital at the start of a sentence: Shift on by itself where one begins.
+    bool CapitalizeSentences = false)
 {
     /// <summary>Whether a language is swiped in (its Glide typing, on its page under Languages, or the toolbar's button while typing in it).</summary>
     public bool GlidesIn(string language) => GlideBy is { } chosen && chosen.TryGetValue(language, out var on) ? on : Glide;

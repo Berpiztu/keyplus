@@ -26,7 +26,7 @@ namespace Berpiztu.KeyPlus;
 public sealed class ThemeView : LinearLayout
 {
     private const float FieldGapDp = 8;
-    private const float CompactSp = 13;
+    private const float CompactSp = ColorsRow.TextSp;
     private const float HintSp = 12;
 
     private readonly SettingsScreen settings;
@@ -66,10 +66,15 @@ public sealed class ThemeView : LinearLayout
         this.settings = settings;
         this.kind = kind;
         screen = KeyPlusPreferences.ForScreen(context, kind);
-        var placed = new PanelPlacement(screen) { Mode = PanelPlacement.StandardMode };
-        (floating, keysScale) = (placed.Floating, placed.Scale);
         language = KeyPlusPreferences.Language(context);
         shown = Keyboards.Selected(context, screen, kind, language.Code);
+        var placed = new PanelPlacement(screen)
+        {
+            Mode = PanelPlacement.StandardMode,
+            Pc = shown.Base == Keyboards.StandardPcBase,
+            Landscape = context.Resources!.Configuration!.Orientation == Android.Content.Res.Orientation.Landscape,
+        };
+        (floating, keysScale) = (placed.Floating, placed.Scale);
         Orientation = Orientation.Vertical;
         // The preview in the colours of the application looked at, with Personalizado's Por app on; else Tema's.
         colors = StandardColors.Read(context, ColorsRow.AppLookedAt(context));
@@ -306,9 +311,10 @@ public sealed class ThemeView : LinearLayout
         return button;
     }
 
-    private ArrayAdapter<string> Choices(IEnumerable<string> names)
+    /// <summary>A list's words as large as its label beside it (<see cref="Caption"/>), the user's: they stood twice as large.</summary>
+    private SmallWords Choices(IEnumerable<string> names)
     {
-        var adapter = new ArrayAdapter<string>(Context!, Android.Resource.Layout.SimpleSpinnerItem, names.ToList());
+        var adapter = new SmallWords(Context!, names.ToList());
         adapter.SetDropDownViewResource(Android.Resource.Layout.SimpleSpinnerDropDownItem);
         return adapter;
     }

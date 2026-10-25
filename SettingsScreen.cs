@@ -13,7 +13,8 @@ namespace Berpiztu.KeyPlus;
 /// A setting's row: its title, the line under it, its sign, and what a tap
 /// does; with a switch, whether it is on and what turning it does; one of a
 /// choice's, shown with all the others, whether it is the one chosen (a tap
-/// chooses it); whether a tap opens a page of its own.
+/// chooses it); whether a tap opens a page of its own; a view of its own
+/// under its line (the log's box), laid with its own size.
 /// </summary>
 public sealed record SettingsRow(
     string Title,
@@ -25,7 +26,8 @@ public sealed record SettingsRow(
     bool? Chosen = null,
     bool Opens = false,
     Action? Removed = null,
-    Action? Edited = null);
+    Action? Edited = null,
+    View? Below = null);
 
 /// <summary>A page of settings: its title and its rows in groups, each group a card; or, in their place, a view of its own that takes the page's room (Tema).</summary>
 public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<SettingsRow>> Groups, View? Body = null);
@@ -79,9 +81,14 @@ public sealed class SettingsScreen
     private readonly Color card;
     private readonly Color words;
     private readonly FrameLayout root;
-    private readonly Stack<SettingsPage> opened = new();
+    /// <summary>The pages opened, the one in sight on top, each with how it is made, to be made again when Back comes to it.</summary>
+    private readonly Stack<(SettingsPage Page, Func<SettingsPage> Made)> opened = new();
     private SettingsPage? main;
     private View? top;
+
+    /// <summary>The main page's pane as last made, and what it was made of: laid again as it is, scrolled where it was, while a page opens beside it or closes over it.</summary>
+    private View? mainPane;
+    private (SettingsPage Page, View? Above)? mainMade;
 
     /// <summary>Whether the page opened has the whole screen to its view, its title and the list out of sight (Tema's designer).</summary>
     private bool alone;
@@ -105,6 +112,9 @@ public sealed class SettingsScreen
 
     /// <summary>The colour the screen's bars stand on.</summary>
     public Color Ground => ground;
+
+    /// <summary>The rows' words' colour, for a view of a row's own (<see cref="SettingsRow.Below"/>).</summary>
+    public Color Words => words;
 
     private bool Wide => context.Resources!.Configuration!.ScreenWidthDp >= WideDp;
 
@@ -130,26 +140,32 @@ public sealed class SettingsScreen
         }
     }
 
-    /// <summary>A page opened from the main one: in its place, or beside the list on a wide screen.</summary>
-    public void Open(SettingsPage page)
+    /// <summary>
+    /// A page opened over the one in sight (a language's from More options):
+    /// in its place, or beside the list on a wide screen; Back, the gesture or
+    /// ←, goes to the one it came from, made again as things are now (a
+    /// download made there shows), and from that to the one before.
+    /// </summary>
+    public void Open(Func<SettingsPage> made)
     {
         alone = false;
-        if (Wide)
-        {
-            opened.Clear();
-        }
-
-        opened.Push(page);
+        opened.Push((made(), made));
         Lay();
+    }
+
+    /// <summary>A section of the main page opened: the pages opened before it closed, so Back from it goes to the main page (on a wide screen, leaves the app).</summary>
+    public void OpenSection(Func<SettingsPage> made)
+    {
+        opened.Clear();
+        Open(made);
     }
 
     /// <summary>The page shown made again, its rows as they are now (a switch turned, a value chosen).</summary>
     public void Refresh(SettingsPage page)
     {
-        if (opened.Count > 0)
+        if (opened.TryPop(out var shown))
         {
-            opened.Pop();
-            opened.Push(page);
+            opened.Push((page, shown.Made));
         }
         else
         {
@@ -159,16 +175,21 @@ public sealed class SettingsScreen
         Lay();
     }
 
-    /// <summary>Back: the page closed, on a narrow screen; false where there is none to close, the activity's to end.</summary>
+    /// <summary>Back: the page in sight closed, the one it was opened from shown again; false where there is none to go back to (a wide screen's section beside the list, a narrow one's main page), the activity's to end.</summary>
     public bool Back()
     {
-        if (Wide || opened.Count == 0)
+        if (opened.Count <= (Wide ? 1 : 0))
         {
             return false;
         }
 
         alone = false;
         opened.Pop();
+        if (opened.TryPop(out var under))
+        {
+            opened.Push((under.Made(), under.Made));
+        }
+
         Lay();
         return true;
     }
@@ -188,7 +209,7 @@ public sealed class SettingsScreen
             return;
         }
 
-        if (alone && opened.TryPeek(out var only) && only.Body is { } body)
+        if (alone && opened.TryPeek(out var only) && only.Page.Body is { } body)
         {
             (body.Parent as ViewGroup)?.RemoveView(body);
             body.SetBackgroundColor(paneGround);
@@ -201,15 +222,40 @@ public sealed class SettingsScreen
         if (Wide)
         {
             var panes = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-            panes.AddView(Pane(main, top, ground, back: false), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, ListShare));
-            var right = opened.TryPeek(out var shown) ? Pane(shown, null, paneGround, back: false) : new View(context);
+            panes.AddView(MainPane(main), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, ListShare));
+            var right = opened.TryPeek(out var shown) ? Pane(shown.Page, null, paneGround, back: opened.Count > 1) : new View(context);
             right.SetBackgroundColor(paneGround);
             panes.AddView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1 - ListShare));
             root.AddView(panes);
             return;
         }
 
-        root.AddView(opened.TryPeek(out var page) ? Pane(page, null, paneGround, back: true) : Pane(main, top, ground, back: false));
+        root.AddView(opened.TryPeek(out var page) ? Pane(page.Page, null, paneGround, back: true) : MainPane(main));
+    }
+
+    /// <summary>
+    /// The main page's pane: the one made before while the page and the view
+    /// over it are the same, so the list stays scrolled where it was as a
+    /// section opens beside it (it went back to its top, the user's); made
+    /// again once they change. Its rows that open a page open a section
+    /// (<see cref="OpenSection"/>).
+    /// </summary>
+    private View MainPane(SettingsPage page)
+    {
+        if (mainPane is null || mainMade != (page, top))
+        {
+            var sections = page with
+            {
+                Groups = [.. page.Groups.Select(group => (IReadOnlyList<SettingsRow>)[.. group.Select(row => row is { Opens: true, Tapped: { } tapped }
+                    ? row with { Tapped = () => { opened.Clear(); tapped(); } }
+                    : row)])],
+            };
+            mainPane = Pane(sections, top, ground, back: false);
+            mainMade = (page, top);
+        }
+
+        (mainPane.Parent as ViewGroup)?.RemoveView(mainPane);
+        return mainPane;
     }
 
     /// <summary>A page: its title (with ← where it closes), a view over its rows, and its groups as cards, scrolling.</summary>
@@ -313,9 +359,11 @@ public sealed class SettingsScreen
         var texts = new LinearLayout(context) { Orientation = Orientation.Vertical };
         texts.SetGravity(GravityFlags.CenterVertical);
         texts.SetPadding(0, Dp(compact ? 0 : 12), 0, Dp(compact ? 0 : 12));
+        // The title in bold, the user's: in regular type it hardly stood apart from its line under it.
         var title = new TextView(context) { Text = row.Title };
         title.SetTextColor(words);
         title.SetTextSize(ComplexUnitType.Sp, RowTitleSp);
+        title.SetTypeface(null, TypefaceStyle.Bold);
         texts.AddView(title);
         if (row.Summary is { } summary)
         {
@@ -323,6 +371,12 @@ public sealed class SettingsScreen
             line.SetTextColor(words);
             line.SetTextSize(ComplexUnitType.Sp, SummarySp);
             texts.AddView(line);
+        }
+
+        if (row.Below is { } below)
+        {
+            (below.Parent as ViewGroup)?.RemoveView(below);
+            texts.AddView(below);
         }
 
         var ends = (row.Removed is not null ? 1 : 0) + (row.Edited is not null ? 1 : 0);

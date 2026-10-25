@@ -110,8 +110,9 @@
 
   <!-- Swipe typing, Berpiztu AI Keyboard's: FUTO Swipe's library (GPL-3.0,
        built by native/futo-swipe/build.sh; .NET takes the .so files under
-       their ABI's folder by itself), its encoder and AOSP's Spanish word
-       list, under Assets. -->
+       their ABI's folder by itself) and its licence, under Assets; its
+       encoder and each language's AOSP word list are downloaded as a
+       language's Glide typing is turned on (SwipeData.cs), never carried. -->
   <ItemGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
     <AndroidJavaSource Update="SwipeDecoder.java" Bind="false" />
   </ItemGroup>
@@ -126,7 +127,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
-    <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs" />
+    <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs;LanguageChoices.cs;SpellingEngine.cs;LanguageOptions.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml;Resources\xml\keyboard_menus.xml" />
     <AndroidJavaSource Remove="SwipeDecoder.java" />
     <AndroidAsset Remove="Assets\**" />

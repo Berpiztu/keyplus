@@ -36,7 +36,7 @@ public static class AppThemes
         }
         catch (JsonException unreadable)
         {
-            Android.Util.Log.Warn("KeyPlus", $"The applications' colours could not be read: {unreadable.Message}");
+            Log.Write($"The applications' colours could not be read: {unreadable.Message}");
             return [];
         }
     }
@@ -118,12 +118,12 @@ public static class AppThemes
             var declared = new Rgb(color.R, color.G, color.B);
             var deviceDark = KeyPlusPreferences.DeviceDark(context);
             var made = (declared.Readable == Rgb.Black) == deviceDark ? declared.Mirrored : declared;
-            Android.Util.Log.Info("KeyPlus", $"Colours: {app}'s theme declares {declared.Text}, the device {(deviceDark ? "dark" : "light")}: {made.Text}");
+            Log.Detail($"Colours: {app}'s theme declares {declared.Text}, the device {(deviceDark ? "dark" : "light")}: {made.Text}");
             return made;
         }
         catch (Exception unread) when (unread is PackageManager.NameNotFoundException or Java.Lang.SecurityException or Android.Content.Res.Resources.NotFoundException)
         {
-            Android.Util.Log.Warn("KeyPlus", $"The theme of {app} could not be read: {unread.Message}");
+            Log.Write($"The theme of {app} could not be read: {unread.Message}");
             return null;
         }
     }

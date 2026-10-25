@@ -4,6 +4,7 @@ using Android.Graphics.Drawables;
 using Android.Media;
 using Android.OS;
 using Android.Views;
+using System.Globalization;
 using System.Text;
 
 namespace Berpiztu.KeyPlus;
@@ -339,7 +340,21 @@ public sealed class StandardKeyboard : View
         /// <summary>A PC's key held: it went on by itself, so the finger lifting types nothing more.</summary>
         public bool Repeated { get; set; }
         public bool Done { get; set; }
+
+        /// <summary>What its long press offers in a popup above it (<see cref="ChoicesFor"/>), and which is chosen now; none, nothing offered.</summary>
+        public Choices? Offered { get; set; }
+        public int Chosen { get; set; }
     }
+
+    /// <summary>A long press's popup: what it offers, each one's cell, and the popup's ground around them.</summary>
+    private sealed record Choices(IReadOnlyList<string> Texts, IReadOnlyList<RectF> Cells, RectF Ground);
+
+    /// <summary>How many a popup's row holds, as Gboard's: more go in rows above it.</summary>
+    private const int ChoicesAcross = 5;
+
+    /// <summary>The room around a popup's cells, and its corners' roundness, the Windows keyboard's.</summary>
+    private const float ChoicesPaddingDp = 6;
+    private const float ChoicesCornerDp = 24;
 
     public StandardKeyboard(Context context, StandardColors colors) : base(context)
     {
@@ -347,6 +362,9 @@ public sealed class StandardKeyboard : View
         density = context.Resources!.DisplayMetrics!.Density;
         HapticFeedbackEnabled = true;
     }
+
+    /// <summary>Shift tapped twice: the text selected, where there is some, turned to its next case; false, none selected, and Shift locks as usual.</summary>
+    public Func<bool>? SelectionCase { get; set; }
 
     /// <summary>Text typed: a key's, a long press's symbol, a space.</summary>
     public Action<string>? Typed { get; set; }
@@ -401,6 +419,9 @@ public sealed class StandardKeyboard : View
 
     /// <summary>A swipe over the letters, to be read as a word, and whether Shift or the capitals' lock was on.</summary>
     public Action<KeyPanel.SwipePath, bool, bool>? Swiped { get; set; }
+
+    /// <summary>Whether a language's letters are swiped over (its Glide typing on, with its files); none, every language's are.</summary>
+    public Func<StandardLanguage, bool>? GlidesIn { get; set; }
 
     /// <summary>The language the keys are laid out for, the space bar reads and a swipe is read in.</summary>
     public StandardLanguage Language
@@ -623,8 +644,14 @@ public sealed class StandardKeyboard : View
     {
         page = shown;
         shift = ShiftState.Off;
+        symbolTyped = false;
         Lay();
     }
+
+    /// <summary>A symbol (or a digit) typed on ?123 or =\&lt; since it was opened: the next space or Enter goes back to the letters, as Gboard's.</summary>
+    private bool symbolTyped;
+
+    private bool OnSymbols => page is StandardPage.Symbols or StandardPage.MoreSymbols or StandardPage.XrSymbols;
 
     protected override void OnDraw(Canvas canvas)
     {
@@ -651,6 +678,154 @@ public sealed class StandardKeyboard : View
         if (designing)
         {
             DrawDesigning(canvas);
+        }
+    }
+
+    /// <summary>The long press's popup over the keyboard's whole window, its toolbar too, as Gboard's goes over its suggestions: the keys' view has no room above its top rows.</summary>
+    private ChoicesLayer? choicesLayer;
+
+    private void ShowChoices()
+    {
+        if (RootView is not { Overlay: { } overlay } window)
+        {
+            return;
+        }
+
+        choicesLayer ??= new ChoicesLayer(this);
+        choicesLayer.SetBounds(0, 0, window.Width, window.Height);
+        overlay.Remove(choicesLayer);
+        overlay.Add(choicesLayer);
+    }
+
+    /// <summary>Where the keys stand in their window, which the popup is drawn over.</summary>
+    private PointF InWindow()
+    {
+        var at = new int[2];
+        GetLocationInWindow(at);
+        return new PointF(at[0], at[1]);
+    }
+
+    /// <summary>The popup as its layer draws it: the keys' own drawing, moved to where they stand in the window.</summary>
+    private sealed class ChoicesLayer(StandardKeyboard keys) : Drawable
+    {
+        public override void Draw(Canvas canvas)
+        {
+            if (keys.finger is { LongPressed: true, Offered: { } offered } choosing)
+            {
+                var at = keys.InWindow();
+                canvas.Save();
+                canvas.Translate(at.X, at.Y);
+                keys.DrawChoices(canvas, offered, choosing.Chosen);
+                canvas.Restore();
+            }
+        }
+
+        public override void SetAlpha(int alpha)
+        {
+        }
+
+        public override void SetColorFilter(ColorFilter? colorFilter)
+        {
+        }
+
+        public override int Opacity => (int)Format.Translucent;
+    }
+
+    /// <summary>
+    /// What a key's long press offers, as Gboard's popup and the Windows
+    /// keyboard's: the symbol in its corner first, then the letters the
+    /// language has for it (<see cref="StandardLanguage.MoreLetters"/>), in
+    /// capitals with Shift; at most <see cref="ChoicesAcross"/> a row, the
+    /// rows going up from above the key, as many across as their number asks
+    /// (eleven, three rows of four). In each row the first stands over the
+    /// key and the next go right, then left, by turns (0, +1, −1, +2, …),
+    /// toward the side with room where one has none; above the key, over the
+    /// toolbar where it reaches it, as Gboard's, and down over the keys only
+    /// where the window has no room above.
+    /// </summary>
+    private Choices ChoicesFor(StandardKey key, RectF box)
+    {
+        List<string> texts = [key.Hint!];
+        if (key.Text is { Length: 1 } letter && language.MoreLetters.TryGetValue(char.ToLowerInvariant(letter[0]), out var more))
+        {
+            var capitals = ShiftedFor(key);
+            texts.AddRange(more.Select(character => capitals ? char.ToUpper(character, CultureInfo.CurrentCulture).ToString() : character.ToString()));
+        }
+
+        var rows = (texts.Count + ChoicesAcross - 1) / ChoicesAcross;
+        var across = (texts.Count + rows - 1) / rows;
+        var (width, height) = (box.Width(), box.Height());
+        var centre = box.CenterX();
+        var side = Dp(SideDp);
+        var leftRoom = Math.Max(0, (int)Math.Floor((centre - (width / 2) - side) / width));
+        var rightRoom = Math.Max(0, (int)Math.Floor((Width - side - centre - (width / 2)) / width));
+        var left = (across - 1) / 2;
+        var right = across - 1 - left;
+        if (left > leftRoom)
+        {
+            (left, right) = (leftRoom, across - 1 - leftRoom);
+        }
+        else if (right > rightRoom)
+        {
+            (left, right) = (across - 1 - rightRoom, rightRoom);
+        }
+
+        List<int> offsets = [0];
+        for (var step = 1; offsets.Count < across; step++)
+        {
+            if (step <= right)
+            {
+                offsets.Add(step);
+            }
+
+            if (step <= left && offsets.Count < across)
+            {
+                offsets.Add(-step);
+            }
+        }
+
+        var padding = Dp(ChoicesPaddingDp);
+        var ground = new RectF(centre - ((left + 0.5f) * width) - padding, box.Top - (rows * height) - padding, centre + ((right + 0.5f) * width) + padding, box.Top + padding);
+
+        // Above the window's top, the popup comes down instead: all of it in sight.
+        var down = Math.Max(0, -(ground.Top + InWindow().Y));
+        ground.Offset(0, down);
+        var cells = texts.Select((_, at) =>
+        {
+            var cellLeft = centre + (offsets[at % across] * width) - (width / 2);
+            var cellTop = box.Top - (((at / across) + 1) * height) + down;
+            return new RectF(cellLeft, cellTop, cellLeft + width, cellTop + height);
+        }).ToList();
+        return new Choices(texts, cells, ground);
+    }
+
+    /// <summary>The popup's choice under the finger, or the nearest, as Gboard's follows the finger anywhere.</summary>
+    private static int Nearest(Choices offered, float x, float y) =>
+        offered.Cells.Select((cell, at) => (At: at, Far: Math.Pow(x - cell.CenterX(), 2) + Math.Pow(y - cell.CenterY(), 2)))
+            .MinBy(cell => cell.Far).At;
+
+    /// <summary>A long press's popup, as Gboard's: a rounded ground in the keys' colour, an outline, each choice's letter, the one chosen on a circle in the colour of a key that is on.</summary>
+    private void DrawChoices(Canvas canvas, Choices offered, int chosen)
+    {
+        var corner = Dp(ChoicesCornerDp);
+        fill.Color = colors.Key;
+        canvas.DrawRoundRect(offered.Ground, corner, corner, fill);
+        fill.Color = colors.FaintOutline;
+        fill.SetStyle(Paint.Style.Stroke);
+        fill.StrokeWidth = Dp(1);
+        canvas.DrawRoundRect(offered.Ground, corner, corner, fill);
+        fill.SetStyle(Paint.Style.Fill);
+        var size = LetterRow * glyphScale * LabelShare;
+        for (var at = 0; at < offered.Texts.Count; at++)
+        {
+            var cell = offered.Cells[at];
+            if (at == chosen)
+            {
+                fill.Color = colors.GridCircle;
+                canvas.DrawCircle(cell.CenterX(), cell.CenterY(), Math.Min(cell.Width(), cell.Height()) / 2, fill);
+            }
+
+            DrawText(canvas, offered.Texts[at], cell.CenterX(), cell.CenterY(), size, colors.Glyph);
         }
     }
 
@@ -789,7 +964,7 @@ public sealed class StandardKeyboard : View
         }
 
         // The corner's symbol in the key's place while held, or for every key while Alt Gr is on, as Shift shows its capitals.
-        var showsHint = key.Hint is not null && (altGr || (finger is { LongPressed: true } longPress && longPress.Key == key));
+        var showsHint = key.Hint is not null && (altGr || (finger is { LongPressed: true, Offered: null } longPress && longPress.Key == key));
 
         // Alt Gr on, a PC's keys show only its symbols: a key with none, blank.
         if (pc && altGr && key.Hint is null)
@@ -1030,6 +1205,9 @@ public sealed class StandardKeyboard : View
             Hold(() =>
             {
                 now.LongPressed = true;
+                now.Offered = ChoicesFor(now.Key, now.Box);
+                now.Chosen = 0;
+                ShowChoices();
                 if (Vibrates)
                 {
                     PerformHapticFeedback(FeedbackConstants.LongPress);
@@ -1085,13 +1263,26 @@ public sealed class StandardKeyboard : View
     {
         now.Points.Add((x, y, time));
         trail?.Add(x, y, time);
+        if (now.LongPressed && now.Offered is { } offered)
+        {
+            var chosen = Nearest(offered, x, y);
+            if (chosen != now.Chosen)
+            {
+                now.Chosen = chosen;
+                choicesLayer?.InvalidateSelf();
+            }
+
+            return;
+        }
+
         if (now.Swiping || now.LongPressed)
         {
             return;
         }
 
         var far = Math.Max(Math.Abs(x - now.X), Math.Abs(y - now.Y)) > Math.Min(now.Box.Width(), now.Box.Height()) * 0.6f;
-        if (far && page is StandardPage.Letters or StandardPage.Pc or StandardPage.XrLetters && Swiped is not null && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
+        if (far && page is StandardPage.Letters or StandardPage.Pc or StandardPage.XrLetters && Swiped is not null && GlidesIn?.Invoke(language) != false
+            && now.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter))
         {
             now.Swiping = true;
             StopHolding();
@@ -1124,6 +1315,11 @@ public sealed class StandardKeyboard : View
     private void Forget()
     {
         StopHolding();
+        if (choicesLayer is not null)
+        {
+            RootView?.Overlay?.Remove(choicesLayer);
+        }
+
         if (trail is not null)
         {
             Overlay!.Remove(trail);
@@ -1152,9 +1348,9 @@ public sealed class StandardKeyboard : View
         }
         else if (longPressed)
         {
-            if (now.Key.Hint is { } hint)
+            if ((now.Offered?.Texts[now.Chosen] ?? now.Key.Hint) is { } chosen)
             {
-                Type(hint);
+                Type(chosen);
                 ModifiersUsed();
             }
         }
@@ -1174,6 +1370,8 @@ public sealed class StandardKeyboard : View
 
     private void Act(StandardKey key)
     {
+        // Gboard's: on ?123 or =\<, a space or Enter after a symbol typed there goes back to the letters.
+        var backToLetters = symbolTyped && !Combining && key.Action is StandardAction.Space or StandardAction.Enter;
         switch (key.Action)
         {
             case StandardAction.Type:
@@ -1244,6 +1442,11 @@ public sealed class StandardKeyboard : View
                 Entered?.Invoke();
                 break;
         }
+
+        if (backToLetters)
+        {
+            ShowPage(BasePage);
+        }
     }
 
     /// <summary>
@@ -1281,6 +1484,7 @@ public sealed class StandardKeyboard : View
     /// <summary>Text typed, a dead key's accent on it where it has one with it (´ then a: á), or before it; a space types the accent alone.</summary>
     private void Type(string typed)
     {
+        symbolTyped |= OnSymbols && typed != " ";
         if (deadKey is { } accent)
         {
             deadKey = null;
@@ -1386,7 +1590,18 @@ public sealed class StandardKeyboard : View
     /// <summary>Shift: on for one key; tapped again within a long press's time, the capitals locked; tapped once more, off.</summary>
     private void ToggleShift()
     {
+        sentenceShift = false;
         var now = SystemClock.UptimeMillis();
+
+        // Tapped twice with text selected: the selection's case turned to the next (SelectionCase), never Shift locked.
+        if (shift == ShiftState.Once && now - shiftTappedAt <= LongPressMs && SelectionCase?.Invoke() == true)
+        {
+            shift = ShiftState.Off;
+            shiftTappedAt = 0;
+            Invalidate();
+            return;
+        }
+
         shift = shift switch
         {
             ShiftState.Off => ShiftState.Once,
@@ -1397,9 +1612,36 @@ public sealed class StandardKeyboard : View
         Invalidate();
     }
 
+    /// <summary>
+    /// The caret where a sentence begins or not (Spelling's Capital at the
+    /// start of a sentence, as the field tells it): Shift on for one key on
+    /// the letters where it is off; off again where a sentence turned it on
+    /// and the caret has left it (⌫, a tap elsewhere). Shift tapped is the
+    /// user's, never taken off.
+    /// </summary>
+    public void SentenceStart(bool begins)
+    {
+        if (begins && shift == ShiftState.Off && page == BasePage)
+        {
+            shift = ShiftState.Once;
+            sentenceShift = true;
+            Invalidate();
+        }
+        else if (!begins && sentenceShift && shift == ShiftState.Once)
+        {
+            shift = ShiftState.Off;
+            sentenceShift = false;
+            Invalidate();
+        }
+    }
+
+    /// <summary>Shift on for one key because a sentence begins, not by a tap.</summary>
+    private bool sentenceShift;
+
     /// <summary>A key typed with Shift on for one key: Shift off again.</summary>
     private void ShiftUsed()
     {
+        sentenceShift = false;
         if (shift == ShiftState.Once)
         {
             shift = ShiftState.Off;

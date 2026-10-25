@@ -185,7 +185,7 @@ public static class Keyboards
         }
         catch (JsonException unreadable)
         {
-            Android.Util.Log.Warn("KeyPlus", $"The keyboards saved could not be read: {unreadable.Message}");
+            Log.Write($"The keyboards saved could not be read: {unreadable.Message}");
             return [];
         }
     }

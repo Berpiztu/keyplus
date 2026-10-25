@@ -10,25 +10,34 @@ using Orientation = Android.Widget.Orientation;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// Tema's Colores in one row of one size whatever it holds, as the Windows
-/// app's: the choice (Sistema, Claro, Oscuro, Personalizado), and under
-/// Personalizado alone Por app, then, with it on, the applications typed in
-/// and, for the one chosen, De la app (its theme's background), then the two
-/// colours (that application's, with one chosen) and Deshacer. A part that
-/// does not apply is hidden in its place; the row made smaller as a whole
-/// where the page is narrower, never cut. Each change kept at once, told
-/// (<c>changed</c>) for the page to be made again in it.
+/// Tema's Colores in three lines of one size whatever they hold, the user's:
+/// the choice (Sistema, Claro, Oscuro, Personalizado); under Personalizado
+/// alone Por app, then, with it on, the applications typed in and, for the
+/// one chosen, De la app (its theme's background); then the two colours (that
+/// application's, with one chosen) and Deshacer. A part that does not apply
+/// is hidden in its place. The applications' list gives up its room first
+/// where the page is narrower, its name cut short (the list dropped down
+/// shows them whole), never narrower than Colores' own list; only then are
+/// the lines made smaller as a whole, never cut. Each change kept at once,
+/// told (<c>changed</c>) for the page to be made again in it.
 /// </summary>
 public sealed class ColorsRow : FrameLayout
 {
     private const float GapDp = 4;
-    private const float TextSp = 13;
+
+    /// <summary>Tema's small type, its labels' and its lists' alike (<see cref="ThemeView"/>).</summary>
+    public const float TextSp = 13;
 
     /// <summary>The application looked at, kept while the page is made again.</summary>
     private static string? lookedAtApp;
 
-    private readonly LinearLayout row;
+    private readonly LinearLayout lines;
     private readonly Action changed;
+    private readonly Spinner looks;
+    private readonly Spinner apps;
+
+    /// <summary>Each list's width for its longest choice, once laid out (<see cref="Choices"/>).</summary>
+    private readonly Dictionary<Spinner, int> widths = [];
     private float scale = 1;
 
     public ColorsRow(Context context, Action changed)
@@ -42,12 +51,14 @@ public sealed class ColorsRow : FrameLayout
         var app = custom ? AppLookedAt(context) : null;
         var appColor = app is not null ? AppThemes.For(context, app) : null;
         var showing = StandardColors.Read(context, app);
-        row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        row.SetGravity(GravityFlags.CenterVertical);
-        AddView(row);
+        lines = new LinearLayout(context) { Orientation = Orientation.Vertical };
+        AddView(lines);
+        var choosing = Line();
+        var perAppLine = Line();
+        var colorsLine = Line();
 
-        row.AddView(Words(Resource.String.look));
-        var looks = Choices(KeyboardLooks.All.Select(choice => context.GetString(KeyboardLooks.Name(choice))).ToList(), Array.IndexOf(KeyboardLooks.All, look), picked =>
+        choosing.AddView(Words(Resource.String.look));
+        looks = Choices(KeyboardLooks.All.Select(choice => context.GetString(KeyboardLooks.Name(choice))).ToList(), Array.IndexOf(KeyboardLooks.All, look), picked =>
         {
             if (KeyboardLooks.All[picked] != look)
             {
@@ -55,17 +66,18 @@ public sealed class ColorsRow : FrameLayout
                 changed();
             }
         });
-        row.AddView(looks);
+        choosing.AddView(looks);
 
         var on = Check(Resource.String.per_app, perApp, custom, isOn =>
         {
             global.Edit()!.PutBoolean(KeyPlusPreferences.PerAppKey, isOn)!.Apply();
             changed();
         });
-        row.AddView(on);
+        on.LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent);
+        perAppLine.AddView(on);
 
         var known = AppThemes.All(context).Keys.ToList();
-        var apps = Choices(known.Select(package => AppThemes.Name(context, package)).ToList(), app is null ? -1 : known.IndexOf(app), picked =>
+        apps = Choices(known.Select(package => AppThemes.Name(context, package)).ToList(), app is null ? -1 : known.IndexOf(app), picked =>
         {
             // Only a choice made: a list hidden, or just filled, tells its first one too.
             if (custom && perApp && known[picked] != app)
@@ -75,7 +87,7 @@ public sealed class ColorsRow : FrameLayout
             }
         });
         apps.Visibility = custom && perApp ? ViewStates.Visible : ViewStates.Invisible;
-        row.AddView(apps);
+        perAppLine.AddView(apps);
 
         // De la app: the application chosen takes its theme's background; left, its own colours start exactly as it showed.
         var own = Check(Resource.String.app_own, appColor?.Look == AppLook.Own, appColor is not null, isOwn =>
@@ -88,7 +100,7 @@ public sealed class ColorsRow : FrameLayout
                 changed();
             }
         });
-        row.AddView(own);
+        perAppLine.AddView(own);
 
         // The two colours: the application's chosen, else Tema's Personalizado's; hidden for an application taking its theme's.
         void Choose(bool keyboard, Rgb chosen)
@@ -111,8 +123,10 @@ public sealed class ColorsRow : FrameLayout
         }
 
         var colorsShown = custom && appColor?.Look != AppLook.Own;
-        row.AddView(ColorButton(Resource.String.look_keyboard, showing.Ground, colorsShown, chosen => Choose(keyboard: true, chosen)));
-        row.AddView(ColorButton(Resource.String.look_accent, showing.Primary, colorsShown, chosen => Choose(keyboard: false, chosen)));
+        var keyboardColor = ColorButton(Resource.String.look_keyboard, showing.Ground, colorsShown, chosen => Choose(keyboard: true, chosen));
+        keyboardColor.LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent);
+        colorsLine.AddView(keyboardColor);
+        colorsLine.AddView(ColorButton(Resource.String.look_accent, showing.Primary, colorsShown, chosen => Choose(keyboard: false, chosen)));
 
         // Deshacer, Tema's Personalizado's: its two colours as they were before the last one was chosen, one step back.
         var before = global.GetString(KeyPlusPreferences.ColorsBeforeKey, null);
@@ -127,7 +141,16 @@ public sealed class ColorsRow : FrameLayout
                 .Apply();
             changed();
         };
-        row.AddView(undo);
+        colorsLine.AddView(undo);
+    }
+
+    /// <summary>One of the lines, its parts in a row and centred on it, a little below the one above.</summary>
+    private LinearLayout Line()
+    {
+        var line = new LinearLayout(Context) { Orientation = Orientation.Horizontal };
+        line.SetGravity(GravityFlags.CenterVertical);
+        lines.AddView(line, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent) { TopMargin = lines.ChildCount > 0 ? Dp(GapDp) : 0 });
+        return line;
     }
 
     /// <summary>The application looked at, with Personalizado's Por app on: the one chosen, or the first typed in; none, Tema's colours.</summary>
@@ -143,17 +166,30 @@ public sealed class ColorsRow : FrameLayout
     protected override void OnMeasure(int widthMeasureSpec, int heightMeasureSpec)
     {
         var unspecified = MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified);
-        row.Measure(unspecified, unspecified);
         var available = MeasureSpec.GetSize(widthMeasureSpec);
-        scale = Math.Min(1f, available / (float)Math.Max(1, row.MeasuredWidth));
-        SetMeasuredDimension(available, (int)Math.Ceiling(row.MeasuredHeight * scale));
+
+        // The applications' list as wide as its longest name (Choices), less what the row lacks, never narrower than Colores' list.
+        if (widths.TryGetValue(apps, out var widest) && widths.TryGetValue(looks, out var least))
+        {
+            apps.LayoutParameters!.Width = widest;
+            lines.Measure(unspecified, unspecified);
+            var lacking = lines.MeasuredWidth - available;
+            if (lacking > 0)
+            {
+                apps.LayoutParameters.Width = Math.Max(Math.Min(widest, least), widest - lacking);
+            }
+        }
+
+        lines.Measure(unspecified, unspecified);
+        scale = Math.Min(1f, available / (float)Math.Max(1, lines.MeasuredWidth));
+        SetMeasuredDimension(available, (int)Math.Ceiling(lines.MeasuredHeight * scale));
     }
 
     protected override void OnLayout(bool changed, int left, int top, int right, int bottom)
     {
-        row.Layout(0, 0, row.MeasuredWidth, row.MeasuredHeight);
-        row.PivotX = row.PivotY = 0;
-        row.ScaleX = row.ScaleY = scale;
+        lines.Layout(0, 0, lines.MeasuredWidth, lines.MeasuredHeight);
+        lines.PivotX = lines.PivotY = 0;
+        lines.ScaleX = lines.ScaleY = scale;
     }
 
     private TextView Words(int text)
@@ -173,11 +209,11 @@ public sealed class ColorsRow : FrameLayout
         return check;
     }
 
-    /// <summary>A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing.</summary>
+    /// <summary>A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing; that width kept (<see cref="widths"/>), for the applications' list to give up room from.</summary>
     private Spinner Choices(IReadOnlyList<string> words, int chosen, Action<int> picked)
     {
         var list = new Spinner(Context);
-        list.Adapter = new SmallWords(Context!, words, TextSp);
+        list.Adapter = new SmallWords(Context!, words);
         if (chosen >= 0)
         {
             list.SetSelection(chosen, false);
@@ -191,7 +227,9 @@ public sealed class ColorsRow : FrameLayout
         {
             // Its frame and arrow as drawn, less the word it shows, and the longest word.
             var shown = list.SelectedItem?.ToString() ?? "";
-            list.LayoutParameters!.Width = (int)Math.Ceiling(list.Width - paint.MeasureText(shown) + widest);
+            var width = (int)Math.Ceiling(list.Width - paint.MeasureText(shown) + widest);
+            list.LayoutParameters!.Width = width;
+            widths[list] = width;
             list.RequestLayout();
         });
         return list;
@@ -223,20 +261,30 @@ public sealed class ColorsRow : FrameLayout
     }
 
     private int Dp(float value) => (int)((value * Resources!.DisplayMetrics!.Density) + 0.5f);
+}
 
-    /// <summary>A list's words in the size asked, the shown one and those dropped down alike.</summary>
-    private sealed class SmallWords(Context context, IReadOnlyList<string> words, float sp)
-        : ArrayAdapter<string>(context, Android.Resource.Layout.SimpleSpinnerItem, words.ToList())
+/// <summary>A list's words in Tema's small type (<see cref="ColorsRow.TextSp"/>), the shown one and those dropped down alike; the shown one on one line, cut short with … where its list is narrower, those dropped down whole.</summary>
+public sealed class SmallWords(Context context, IReadOnlyList<string> words)
+    : ArrayAdapter<string>(context, Android.Resource.Layout.SimpleSpinnerItem, words.ToList())
+{
+    public override View GetView(int position, View? convertView, ViewGroup parent)
     {
-        public override View GetView(int position, View? convertView, ViewGroup parent) => Small(base.GetView(position, convertView, parent));
-
-        public override View? GetDropDownView(int position, View? convertView, ViewGroup? parent) => Small(base.GetDropDownView(position, convertView, parent));
-
-        private View Small(View? view)
+        var shown = Small(base.GetView(position, convertView, parent));
+        if (shown is TextView line)
         {
-            (view as TextView)?.SetTextSize(ComplexUnitType.Sp, sp);
-            return view!;
+            line.SetSingleLine(true);
+            line.Ellipsize = TextUtils.TruncateAt.End;
         }
+
+        return shown;
+    }
+
+    public override View? GetDropDownView(int position, View? convertView, ViewGroup? parent) => Small(base.GetDropDownView(position, convertView, parent));
+
+    private View Small(View? view)
+    {
+        (view as TextView)?.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
+        return view!;
     }
 }
 

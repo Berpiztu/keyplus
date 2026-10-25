@@ -57,13 +57,13 @@ public static class AndroidUpdates
             KeepChecked(context);
             if (Updates.IsNewer(release, Running(context)))
             {
-                Android.Util.Log.Info("KeyPlus", $"Updates: {release.Version} is out, {Running(context)} installed");
+                Log.Write($"Updates: {release.Version} is out, {Running(context)} installed");
                 Notify(context, release);
             }
         }
         catch (Exception failed) when (Failed(failed))
         {
-            Android.Util.Log.Warn("KeyPlus", $"Updates: {failed.Message}");
+            Log.Write($"Updates: {failed.Message}");
         }
         finally
         {
@@ -103,7 +103,7 @@ public static class AndroidUpdates
         }
         catch (Exception failed) when (Failed(failed))
         {
-            Android.Util.Log.Warn("KeyPlus", $"Updates: {failed.Message}");
+            Log.Write($"Updates: {failed.Message}");
             if (asked)
             {
                 Tell(activity, Say(activity, Resource.String.update_failed, failed.Message));
@@ -129,7 +129,7 @@ public static class AndroidUpdates
         else if (status != PackageInstallStatus.Success)
         {
             var message = intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? status.ToString();
-            Android.Util.Log.Warn("KeyPlus", $"Updates: the install failed: {message}");
+            Log.Write($"Updates: the install failed: {message}");
             Tell(activity, Say(activity, Resource.String.update_failed, message));
         }
     }
@@ -155,11 +155,11 @@ public static class AndroidUpdates
             // Mutable: the installer adds its status to it.
             var status = PendingIntent.GetActivity(activity, id, told, PendingIntentFlags.Mutable | PendingIntentFlags.UpdateCurrent)!;
             session.Commit(status.IntentSender!);
-            Android.Util.Log.Info("KeyPlus", $"Updates: {release.Version} handed to Android's installer");
+            Log.Write($"Updates: {release.Version} handed to Android's installer");
         }
         catch (Exception failed) when (Failed(failed) || failed is Java.Lang.Exception)
         {
-            Android.Util.Log.Warn("KeyPlus", $"Updates: {failed.Message}");
+            Log.Write($"Updates: {failed.Message}");
             Tell(activity, Say(activity, Resource.String.update_failed, failed.Message));
         }
     }

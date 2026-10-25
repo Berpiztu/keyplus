@@ -74,6 +74,6 @@ public static class SwipeData
     public static async Task DownloadFor(StandardLanguage language, IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
     {
         await Downloads.FilesAsync([.. (ModelDownloaded ? [] : Model).Select(file => (Folder, file)), WordListFile(language)], progress, cancel);
-        Android.Util.Log.Warn("KeyPlus", $"Glide typing: the {language.Code} word list downloaded, with FUTO Swipe's model where it was missing");
+        Log.Write($"Glide typing: the {language.Code} word list downloaded, with FUTO Swipe's model where it was missing");
     }
 }

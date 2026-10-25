@@ -107,7 +107,9 @@ a window that does.
 | [SpanishMarks.cs](SpanishMarks.cs) | Spelling's opening marks, on Android and Windows: a sentence closed with ? or ! given its "¿" or "¡" at its start |
 | [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
 | [AndroidUpdates.cs](AndroidUpdates.cs) | Updates on Android: the day's check from the keyboard or the service, its notification, the app's question, Android's installer |
-| [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Voice typing's settings (the password sealed by Android's keystore), the device's microphone, and Android's own recognizer for Local |
+| [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Voice typing's settings (the password sealed by Android's keystore), the microphone chosen or the device's own, and Android's own recognizer for Local |
+| [VoiceBars.cs](VoiceBars.cs) | 🎤 while it listens, on Android and Windows, as Gboard's: bars in the microphone's place rising and falling with the voice heard |
+| [Log.cs](Log.cs) | The keyboard's log, on Android and Windows: a line each with its time, every warning and error, what names what is on the screen only with Troubleshooting's Detailed log on; on Android in the app's files and logcat |
 | [MenuWatchService.cs](MenuWatchService.cs) | Also move out of the way of menus on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Theme's Per app, the colour beside the field typed in, on a screenshot |
 | [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Standard PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Settings › Theme), by language: Standard, Standard PC and those saved; each screen's one in each language |
@@ -124,7 +126,7 @@ a window that does.
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
-| [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder and the Spanish word list loaded once, a swipe read as words, accents put back |
+| [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder and each language's word list, downloaded with its Glide typing ([SwipeData.cs](SwipeData.cs)), loaded once, a swipe read as words, accents put back |
 | [SwipeDecoder.java](SwipeDecoder.java) | FUTO Swipe's Java side over its native library ([native/futo-swipe](native/futo-swipe)), GPL-3.0 |
 | [SwipeTrail.cs](SwipeTrail.cs) | The line a swiping finger draws over the keys, thinning behind it |
 

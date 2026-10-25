@@ -67,6 +67,10 @@
     <Compile Include="..\CommonErrors.cs" Link="Shared\CommonErrors.cs" />
     <Compile Include="..\AccentModel.cs" Link="Shared\AccentModel.cs" />
     <Compile Include="..\SwipeData.cs" Link="Shared\SwipeData.cs" />
+    <Compile Include="..\SpellingEngine.cs" Link="Shared\SpellingEngine.cs" />
+    <Compile Include="..\LanguageOptions.cs" Link="Shared\LanguageOptions.cs" />
+    <Compile Include="..\Log.cs" Link="Shared\Log.cs" />
+    <Compile Include="..\VoiceBars.cs" Link="Shared\VoiceBars.cs" />
     <Content Include="..\Resources\drawable\ic_key_*.xml;..\Resources\drawable\ic_emoji_*.xml;..\Resources\drawable\ic_grid_pc.xml;..\Resources\drawable\ic_grid_phone.xml;..\Resources\drawable\ic_grid_design.xml;..\Resources\drawable\ic_grid_floating.xml;..\Resources\drawable\ic_grid_floating_off.xml;..\Resources\drawable\ic_tool_close.xml;..\Resources\drawable\ic_tool_back.xml;..\Resources\drawable\ic_tool_mic.xml;..\Resources\drawable\ic_tool_settings.xml;..\Resources\drawable\ic_tool_resize.xml;..\Resources\drawable\ic_tool_spellcheck.xml;..\Resources\drawable\ic_settings_gesture.xml;..\Resources\drawable\ic_keyplus.xml"
              LinkBase="drawable" CopyToOutputDirectory="PreserveNewest" />
     <!-- The words, the Android keyboard's, in English and Spanish (Texts.cs). -->

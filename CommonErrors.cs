@@ -39,7 +39,7 @@ public sealed class CommonErrors
     public static async Task DownloadAsync(IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
     {
         await Downloads.FilesAsync(Folder, Files, progress, cancel);
-        Android.Util.Log.Warn("KeyPlus", "Spelling: the Wikipedia's common misspellings downloaded");
+        Log.Write("Spelling: the Wikipedia's common misspellings downloaded");
     }
 
     /// <summary>Each word written, the words meant: those matched whatever their case, and those (cs) only as written.</summary>
@@ -90,7 +90,7 @@ public sealed class CommonErrors
         // Whatever the platform's failure (Android's assets throw Java's), a list not read leaves the others in use.
         catch (Exception failure)
         {
-            Android.Util.Log.Warn("KeyPlus", $"Spelling: a list of common misspellings could not be read: {failure.Message}");
+            Log.Write($"Spelling: a list of common misspellings could not be read: {failure.Message}");
         }
     }
 

@@ -162,8 +162,18 @@ public sealed class KeyboardWindow : Window
     /// <summary>Being moved by the user, by the toolbar or the handle.</summary>
     private bool moving;
 
-    /// <summary>What the window keeps between runs.</summary>
-    private sealed record State(double Left, double Top, double Width, string Language, double? IconLeft = null, double? IconTop = null, double RowScale = 1, double? DockedWidth = null, double DockedOffset = 0, double DockedLift = 0);
+    /// <summary>
+    /// What the window keeps between runs: the language, the icon's place, the keyboard's size and place for each way it is
+    /// shown (<see cref="Way(bool, bool, bool)"/>); Left to DockedLift, as it was left before the size was kept for each way,
+    /// where a way not kept yet starts.
+    /// </summary>
+    private sealed record State(string Language, double? IconLeft = null, double? IconTop = null, Dictionary<string, Placing>? Placings = null, double? Left = null, double? Top = null, double? Width = null, double RowScale = 1, double? DockedWidth = null, double DockedOffset = 0, double DockedLift = 0);
+
+    /// <summary>The keyboard's size and place in one way of showing it: floating, the window's width and place; docked, the keys' width, place on the bar (Offset) and lift; the rows' scale either way.</summary>
+    private sealed record Placing(double Width, double RowScale, double Left = 0, double Top = 0, double Offset = 0, double Lift = 0);
+
+    /// <summary>The way of showing the keyboard the size and place in sight belong to, which <see cref="Keep"/> keeps them under.</summary>
+    private string placedFor = "";
 
     /// <summary>The keyboard window's title, by which another start of the program finds it.</summary>
     public const string WindowTitle = "Berpiztu AI Keyboard";
@@ -239,17 +249,25 @@ public sealed class KeyboardWindow : Window
         });
         keys.Suggestions += ShowSuggestions;
         keys.Offered += ShowTyping;
-        keys.Suggesting = Suggest;
+        keys.Suggesting = (language, typed) => spellingEngine.Suggest(language, typed);
         keys.PressedAt = () => input.PressedAt;
         keys.KeyedAt = () => input.KeyedAt;
-        commonErrors = new(() => (Wikipedia, Wikipedia && CommonErrors.Downloaded ? CommonErrors.Stamp : default), () => CommonErrors.Load(Wikipedia, () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList))));
+        spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
+            () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList)), Log.Write);
+        spellingEngine.FixesFound += (language, word) =>
+        {
+            if (keys.TypingWord == word)
+            {
+                ShowTyping(spellingEngine.Suggest(language, word));
+            }
+        };
         keys.SpellingIn = language => preferences.Applied(language.Code);
-        keys.Fixing = Fix;
+        keys.Fixing = (language, word) => spellingEngine.Fix(language, word);
         keys.WordFixed += ShowWordFix;
-        keys.CorrectNow = sentence => accents.InUse()?.Restore(sentence);
+        keys.CorrectNow = sentence => spellingEngine.Accents.InUse()?.Restore(sentence);
         keys.SentenceClosed += async sentence =>
         {
-            if (await accents.Async() is not { } model)
+            if (await spellingEngine.Accents.Async() is not { } model)
             {
                 return;
             }
@@ -425,6 +443,16 @@ public sealed class KeyboardWindow : Window
         middle.Children.Add(notice);
         middle.Children.Add(suggestions);
         bar.Children.Add(middle);
+
+        // While words are suggested, as Android's (Gboard's): the first and the last button, the words between them.
+        UIElement[] between = [smiley, spellingButton, glideButton, mic, settings, design, dock, resize];
+        System.ComponentModel.DependencyPropertyDescriptor.FromProperty(VisibilityProperty, typeof(Grid)).AddValueChanged(suggestions, (_, _) =>
+        {
+            foreach (var tool in between)
+            {
+                tool.Visibility = suggestions.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            }
+        });
         Moves(bar);
 
         var handle = new Border
@@ -496,11 +524,13 @@ public sealed class KeyboardWindow : Window
             appsWatch.Dispose();
             personalWatch.Dispose();
             dockedBar?.Undock();
+            Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= DisplayChanged;
             tray.Dispose();
             icon.Close();
         };
         LocationChanged += (_, _) => KeepSoon();
         SizeChanged += (_, _) => KeepSoon();
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += DisplayChanged;
         // Docked, the room is kept only while the keyboard is in sight.
         IsVisibleChanged += (_, _) =>
         {
@@ -781,11 +811,11 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
-        var scale = keys.RowScale;
+        Keep();
         keyboard = chosen;
         keys.Pc = chosen.Base == Keyboards.StandardPcBase;
         keys.Design = StandardDesign.FromText(chosen.DesignFor(docked));
-        FitKeys(scale);
+        PlaceAsKept();
         ShowSwitcher();
         Keep();
     }
@@ -916,211 +946,18 @@ public sealed class KeyboardWindow : Window
     {
         // Off from the toolbar (writing code), nothing is corrected or offered (Applied); the choices stay as they are.
         ShowSpellingButton(kept);
+        keys.CapitalizesSentences = kept.CapitalizeSentences;
 
         // What words were found to mean may change with what is now turned on.
-        fixes.Clear();
-        var spelling = kept.Applied(keys.KeyLanguage.Code);
-        if (spelling.Accents)
-        {
-            _ = accents.Async();
-        }
-
-        if (spelling.Words)
-        {
-            _ = DictionaryFor(keys.KeyLanguage)?.Async();
-            _ = commonErrors.Async();
-        }
+        spellingEngine.Forget();
+        spellingEngine.Prepare(keys.KeyLanguage);
     }
-
-    /// <summary>Each language's word list, downloaded with Glide typing (<see cref="SwipeData"/>): the words offered as a word is typed and how common a word is.</summary>
-    private readonly Dictionary<StandardLanguage, Loaded<WordSuggestions>> wordLists = [];
-
-    /// <summary>A language's word list, read away from the window's thread the first time it is asked for and again once it is downloaded again; none while it is not on this computer.</summary>
-    private Loaded<WordSuggestions> WordListOf(StandardLanguage language)
-    {
-        if (!wordLists.TryGetValue(language, out var list))
-        {
-            wordLists[language] = list = new(() => SwipeData.HasWordList(language) ? SwipeData.WordListStamp(language) : null, () =>
-            {
-                if (!SwipeData.HasWordList(language))
-                {
-                    return null;
-                }
-
-                try
-                {
-                    using var wordList = File.OpenRead(SwipeData.WordListPath(language));
-                    return WordSuggestions.Read(wordList, language);
-                }
-                catch (Exception failure) when (failure is IOException or InvalidDataException)
-                {
-                    Log.Write($"The {language.Code} word list could not be read: {failure.Message}");
-                    return null;
-                }
-            });
-        }
-
-        return list;
-    }
-
-    /// <summary>The words offered for a word being typed; from the word list only once it is downloaded and read.</summary>
-    private IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
-    {
-        IReadOnlyList<string> listed = WordListOf(language).InUse() is { } ready ? ready.For(typed) : [];
-
-        // The user's own words first, so one being typed stays in its place as what the word may have meant comes in
-        // after it, once found; the word list's starting so only where room is left.
-        if (!fixes.TryGetValue(typed, out var found))
-        {
-            FindFixes(language, typed);
-            fixes.TryGetValue(typed, out found);
-        }
-
-        // First, whether the word typed is a word: then it is what a space writes, in the centre, whatever is commoner ("hola" before "holandés").
-        IReadOnlyList<string> itself = IsWord(language, typed) ? [typed] : [];
-        return [.. itself.Concat(personal.Starting(language, typed)).Concat(found?.Words ?? []).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
-    }
-
-    /// <summary>Whether a word is a word as it is written, its accents too: the language's word list's, the user's dictionary's or its spelling dictionary's (Hunspell's).</summary>
-    private bool IsWord(StandardLanguage language, string word) =>
-        WordListOf(language).InUse()?.HasSpelled(word) == true
-        || personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase)
-        || DictionaryFor(language)?.InUse()?.Knows(word) == true;
-
-    /// <summary>Spelling's accent model, loaded the first time a sentence asks for it; the one loaded before let go once the new one is, a sentence may still be reading it.</summary>
-    private readonly Loaded<AccentModel> accents = new(() => AccentModel.Downloaded ? AccentModel.Stamp : null, AccentModel.Load, old => old.Dispose());
-
-    /// <summary>Spelling's dictionaries, each language's loaded as Correct words is turned on in it, the keyboard starts in it or its first word is checked.</summary>
-    private readonly Dictionary<string, Loaded<SpellingDictionary>> dictionaries = [];
-
-    /// <summary>A language's dictionary, read the first time it is asked for; none for a language Spelling has none for.</summary>
-    private Loaded<SpellingDictionary>? DictionaryFor(StandardLanguage language)
-    {
-        var code = language.Code;
-        if (!SpellingDictionary.Has(code))
-        {
-            return null;
-        }
-
-        if (!dictionaries.TryGetValue(code, out var loaded))
-        {
-            dictionaries[code] = loaded = new(() => SpellingDictionary.DownloadedFor(code) ? SpellingDictionary.StampFor(code) : null, () => SpellingDictionary.Load(code));
-        }
-
-        return loaded;
-    }
-
-    /// <summary>The common misspellings, the keyboard's own and, turned on, the Wikipedia's; read again as that choice changes.</summary>
-    private readonly Loaded<CommonErrors> commonErrors;
 
     /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
     private bool Wikipedia => preferences.SpellingIn(StandardKeys.Spanish.Code).Wikipedia;
 
-    /// <summary>
-    /// The words a word typed may have meant, at most as many as the toolbar
-    /// shows, and whether it is misspelled; none for a word left as it is.
-    /// </summary>
-    private WordFixes? Fix(StandardLanguage language, string word)
-    {
-        if (Checking(language, word) is not { } checking)
-        {
-            return null;
-        }
-
-        // Found already as it was typed, else looked for now: Hunspell's own limits keep the key waiting little.
-        if (!fixes.TryGetValue(word, out var found))
-        {
-            fixes[word] = found = Corrections(word, checking);
-        }
-
-        return found.Words.Count == 0 ? null : found with { Words = [.. found.Words.Take(WordSuggestions.Offered)] };
-    }
-
-    /// <summary>What a word is checked with, read on the window's thread: Correct words on, the language's dictionary loaded (Spanish's or English's), the common misspellings in Spanish; and whether the word is one (a list's, the accents aside, those being the accent model's; the user's; Hunspell's). None, it is not checked.</summary>
-    private sealed record Check(SpellingDictionary Spelling, CommonErrors? Common, WordSuggestions? Listed, IReadOnlyList<string> Personal, bool Known);
-
-    private Check? Checking(StandardLanguage language, string word)
-    {
-        if (!preferences.Applied(language.Code).Words || word.Length < 2 || DictionaryFor(language)?.InUse() is not { } spelling)
-        {
-            return null;
-        }
-
-        var listed = WordListOf(language).InUse();
-        var own = personal.Words(language.Code);
-        var known = Knows(language, word) || own.Contains(word, StringComparer.OrdinalIgnoreCase) || spelling.Knows(word);
-        // The common misspellings are Spanish ones.
-        return new Check(spelling, language.Code == StandardKeys.Spanish.Code ? commonErrors.InUse() : null, listed, own, known);
-    }
-
-    /// <summary>
-    /// What the word may have meant: a common misspelling's words first, in
-    /// their list's order; then, for a word that is none, Hunspell's and the
-    /// nearest of the word list and of the user's dictionary ("bidominoi":
-    /// bidominio), the user's as common as swiping has them
-    /// (<see cref="PersonalWords.Frequency"/>). A word that is a word ("as") is only offered its
-    /// common ones, never corrected alone. Nothing for a word Hunspell fails
-    /// on, which is then not looked for again.
-    /// </summary>
-    private static WordFixes Corrections(string word, Check checking)
-    {
-        IReadOnlyList<string> common = checking.Common?.For(word) ?? [];
-        if (checking.Known)
-        {
-            return new(common, Misspelled: false);
-        }
-
-        try
-        {
-            var listed = checking.Listed;
-            var own = checking.Personal.Where(mine => checking.Spelling.Close(word, mine)).ToList();
-            var near = own.Concat(listed?.Near(word, other => checking.Spelling.Close(word, other)) ?? []);
-            var suggested = checking.Spelling.Suggest(word, fix => own.Contains(fix) ? PersonalWords.Frequency : listed?.Frequency(fix) ?? 0, near);
-            return new([.. common.Concat(suggested).Distinct()], Misspelled: true);
-        }
-        catch (Exception failure)
-        {
-            Log.Write($"Spelling: a word's corrections could not be found: {failure.Message}");
-            return new(common, Misspelled: true);
-        }
-    }
-
-    /// <summary>What each word typed may have meant, found as it was typed, for its end; begun again past <see cref="FixesKept"/> words and as Spelling's choices change.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, WordFixes> fixes = new();
-
-    private const int FixesKept = 200;
-
-    /// <summary>
-    /// A word being typed: what it may have meant, a word's at once (a list's
-    /// look-up), a misspelled one's away from the window's thread (Hunspell's
-    /// search) and offered once found, while that word is still being typed.
-    /// </summary>
-    private void FindFixes(StandardLanguage language, string word)
-    {
-        if (fixes.ContainsKey(word) || Checking(language, word) is not { } checking)
-        {
-            return;
-        }
-
-        if (fixes.Count > FixesKept)
-        {
-            fixes.Clear();
-        }
-
-        if (checking.Known)
-        {
-            fixes[word] = Corrections(word, checking);
-            return;
-        }
-
-        Task.Run(() => fixes[word] = Corrections(word, checking)).ContinueWith(_ =>
-        {
-            if (keys.TypingWord == word)
-            {
-                ShowTyping(Suggest(language, word));
-            }
-        }, TaskScheduler.FromCurrentSynchronizationContext());
-    }
+    /// <summary>What the keyboard knows of words as they are typed (<see cref="SpellingEngine"/>), shared with Android.</summary>
+    private readonly SpellingEngine spellingEngine;
 
     /// <summary>
     /// A misspelled word in the toolbar's middle, as a sentence's accents
@@ -1204,10 +1041,6 @@ public sealed class KeyboardWindow : Window
         suggestions.Visibility = Visibility.Visible;
     }
 
-    /// <summary>Whether the language's word list has the word; while the list is being read, taken as known, so nothing is offered by mistake; without one downloaded, not known by it.</summary>
-    private bool Knows(StandardLanguage language, string word) =>
-        WordListOf(language).InUse() is { } ready ? ready.Knows(word) : SwipeData.HasWordList(language);
-
     /// <summary>
     /// Words in the toolbar's middle, as Gboard's: a swipe's, the typed one in
     /// the centre in bold and the next likeliest on each side, a side one
@@ -1258,7 +1091,7 @@ public sealed class KeyboardWindow : Window
     {
         var language = keys.KeyLanguage;
         var typed = keys.TypingWord;
-        if (typed.Length < 2 || !personal.LearnTyped || !Learns(language) || !Unknown(language, typed))
+        if (typed.Length < 2 || !personal.LearnTyped || !Learns(language) || !spellingEngine.Unknown(language, typed))
         {
             ShowSuggestions(words, null);
             return;
@@ -1289,10 +1122,6 @@ public sealed class KeyboardWindow : Window
             suggestions.Children.Add(place);
         }
     }
-
-    /// <summary>Whether no word list, no dictionary of the user's and no Hunspell of the language has the word; while the list is read, known, so nothing is offered to learn by mistake.</summary>
-    private bool Unknown(StandardLanguage language, string word) =>
-        !Knows(language, word) && !personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase) && DictionaryFor(language)?.InUse()?.Knows(word) != true;
 
     /// <summary>
     /// 🎤: a tap starts listening, 🎤 lit and beating with the voice's level,
@@ -1347,6 +1176,7 @@ public sealed class KeyboardWindow : Window
         }
 
         mic.Lit = true;
+        mic.Hearing = true;
         Notice(Texts.Get(options.Service == settings.Service ? Resource.String.voice_listening : Resource.String.voice_fallback_local), lasting: true);
     }
 
@@ -1372,6 +1202,7 @@ public sealed class KeyboardWindow : Window
 
         transcribing = true;
         mic.Lit = false;
+        mic.Hearing = false;
         mic.Level = 0;
         Topmost = true;
         if (notice.Text == Texts.Get(Resource.String.voice_listening))
@@ -1562,7 +1393,7 @@ public sealed class KeyboardWindow : Window
     /// Acoplar: docked at the bottom of the screen it is on, as wide, as Windows' touch keyboard docks (<see cref="DockedBar"/>),
     /// its card's shadow, corners and handle gone, never moved, the other windows made to give it room; or floating again where
     /// it was left. The same keyboard either way, shown as its docked design has it where it has one (designed while docked),
-    /// its rows as tall.
+    /// at the size kept for that way (<see cref="PlaceAsKept"/>).
     /// </summary>
     private void SetDocked(bool on)
     {
@@ -1571,26 +1402,15 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
-        var scale = keys.RowScale;
-        if (on)
-        {
-            Keep();
-            // The width set, not the one laid out: docked as it starts, the window is not laid out yet.
-            var kept = ReadState();
-            (dockedWidth, dockedOffset, dockedLift) = (kept?.DockedWidth ?? (Width - (2 * ShadowDp)), kept?.DockedOffset ?? 0, kept?.DockedLift ?? 0);
-        }
-
+        Keep();
         docked = on;
         if (preferences.Docked != on)
         {
             (preferences = KeyboardPreferences.Read() with { Docked = on }).Keep();
         }
 
-        frame.Margin = on ? new Thickness(0, 0, 0, dockedLift) : new Thickness(ShadowDp);
-        frame.RenderTransform = on ? new TranslateTransform(dockedOffset, 0) : Transform.Identity;
         frame.CornerRadius = new CornerRadius(on ? 0 : CardCornerDp);
         frame.Effect = on ? null : shadow;
-        frame.Width = on ? dockedWidth : double.NaN;
         frame.HorizontalAlignment = on ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
         Background = on ? frame.Background : Brushes.Transparent;
         handleBand.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
@@ -1605,13 +1425,12 @@ public sealed class KeyboardWindow : Window
         {
             dockedPlace = null;
             dockedBar?.Undock();
-            if (ReadState() is { } floating)
-            {
-                (Left, Top, Width) = (floating.Left, floating.Top, floating.Width);
-            }
+            frame.Margin = new Thickness(ShadowDp);
+            frame.RenderTransform = Transform.Identity;
+            frame.Width = double.NaN;
         }
 
-        FitKeys(scale);
+        PlaceAsKept();
         Log.Detail(on ? "Keyboard: docked" : "Keyboard: floating");
     }
 
@@ -1887,14 +1706,11 @@ public sealed class KeyboardWindow : Window
         }
     }
 
-    /// <summary>Where it was left, as wide, with the keyboard and language it had; the first time, three fifths of the screen wide at its bottom's middle.</summary>
+    /// <summary>With the keyboard and language it had, at the size and place kept for the way it is shown (<see cref="PlaceAsKept"/>).</summary>
     private void Restore()
     {
-        var area = SystemParameters.WorkArea;
-        var state = ReadState();
-        Width = Math.Max(MinWidth, state?.Width ?? area.Width * FirstWidthShare);
         // The language and its keyboard as the preferences have them; the language kept before they did, as the window kept it.
-        var language = preferences.Language ?? state?.Language;
+        var language = preferences.Language ?? ReadState()?.Language;
         keys.KeyLanguage = StandardKeys.LanguageOf(language);
         keyboard = Keyboards.Selected(preferences, keys.KeyLanguage.Code);
         keys.Pc = keyboard.Base == Keyboards.StandardPcBase;
@@ -1904,29 +1720,97 @@ public sealed class KeyboardWindow : Window
         keys.DeletesSwipedWord = preferences.GlideDeleteWord;
         Log.Detailed = preferences.DetailedLog;
         TakeSpelling(preferences);
-        FitKeys(state?.RowScale ?? 1);
-        if (state is not null && area.Contains(new Point(state.Left + 40, state.Top + 40)))
+        PlaceAsKept();
+    }
+
+    /// <summary>
+    /// The keyboard at the size and place kept for the way it is shown now (<see cref="Way(bool, bool)"/>); a way not kept yet,
+    /// as the keyboard was left before; the first time, floating three fifths of the screen wide at its bottom's middle,
+    /// docked as wide as it floats, in the bar's middle and on its bottom, its rows at their usual height.
+    /// </summary>
+    private void PlaceAsKept()
+    {
+        placedFor = Way(keys.Pc, docked);
+        var placing = KeptFor(placedFor, docked);
+        var area = SystemParameters.WorkArea;
+        if (docked)
         {
-            Left = state.Left;
-            Top = state.Top;
+            var floating = KeptFor(Way(keys.Pc, false), false)?.Width ?? (area.Width * FirstWidthShare);
+            (dockedWidth, dockedOffset, dockedLift) = placing is { } kept ? (kept.Width, kept.Offset, kept.Lift) : (floating - (2 * ShadowDp), 0, 0);
+            LayDocked();
+            FitKeys(placing?.RowScale ?? 1);
+            return;
+        }
+
+        Width = Math.Max(MinWidth, placing?.Width ?? area.Width * FirstWidthShare);
+        FitKeys(placing?.RowScale ?? 1);
+        if (placing is not null && area.Contains(new Point(placing.Left + 40, placing.Top + 40)))
+        {
+            (Left, Top) = (placing.Left, placing.Top);
         }
         else
         {
-            Left = area.Left + ((area.Width - Width) / 2);
-            Loaded += (_, _) => Top = area.Bottom - ActualHeight;
+            (Left, Top) = (area.Left + ((area.Width - Width) / 2), area.Bottom - Height);
         }
     }
+
+    /// <summary>
+    /// A way of showing the keyboard, each with its own size and place, as the user may want Estándar PC's more keys larger
+    /// than Estándar's: the keyboard (Estándar or Estándar PC), floating or docked, on a screen lying (landscape) or standing.
+    /// </summary>
+    private static string Way(bool pc, bool docked, bool landscape) =>
+        $"{(pc ? "pc" : "standard")}.{(docked ? "docked" : "floating")}.{(landscape ? "landscape" : "portrait")}";
+
+    /// <summary>A way of showing the keyboard on the screen the window is on.</summary>
+    private string Way(bool pc, bool docked) => Way(pc, docked, Landscape(new WindowInteropHelper(this).Handle));
+
+    /// <summary>Whether the screen the window is on lies wider than tall; with no window yet, the main screen.</summary>
+    private static bool Landscape(IntPtr window)
+    {
+        var screen = (window == IntPtr.Zero ? System.Windows.Forms.Screen.PrimaryScreen : System.Windows.Forms.Screen.FromHandle(window))!.Bounds;
+        return screen.Width >= screen.Height;
+    }
+
+    /// <summary>The size and place kept for a way of showing the keyboard; a way not kept yet, as the keyboard was left before; none, never kept.</summary>
+    private static Placing? KeptFor(string way, bool docked)
+    {
+        var state = ReadState();
+        if (state?.Placings?.GetValueOrDefault(way) is { } placing)
+        {
+            return placing;
+        }
+
+        return docked
+            ? state?.DockedWidth is { } keysWidth ? new Placing(keysWidth, state.RowScale, Offset: state.DockedOffset, Lift: state.DockedLift) : null
+            : state?.Width is { } width ? new Placing(width, state.RowScale, state.Left ?? 0, state.Top ?? 0) : null;
+    }
+
+    /// <summary>The size and place in sight, as kept for the way the keyboard is shown.</summary>
+    private Placing Shown() => docked
+        ? new Placing(dockedWidth, keys.RowScale, Offset: dockedOffset, Lift: dockedLift)
+        : new Placing(Width, keys.RowScale, Left, Top);
+
+    /// <summary>The screen turned or changed: the size and place kept for the way the keyboard is shown on it now.</summary>
+    private void DisplayChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(() =>
+    {
+        if (Way(keys.Pc, docked) != placedFor)
+        {
+            PlaceAsKept();
+        }
+    });
 
     /// <summary>The keyboard's width the first time, a share of the screen's.</summary>
     private const double FirstWidthShare = 0.6;
 
-    /// <summary>The keys' width and their rows' share of Gboard's height as the keyboard was left (the first time, as it first opens; docked, its docked width), for the settings' preview to show it as it is.</summary>
+    /// <summary>The keys' width and their rows' share of Gboard's height as kept for the way the keyboard is shown (the first time, as it first opens; docked, its docked width), for the settings' preview to show it as it is.</summary>
     public static (double Width, double RowScale) KeptKeys()
     {
-        var state = ReadState();
-        var floating = state is not null ? state.Width - (2 * ShadowDp) : (SystemParameters.WorkArea.Width * FirstWidthShare) - (2 * ShadowDp);
-        var width = KeyboardPreferences.Read().Docked ? state?.DockedWidth ?? floating : floating;
-        return (width, state?.RowScale ?? 1);
+        var preferences = KeyboardPreferences.Read();
+        var pc = ShownIn(preferences).Base == Keyboards.StandardPcBase;
+        var landscape = Landscape(IntPtr.Zero);
+        var floating = (KeptFor(Way(pc, false, landscape), false)?.Width ?? (SystemParameters.WorkArea.Width * FirstWidthShare)) - (2 * ShadowDp);
+        var placing = KeptFor(Way(pc, preferences.Docked, landscape), preferences.Docked);
+        return (preferences.Docked ? placing?.Width ?? floating : floating, placing?.RowScale ?? 1);
     }
 
     private static State? ReadState()
@@ -1955,15 +1839,14 @@ public sealed class KeyboardWindow : Window
         keepTimer.Start();
     }
 
-    /// <summary>The window's state kept; docked, its floating place and width as they were, to float there again.</summary>
+    /// <summary>The window's state kept: the size and place in sight under the way the keyboard is shown, the other ways' as they were.</summary>
     private void Keep()
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Kept)!);
-        var kept = ReadState();
+        var kept = ReadState() ?? new State(keys.KeyLanguage.Code);
         var iconKept = icon.IsVisible ? (icon.Left, icon.Top) : (kept is { IconLeft: { } left, IconTop: { } top } ? (left, top) : ((double, double)?)null);
-        var (placeLeft, placeTop, placeWidth) = docked && kept is not null ? (kept.Left, kept.Top, kept.Width) : (Left, Top, Width);
-        var (keptDockedWidth, keptOffset, keptLift) = docked ? (dockedWidth, dockedOffset, dockedLift) : (kept?.DockedWidth, kept?.DockedOffset ?? 0, kept?.DockedLift ?? 0);
-        File.WriteAllText(Kept, JsonSerializer.Serialize(new State(placeLeft, placeTop, placeWidth, keys.KeyLanguage.Code, iconKept?.Item1, iconKept?.Item2, keys.RowScale, keptDockedWidth, keptOffset, keptLift)));
+        var placings = new Dictionary<string, Placing>(kept.Placings ?? []) { [placedFor] = Shown() };
+        File.WriteAllText(Kept, JsonSerializer.Serialize(kept with { Language = keys.KeyLanguage.Code, IconLeft = iconKept?.Item1, IconTop = iconKept?.Item2, Placings = placings }));
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -1981,6 +1864,7 @@ public sealed class SignButton(Palette colors) : FrameworkElement
     private int sign;
     private bool down;
     private bool lit;
+    private bool hearing;
     private double level;
 
     /// <summary>Whether it is in use (🎤 listening): circled in the modifiers' tone.</summary>
@@ -1994,7 +1878,18 @@ public sealed class SignButton(Palette colors) : FrameworkElement
         }
     }
 
-    /// <summary>The level heard (0 to 1) while it is lit: its circle the wider, the louder.</summary>
+    /// <summary>Whether it shows the voice coming in (🎤 listening): <see cref="VoiceBars"/> in its sign's place.</summary>
+    public bool Hearing
+    {
+        get => hearing;
+        set
+        {
+            hearing = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>The level heard (0 to 1) while it is lit: its circle the wider, the louder, and its bars, while hearing, the taller.</summary>
     public double Level
     {
         get => level;
@@ -2028,7 +1923,27 @@ public sealed class SignButton(Palette colors) : FrameworkElement
             context.DrawEllipse(new SolidColorBrush(lit ? colors.On : colors.Function), null, new Point(RenderSize.Width / 2, RenderSize.Height / 2), radius, radius);
         }
 
+        if (hearing)
+        {
+            DrawBars(context);
+            return;
+        }
+
         Icons.Draw(context, sign, new Point(RenderSize.Width / 2, RenderSize.Height / 2), Size, colors.Glyph);
+    }
+
+    /// <summary>The voice coming in, as Gboard's: the bars rounded, in the sign's colour, each as tall as the level and its beat make it.</summary>
+    private void DrawBars(DrawingContext context)
+    {
+        var brush = new SolidColorBrush(colors.Glyph);
+        var (left, top) = ((RenderSize.Width - Size) / 2, RenderSize.Height / 2);
+        var width = VoiceBars.WidthShare * Size;
+        var seconds = Environment.TickCount64 / 1000.0;
+        for (var bar = 0; bar < VoiceBars.Count; bar++)
+        {
+            var height = Math.Max(width, VoiceBars.Height(bar, level, seconds) * Size);
+            context.DrawRoundedRectangle(brush, null, new Rect(left + VoiceBars.Left(bar, Size), top - (height / 2), width, height), width / 2, width / 2);
+        }
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)

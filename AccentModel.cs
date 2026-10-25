@@ -53,7 +53,7 @@ public sealed class AccentModel : IDisposable
     public static async Task DownloadAsync(IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
     {
         await Downloads.FilesAsync(Folder, Files, progress, cancel);
-        Android.Util.Log.Warn("KeyPlus", "Spelling: accent model downloaded");
+        Log.Write("Spelling: accent model downloaded");
     }
 
     private const string Language = "spa";
@@ -108,7 +108,7 @@ public sealed class AccentModel : IDisposable
         var labelsFile = Path.Combine(Folder, "labels.json");
         if (!File.Exists(onnx) || !File.Exists(labelsFile))
         {
-            Android.Util.Log.Warn("KeyPlus", $"Spelling: no accent model in {Folder}");
+            Log.Write($"Spelling: no accent model in {Folder}");
             return null;
         }
 
@@ -125,12 +125,12 @@ public sealed class AccentModel : IDisposable
 
             var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL, IntraOpNumThreads = 2 };
             var model = new AccentModel(new InferenceSession(onnx, options), labels, temperature);
-            Android.Util.Log.Warn("KeyPlus", "Spelling: accent model loaded");
+            Log.Write("Spelling: accent model loaded");
             return model;
         }
         catch (Exception failure) when (failure is IOException or JsonException or InvalidDataException or OnnxRuntimeException)
         {
-            Android.Util.Log.Warn("KeyPlus", $"Spelling: the accent model could not be loaded: {failure.Message}");
+            Log.Write($"Spelling: the accent model could not be loaded: {failure.Message}");
             return null;
         }
     }

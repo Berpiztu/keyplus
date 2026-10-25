@@ -413,10 +413,9 @@ public sealed class KeyPanel
     private IReadOnlyList<GridTile> gridTiles = [];
 
     /// <summary>The toolbar's own buttons, Gboard's, in Gboard's order: where they stand until placed elsewhere (⊞ › ✏).</summary>
-    private static readonly string[] BarFirst = ["clipboard", "stickers", "resize", "settings", "oneHanded"];
+    private static readonly string[] BarFirst = ["clipboard", "resize", "settings"];
 
     private const string OtherStandardId = "otherStandard";
-    private const string MinimizeId = "minimize";
 
     /// <summary>
     /// Customising, on the Fold: the toolbar's buttons in a blue outline 85 px
@@ -478,6 +477,9 @@ public sealed class KeyPanel
     /// </summary>
     public Func<SwipePath, Task<IReadOnlyList<string>>>? Swiping { get; set; }
 
+    /// <summary>Whether a language is swiped in: its Glide typing on, with its word list and the model downloaded (the keyboard's LanguageChoices); none, every language is.</summary>
+    public Func<StandardLanguage, bool>? GlidesFor { get; set; }
+
     /// <summary>A swipe's words in the order to offer them, what was learnt first (<see cref="PersonalWords.Ordered"/>); none, as read.</summary>
     public Func<StandardLanguage, IReadOnlyList<string>, IReadOnlyList<string>>? OrderSwiped { get; set; }
 
@@ -526,7 +528,10 @@ public sealed class KeyPanel
     private string typingWord = "";
 
     /// <summary>Whether the toolbar's middle shows words: a swipe's, or those offered for the word being typed.</summary>
-    private bool OffersWords => swipeWords.Count > 0 || typingWords.Count > 0;
+    private bool OffersWords => swipeWords.Count > 0 || typingWords.Count > 0 || learnable;
+
+    /// <summary>Whether the word being typed is one no list has, offered as typed at the toolbar's left to be learnt with a tap (<see cref="Learnable"/>).</summary>
+    private bool learnable;
 
     /// <summary>The words to offer for a word being typed in a language, the likeliest first (<see cref="WordSuggestions"/>); none, nothing is offered as letters are typed.</summary>
     public Func<StandardLanguage, string, IReadOnlyList<string>>? Suggesting { get; set; }
@@ -1194,21 +1199,32 @@ public sealed class KeyPanel
         var others = swipeWords.Where(word => word != swipedWord).Take(2).ToList();
         var words = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         words.SetGravity(GravityFlags.CenterVertical);
-        string?[] shown = typing
-            ? [typingWords.ElementAtOrDefault(1), typingWords.ElementAtOrDefault(0), typingWords.ElementAtOrDefault(2)]
+
+        // A word no list has, as typed at the left in quotes, as Gboard's: a tap writes it and learns it; the others after it.
+        var learning = typing && learnable;
+        var rest = typingWords.Where(word => !learning || !word.Equals(typingWord, StringComparison.OrdinalIgnoreCase)).ToList();
+        string?[] shown = learning ? [typingWord, rest.ElementAtOrDefault(0), rest.ElementAtOrDefault(1)]
+            : typing ? [typingWords.ElementAtOrDefault(1), typingWords.ElementAtOrDefault(0), typingWords.ElementAtOrDefault(2)]
             : [others.ElementAtOrDefault(0), swipedWord, others.ElementAtOrDefault(1)];
         for (var i = 0; i < shown.Length; i++)
         {
             var word = shown[i];
             var typed = i == 1 && !typing;
+            var learnt = learning && i == 0;
             if (divider is { } line && i > 0)
             {
                 words.AddView(Divider(line), new LinearLayout.LayoutParams(Dp(SuggestionLineDp), Dp(SuggestionLineHeightDp)));
             }
 
-            var button = ToolButton(word ?? "", typed ? $"{word}, written" : $"Write {word} instead", sp, () =>
+            var button = ToolButton(learnt ? $"\"{word}\"" : word ?? "", typed ? $"{word}, written" : $"Write {word} instead", sp, () =>
             {
-                if (word is not null && typing)
+                if (word is not null && learnt)
+                {
+                    var language = TypingLanguage;
+                    TakeSuggestion(word);
+                    Learn?.Invoke(language, word);
+                }
+                else if (word is not null && typing)
                 {
                     TakeSuggestion(word);
                 }
@@ -1282,7 +1298,12 @@ public sealed class KeyPanel
             ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
             : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
         standardBar.AddView(first, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
-        if (OffersWords)
+        if (offer is { } offered)
+        {
+            (offered.Parent as ViewGroup)?.RemoveView(offered);
+            standardBar.AddView(offered, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        }
+        else if (OffersWords)
         {
             standardBar.AddView(SwipeWordsRow(SuggestionSp, colors.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
@@ -1295,7 +1316,8 @@ public sealed class KeyPanel
         else
         {
             var tools = Tools();
-            foreach (var tool in Arranged().Bar.Select(id => tools[id]).Select(tool => StandardTool(tool.Icon, tool.Label, tool.Chosen)))
+            foreach (var tool in Arranged().Bar.Select(id => tools[id]).Select(tool => StandardTool(tool.Icon, tool.Label, tool.Chosen,
+                tool.On ? colors.Primary : null, tool.On ? colors.OnPrimary : null)))
             {
                 standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
                 standardBar.AddView(tool, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
@@ -1313,11 +1335,17 @@ public sealed class KeyPanel
     /// <summary>The standard keyboard's language as a dictation asks for it, by its locale ("es-ES", "en-US").</summary>
     public string DictationLocale => (standard?.Language ?? StandardKeys.Spanish).Locale;
 
+    /// <summary>Whether the caret stands where a sentence begins (Spelling's Capital at the start of a sentence): the standard keyboard's Shift on by itself, or off again.</summary>
+    public void SentenceStart(bool begins) => standard?.SentenceStart(begins);
+
     /// <summary>🎤's circle, lit while listening and as wide as the voice is loud; its sign.</summary>
     private View? micHalo;
     private ImageView? micSign;
     private bool listening;
     private double listeningLevel;
+
+    /// <summary>🎤's sign while it listens: the voice coming in (<see cref="VoiceBars"/>).</summary>
+    private BarsSign? bars;
 
     /// <summary>
     /// 🎤 as the Windows keyboard's: in the keys' tone, and while it listens
@@ -1357,12 +1385,62 @@ public sealed class KeyPanel
         var scale = QuietHalo + ((LoudHalo - QuietHalo) * (float)level);
         micHalo.ScaleX = micHalo.ScaleY = scale;
         micSign.ImageTintList = ColorStateList.ValueOf(on ? standardColors.OnPrimary : standardColors.Glyph);
+        if (on)
+        {
+            bars ??= new BarsSign();
+            bars.Show(standardColors.OnPrimary, level);
+            if (micSign.Drawable != bars)
+            {
+                micSign.SetImageDrawable(bars);
+            }
+        }
+        else if (micSign.Drawable == bars)
+        {
+            micSign.SetImageResource(Resource.Drawable.ic_tool_mic);
+        }
 
         // The sign's own circle, in the keys' tone, out of the way while the lit one beats behind it.
         if (micSign.Background is { } own)
         {
             own.Alpha = on ? 0 : 255;
         }
+    }
+
+    /// <summary>The voice coming in, as Gboard's, in 🎤's place: the bars rounded, in the tone on the lit circle, each as tall as the level and its beat make it.</summary>
+    private sealed class BarsSign : Drawable
+    {
+        private readonly Paint paint = new() { AntiAlias = true };
+        private double level;
+
+        public void Show(Color color, double heard)
+        {
+            paint.Color = color;
+            level = heard;
+            InvalidateSelf();
+        }
+
+        public override void Draw(Canvas canvas)
+        {
+            var box = Bounds;
+            var size = Math.Min(box.Width(), box.Height());
+            var (left, middle) = (box.Left + ((box.Width() - size) / 2f), box.ExactCenterY());
+            var width = (float)(VoiceBars.WidthShare * size);
+            var seconds = System.Environment.TickCount64 / 1000.0;
+            for (var bar = 0; bar < VoiceBars.Count; bar++)
+            {
+                var height = Math.Max(width, (float)(VoiceBars.Height(bar, level, seconds) * size));
+                var x = left + (float)VoiceBars.Left(bar, size);
+                canvas.DrawRoundRect(x, middle - (height / 2), x + width, middle + (height / 2), width / 2, width / 2, paint);
+            }
+        }
+
+        public override void SetAlpha(int alpha) => paint.Alpha = alpha;
+
+        public override void SetColorFilter(ColorFilter? colorFilter)
+        {
+        }
+
+        public override int Opacity => (int)Format.Translucent;
     }
 
     /// <summary>A toolbar sign's place: Gboard's, or, where seven of them do not fit (a narrow window), a seventh of the bar.</summary>
@@ -1498,17 +1576,14 @@ public sealed class KeyPanel
         GridTile[] all =
         [
             new("clipboard", context.GetString(Resource.String.clipboard), Resource.Drawable.ic_clipboard, () => Toggle(clipboardView!, ShowClipboard)),
-            new("stickers", context.GetString(Resource.String.stickers), Resource.Drawable.ic_tool_stickers, () => NotMadeYet(context.GetString(Resource.String.stickers))),
             new("resize", context.GetString(Resource.String.resize), Resource.Drawable.ic_tool_resize, () => ResizeRequested?.Invoke()),
             new("settings", context.GetString(Resource.String.keyboard_settings), Resource.Drawable.ic_tool_settings, OpenApp),
-            new("oneHanded", context.GetString(Resource.String.one_handed), Resource.Drawable.ic_tool_one_handed, () => NotMadeYet(context.GetString(Resource.String.one_handed))),
             .. gridTiles,
             // One button either way, as the owner asked: it shows the keyboard in sight, Estándar a phone, PC a computer, and switches to the other.
             keyboard?.Id == Keyboards.StandardId
                 ? new(OtherStandardId, context.GetString(Resource.String.keyboard_standard), Resource.Drawable.ic_grid_phone, () => Choose(OtherStandard))
                 : new(OtherStandardId, "PC", Resource.Drawable.ic_grid_pc, () => Choose(OtherStandard)),
             new(DesignId, context.GetString(Resource.String.design), Resource.Drawable.ic_grid_design, Design),
-            new(MinimizeId, context.GetString(Resource.String.minimize), Resource.Drawable.ic_grid_minimize, () => SetFolded(true)),
         ];
         return all.ToDictionary(tool => tool.Id);
     }
@@ -1567,7 +1642,7 @@ public sealed class KeyPanel
     /// <summary>The toolbar's buttons and the grid's as placed; those the toolbar has no room for in the grid, first.</summary>
     private (List<string> Bar, List<string> Grid) Arranged()
     {
-        var (bar, grid) = StandardTools.Read(context, BarFirst, [.. gridTiles.Select(tile => tile.Id), OtherStandardId, DesignId, MinimizeId]);
+        var (bar, grid) = StandardTools.Read(context, BarFirst, [.. gridTiles.Select(tile => tile.Id), OtherStandardId, DesignId]);
         var room = BarRoom;
         return ([.. bar.Take(room)], [.. bar.Skip(room), .. grid]);
     }
@@ -2433,18 +2508,32 @@ public sealed class KeyPanel
     /// </summary>
     private StandardKeyboard MakeStandard() => new(context, standardColors!)
     {
+        SelectionCase = () => SelectionCase?.Invoke() == true,
         Typed = text =>
         {
-            if (EndSwipe(text.Length == 1 && char.IsLetter(text[0])))
+            var letter = text.Length == 1 && char.IsLetter(text[0]);
+            EndOffer();
+            if (EndSwipe(letter))
             {
                 Type(" ");
             }
 
+            var fixing = letter ? null : FixWord();
             Type(text);
             OfferWords();
+            if (fixing is { } offered)
+            {
+                OfferFix(offered, text);
+            }
+
+            if (text is "." or "?" or "!")
+            {
+                CorrectClosed();
+            }
         },
         Deleted = () =>
         {
+            EndOffer();
             if (!DeleteSwiped())
             {
                 EndSwipe(letter: false);
@@ -2455,6 +2544,7 @@ public sealed class KeyPanel
         },
         KeyPressed = (code, meta) =>
         {
+            EndOffer();
             EndSwipe(letter: false);
             Send(code, meta);
             OfferWordsSoon();
@@ -2465,7 +2555,9 @@ public sealed class KeyPanel
         EmojisAsked = ShowEmojis,
         Entered = () =>
         {
+            EndOffer();
             EndSwipe(letter: false);
+            CorrectBeforeEnter();
             ForgetTyping();
             if (Enter is { } enter)
             {
@@ -2480,6 +2572,7 @@ public sealed class KeyPanel
         NextLanguage = NextLanguage,
         NotMade = NotMadeYet,
         Swiped = (path, capital, capitals) => ReadSwipe(path, capital, capitals),
+        GlidesIn = language => Swiping is not null && GlidesFor?.Invoke(language) != false,
         Visibility = ViewStates.Gone,
     };
 
@@ -2491,7 +2584,6 @@ public sealed class KeyPanel
         sounds = kept.GetBoolean(KeyPlusPreferences.SoundKey, false);
         showsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
         deletesSwipedWord = kept.GetBoolean(KeyPlusPreferences.SwipeDeleteWordKey, true);
-        openMarks = kept.GetBoolean(KeyPlusPreferences.SpellingOpenMarkKey, false);
         if (standard is not null)
         {
             standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
@@ -2509,9 +2601,6 @@ public sealed class KeyPanel
     /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed.</summary>
     private bool deletesSwipedWord = true;
 
-    /// <summary>Spelling's opening mark put at a sentence's start on closing it with ? or ! (<see cref="SpanishMarks"/>).</summary>
-    private bool openMarks;
-
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen, the kind of keyboard in sight kept in it (Estándar, Estándar PC); where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
     private void NextLanguage()
     {
@@ -2525,7 +2614,11 @@ public sealed class KeyPanel
 
         standard.Language = next;
         KeyPlusPreferences.Global(context).Edit()!.PutString(KeyPlusPreferences.LanguageKey, next.Code)!.Apply();
+        LanguageChanged?.Invoke(next);
     }
+
+    /// <summary>The standard keyboard's language changed (🌐): what goes by language, its tools lit or not, made again.</summary>
+    public event Action<StandardLanguage>? LanguageChanged;
 
     /// <summary>Enter as the field asks (Go, Search, Send…), where the keyboard can say; none, the Enter key.</summary>
     public Action? Enter { get; set; }
@@ -3750,7 +3843,7 @@ public sealed class KeyPanel
     /// </summary>
     private bool SwipeTouch(PanelKey key, View view, MotionEvent motion)
     {
-        if (Swiping is null || designing || !key.IsLetter || !SwipeLetters.Contains(key.Text!) || !Within(view, wholeKeyboard))
+        if (Swiping is null || GlidesFor?.Invoke(StandardKeys.Spanish) == false || designing || !key.IsLetter || !SwipeLetters.Contains(key.Text!) || !Within(view, wholeKeyboard))
         {
             return false;
         }
@@ -3905,7 +3998,7 @@ public sealed class KeyPanel
     {
         if (PathOf(trace) is not { } path)
         {
-            Log.Warn("KeyPlusSwipe", "A swipe was not read: a letter has no key in sight");
+            Log.Write("A swipe was not read: a letter has no key in sight");
             return;
         }
 
@@ -3938,7 +4031,7 @@ public sealed class KeyPanel
         }
         catch (Exception failure)
         {
-            Log.Warn("KeyPlusSwipe", $"The swipe could not be read: {failure}");
+            Log.Write($"The swipe could not be read: {failure}");
         }
     }
 
@@ -4008,7 +4101,7 @@ public sealed class KeyPanel
     /// </summary>
     private void MendSentence(char closing)
     {
-        if (openMarks && (standard?.Language ?? StandardKeys.Spanish) == StandardKeys.Spanish
+        if (SpellingIn?.Invoke(TypingLanguage).OpenMark == true
             && ReplaceBeforeCaret is { } replace && RecentText?.Invoke() is { } before
             && SpanishMarks.Opened(before, closing) is { } mended)
         {
@@ -4069,13 +4162,15 @@ public sealed class KeyPanel
     {
         var word = swipedText is null && Suggesting is not null && standard is not null ? WordBeforeCaret?.Invoke() ?? "" : "";
         IReadOnlyList<string> words = word.Length > 0 ? Suggesting!(standard!.Language, word) : [];
-        if (words.Count == 0 && typingWords.Count == 0)
+        var learning = word.Length >= 2 && Learnable?.Invoke(standard!.Language, word) == true;
+        if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
         {
             return;
         }
 
         typingWords = words;
         typingWord = word;
+        learnable = learning;
         ShowBars();
     }
 
@@ -4111,12 +4206,13 @@ public sealed class KeyPanel
     public void ForgetTyping()
     {
         typingWord = "";
-        if (typingWords.Count == 0)
+        if (typingWords.Count == 0 && !learnable)
         {
             return;
         }
 
         typingWords = [];
+        learnable = false;
         ShowBars();
     }
 
@@ -4132,6 +4228,264 @@ public sealed class KeyPanel
 
         swipeWords = [];
         ShowBars();
+    }
+
+    /// <summary>Spelling, the keyboard's as Windows': the words a word typed may have meant and whether it is misspelled (the keyboard's SpellingEngine); none, it is left as it is.</summary>
+    public Func<StandardLanguage, string, WordFixes?>? Fixing { get; set; }
+
+    /// <summary>A language's Spelling as it applies now: its Autocorrect, its opening marks, its accents.</summary>
+    public Func<StandardLanguage, LanguageSpelling>? SpellingIn { get; set; }
+
+    /// <summary>The accent model's sentence for one typed, read away from the main thread; none while it is not loaded.</summary>
+    public Func<string, Task<string?>>? CorrectSentence { get; set; }
+
+    /// <summary>The same at once, for Enter, which cannot wait; none while it is not loaded.</summary>
+    public Func<string, string?>? CorrectSentenceNow { get; set; }
+
+    /// <summary>The text right after the caret, to tell a word being written in the middle of another.</summary>
+    public Func<string?>? TextAfterCaret { get; set; }
+
+    /// <summary>Shift tapped twice: the field's selected text turned to its next case, still selected; false where none is selected.</summary>
+    public Func<bool>? SelectionCase { get; set; }
+
+    /// <summary>Whether a word being typed is one no list, no dictionary of the user's and no Hunspell has, offered as typed at the toolbar's left to be learnt; none, never.</summary>
+    public Func<StandardLanguage, string, bool>? Learnable { get; set; }
+
+    /// <summary>A word taken from the toolbar's left, learnt into the user's dictionary.</summary>
+    public Action<StandardLanguage, string>? Learn { get; set; }
+
+    private StandardLanguage TypingLanguage => standard?.Language ?? StandardKeys.Spanish;
+
+    /// <summary>The last word or sentence Spelling corrected or offered: what is written, what was typed, and what followed it; taken back or changed from the toolbar while the text still ends so.</summary>
+    private sealed record Correction(string Written, string Typed, string After);
+
+    private Correction? correction;
+
+    /// <summary>What the toolbar's middle shows in place of words: a correction, or what a tool lacks with Download; none, as ever.</summary>
+    private View? offer;
+
+    /// <summary>The toolbar's middle given to what is offered; none, back to words or tools.</summary>
+    private void ShowOffer(View? shown)
+    {
+        offer = shown;
+        ShowBars();
+    }
+
+    /// <summary>Something else typed: what was offered gone from the toolbar.</summary>
+    private void EndOffer()
+    {
+        correction = null;
+        if (offer is not null)
+        {
+            ShowOffer(null);
+        }
+    }
+
+    /// <summary>The text right before the caret, so many characters, replaced with another, in one edit where the field allows it.</summary>
+    private void Replace(int length, string text)
+    {
+        if (ReplaceBeforeCaret is { } replace)
+        {
+            replace(length, text);
+            return;
+        }
+
+        for (var gone = 0; gone < length; gone++)
+        {
+            Send(Keycode.Del, MetaKeyStates.None);
+        }
+
+        typeOut(text);
+    }
+
+    /// <summary>
+    /// The word typed letter by letter, ended now, before what ends it is
+    /// typed: misspelled, with Autocorrect on, the likeliest word it may have
+    /// meant written in its place; the word as typed, those words and whether
+    /// one was written, for the toolbar. None for a word left as it is, a
+    /// swiped one, or one being written in the middle of another (letters
+    /// right after the caret).
+    /// </summary>
+    private (string Typed, IReadOnlyList<string> Fixes, bool Applied)? FixWord()
+    {
+        if (Fixing is null || swipedText is not null || WordBeforeCaret?.Invoke() is not { Length: > 0 } word
+            || (TextAfterCaret?.Invoke() is { Length: > 0 } after && char.IsLetter(after[0]))
+            || Fixing(TypingLanguage, word) is not { Words.Count: > 0 } fixes)
+        {
+            return null;
+        }
+
+        var applied = SpellingIn?.Invoke(TypingLanguage).Autocorrect == true && fixes.Misspelled;
+        if (applied)
+        {
+            Replace(word.Length, fixes.Words[0]);
+        }
+
+        return (word, fixes.Words, applied);
+    }
+
+    /// <summary>
+    /// A word checked offered in the toolbar once what ended it is typed:
+    /// written in its place, ↶ and the word as typed in the centre and the
+    /// other words it may have meant on each side; else those words, ✓ on
+    /// the likeliest in the centre. A tap writes it again with what ended it.
+    /// </summary>
+    private void OfferFix((string Typed, IReadOnlyList<string> Fixes, bool Applied) fixing, string ending)
+    {
+        correction = new(fixing.Applied ? fixing.Fixes[0] : fixing.Typed, fixing.Typed, ending);
+        string?[] shown = fixing.Applied
+            ? [fixing.Fixes.ElementAtOrDefault(1), fixing.Typed, fixing.Fixes.ElementAtOrDefault(2)]
+            : [fixing.Fixes.ElementAtOrDefault(1), fixing.Fixes[0], fixing.Fixes.ElementAtOrDefault(2)];
+        ShowOffer(OfferRow(shown, fixing.Applied ? "↶ " : "✓ ", TakeCorrection));
+    }
+
+    /// <summary>Three words in the toolbar's middle, as its suggestions are: the centre's in bold after its sign, each written with a tap.</summary>
+    private LinearLayout OfferRow(string?[] shown, string centreSign, Action<string> taken)
+    {
+        var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        row.SetGravity(GravityFlags.CenterVertical);
+        for (var i = 0; i < shown.Length; i++)
+        {
+            var word = shown[i];
+            if (standardColors?.Divider is { } line && i > 0)
+            {
+                row.AddView(Divider(line), new LinearLayout.LayoutParams(Dp(SuggestionLineDp), Dp(SuggestionLineHeightDp)));
+            }
+
+            var button = ToolButton(word is null ? "" : i == 1 ? centreSign + word : word, word ?? "", SuggestionSp, () =>
+            {
+                if (word is not null)
+                {
+                    taken(word);
+                }
+            });
+            button.SetTextColor(standardColors!.Glyph);
+            button.SetPadding(Dp(2), 0, Dp(2), 0);
+            button.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(SuggestionSp), 1, (int)ComplexUnitType.Sp);
+            if (i == 1)
+            {
+                button.SetTypeface(null, TypefaceStyle.Bold);
+            }
+
+            row.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        }
+
+        return row;
+    }
+
+    /// <summary>A word or a sentence of the toolbar taken in place of the one corrected or offered, what followed it written again after it; only while the text still ends so.</summary>
+    private void TakeCorrection(string word)
+    {
+        if (correction is { } fix && RecentText?.Invoke() is { } before && before.EndsWith(fix.Written + fix.After, StringComparison.Ordinal))
+        {
+            Replace(fix.Written.Length + fix.After.Length, word + fix.After);
+        }
+
+        EndOffer();
+    }
+
+    /// <summary>The sentence the text before the caret ends with: from after the last . ? ! or new line before its end; empty where there is none.</summary>
+    private static string SentenceAt(string recent)
+    {
+        var start = recent.Length > 1 ? recent.LastIndexOfAny(['.', '?', '!', '\n'], recent.Length - 2) + 1 : 0;
+        return recent[start..].TrimStart();
+    }
+
+    /// <summary>
+    /// A sentence closed with . ? or !, its accents read by the model away
+    /// from the main thread, as Windows': with Autocorrect on, written in its
+    /// place, ↶ offering it back; off, the words it would change offered with
+    /// ✓. Only while the text still ends with it, spaces aside.
+    /// </summary>
+    private async void CorrectClosed()
+    {
+        var language = TypingLanguage;
+        if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { Accents: true } spelling
+            || RecentText?.Invoke() is not { } recent || SentenceAt(recent) is not { Length: > 1 } sentence)
+        {
+            return;
+        }
+
+        if (await CorrectSentence(sentence) is not { } corrected || corrected == sentence
+            || RecentText?.Invoke() is not { } now || now.LastIndexOf(sentence, StringComparison.Ordinal) is var at && at < 0)
+        {
+            return;
+        }
+
+        var after = now[(at + sentence.Length)..];
+        if (after.Any(character => !char.IsWhiteSpace(character)))
+        {
+            return;
+        }
+
+        string Changed(string shown, string other) => string.Join(' ', shown.Split(' ').Zip(other.Split(' ')).Where(pair => pair.First != pair.Second).Select(pair => pair.First));
+        if (spelling.Autocorrect)
+        {
+            Replace(sentence.Length + after.Length, corrected + after);
+            correction = new(corrected, sentence, after);
+            ShowOffer(OfferRow([null, Changed(sentence, corrected), null], "↶ ", _ => TakeCorrection(sentence)));
+        }
+        else
+        {
+            correction = new(sentence, sentence, after);
+            ShowOffer(OfferRow([null, Changed(corrected, sentence), null], "✓ ", _ => TakeCorrection(corrected)));
+        }
+    }
+
+    /// <summary>Enter closing what is typed, with Autocorrect on: its last word corrected, then its sentence's accents, before the line ends, for after Enter the field may add what it likes; nothing offered after.</summary>
+    private void CorrectBeforeEnter()
+    {
+        if (SpellingIn?.Invoke(TypingLanguage) is not { Autocorrect: true } spelling)
+        {
+            return;
+        }
+
+        FixWord();
+        if (spelling.Accents && CorrectSentenceNow is { } correct && RecentText?.Invoke() is { } recent
+            && SentenceAt(recent) is { Length: > 1 } sentence && correct(sentence) is { } corrected && corrected != sentence)
+        {
+            Replace(sentence.Length, corrected);
+        }
+    }
+
+    /// <summary>
+    /// What a tool lacks to work, said in the toolbar's middle with Download
+    /// beside it, in the keyboard's colours, as Windows': fetched there with
+    /// a tap, how much said as it comes, and once it is, what it is for
+    /// turned on (<paramref name="turnOn"/>) and the toolbar as it was; a
+    /// failure said there. Nothing is fetched but by that tap.
+    /// </summary>
+    public void OfferDownload(string missing, Func<Exception, string> failed, Func<IProgress<(long Done, long Total)>, Task> download, Action turnOn)
+    {
+        var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        row.SetGravity(GravityFlags.CenterVertical);
+        var said = ToolButton(missing, missing, SuggestionSp, () => { });
+        said.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(SuggestionSp), 1, (int)ComplexUnitType.Sp);
+        TextView? fetch = null;
+        fetch = ToolButton(context.GetString(Resource.String.download)!, context.GetString(Resource.String.download)!, SuggestionSp, async () =>
+        {
+            fetch!.Visibility = ViewStates.Gone;
+            try
+            {
+                await download(new Progress<(long Done, long Total)>(at => said.Text = context.GetString(Resource.String.downloading_short,
+                    new Java.Lang.String((at.Done / 1_000_000.0).ToString("0.0", CultureInfo.CurrentCulture)),
+                    new Java.Lang.String((Math.Max(at.Total, at.Done) / 1_000_000.0).ToString("0.0", CultureInfo.CurrentCulture)))));
+                turnOn();
+                ShowOffer(null);
+            }
+            catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+            {
+                Log.Write($"Downloads: {missing} could not be downloaded from the toolbar: {failure.Message}");
+                said.Text = failed(failure);
+            }
+        });
+        said.SetTextColor(standardColors!.Glyph);
+        fetch.SetTextColor(standardColors.Glyph);
+        fetch.SetTypeface(null, TypefaceStyle.Bold);
+        fetch.SetPadding(Dp(8), 0, Dp(8), 0);
+        row.AddView(said, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        row.AddView(fetch, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        ShowOffer(row);
     }
 
     private TextView PanelKeyView(PanelKey key)

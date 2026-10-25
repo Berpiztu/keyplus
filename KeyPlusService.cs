@@ -37,8 +37,6 @@ namespace Berpiztu.KeyPlus;
 [MetaData("android.accessibilityservice", Resource = "@xml/keyplus_accessibility")]
 public sealed class KeyPlusService : AccessibilityService, Android.Content.ISharedPreferencesOnSharedPreferenceChangeListener
 {
-    private const string LogTag = "KeyPlus";
-
     /// <summary>The panel in its window on one display, and the screen whose layout it has.</summary>
     private sealed record Overlay(int DisplayId, KeyPlusPreferences.Screen Screen, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement);
 
@@ -438,7 +436,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// <summary>Test on a headset: a line on the keys' window and in the log.</summary>
     private void Report(string text)
     {
-        Log.Info(LogTag, text);
+        Log.Write(text);
         if (WindowPanel is { } panel)
         {
             panel.InfoText = $"{DateTime.Now:HH:mm:ss} {text}";
@@ -545,7 +543,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             }
             catch (Exception failed) when (failed is Java.Lang.Exception or InvalidOperationException)
             {
-                Log.Warn(LogTag, $"The windows could not be looked at: {failed.Message}");
+                Log.Write($"The windows could not be looked at: {failed.Message}");
                 seen = default;
             }
 
@@ -555,7 +553,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
                 // Whether the focused display's windows alone come sooner.
                 var focusedOnly = System.Diagnostics.Stopwatch.StartNew();
                 _ = Windows;
-                Log.Warn(LogTag, $"Looking at every display's windows took {lookMs} ms; the focused display's alone {focusedOnly.ElapsedMilliseconds} ms");
+                Log.Write($"Looking at every display's windows took {lookMs} ms; the focused display's alone {focusedOnly.ElapsedMilliseconds} ms");
             }
 
             handler.Post(() =>
@@ -565,7 +563,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
                 PlaceNow(seen);
                 if (placing.ElapsedMilliseconds > SlowMs)
                 {
-                    Log.Warn(LogTag, $"Placing the panel took {placing.ElapsedMilliseconds} ms");
+                    Log.Write($"Placing the panel took {placing.ElapsedMilliseconds} ms");
                 }
 
                 if (lookAgain)
@@ -692,7 +690,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             : keyboard is null ? "as the icon, no keyboard open"
             : placed.Width > 0 ? "docked where it was left"
             : $"above the keyboard at {keyboard.Value.Bounds.ToShortString()}";
-        Log.Info(LogTag, $"Panel on display {displayId} at {x},{y} width {width}, {where}");
+        Log.Detail($"Panel on display {displayId} at {x},{y} width {width}, {where}");
         placement.X = x;
         placement.Y = y;
         placement.Width = width;
@@ -1000,7 +998,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             // The service's connection was being taken down as it came up
             // (turned off and on at once): no window now; the next windows
             // change, on the connection that stays, opens it.
-            Log.Warn(LogTag, $"No window on display {displayId}: {refused.Message}");
+            Log.Write($"No window on display {displayId}: {refused.Message}");
             if (displayId != Display.DefaultDisplay)
             {
                 refusedDisplays[displayId] = SystemClock.ElapsedRealtime();

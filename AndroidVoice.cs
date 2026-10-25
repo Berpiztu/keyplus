@@ -15,7 +15,8 @@ namespace Berpiztu.KeyPlus;
 /// 🎤's settings on Android, Escribir por voz's, the Windows keyboard's
 /// (windows\VoiceSettings.cs) with Android's own: whether it stops by itself
 /// once the user stops speaking and after how long a silence (off, it listens
-/// until 🎤 is tapped again), how much the volume is raised, and which
+/// until 🎤 is tapped again), the microphone ia-voice hears by and how much
+/// its volume is raised, and which
 /// service reads it: Local, Android's own recognizer on the device; an
 /// ia-voice on the local network, by its IP; or a remote one, at an address,
 /// with the user and password its proxy asks for,
@@ -29,6 +30,7 @@ public static class VoicePreferences
     public const string GainKey = "voiceGain";
     public const string ServiceKey = "voiceService";
     public const string LanAddressKey = "voiceLanAddress";
+    public const string MicrophoneKey = "voiceMicrophone";
 
     /// <summary>Kept before the local network was a choice: whether the device's recognizer, else the address.</summary>
     private const string LocalKey = "voiceLocal";
@@ -51,6 +53,9 @@ public static class VoicePreferences
     public static float Silence(Context context) => KeyPlusPreferences.Global(context).GetFloat(SilenceKey, SilenceDefault);
 
     public static float Gain(Context context) => KeyPlusPreferences.Global(context).GetFloat(GainKey, 1);
+
+    /// <summary>The microphone chosen, by its name (<see cref="AndroidMicrophone.Names"/>), as Windows': empty, the system's default.</summary>
+    public static string Microphone(Context context) => KeyPlusPreferences.Global(context).GetString(MicrophoneKey, "") ?? "";
 
     /// <summary>The service chosen (<see cref="VoiceTyping.OnDevice"/>, <see cref="VoiceTyping.OnLan"/>, <see cref="VoiceTyping.Remote"/>), as kept.</summary>
     public static string Choice(Context context)
@@ -82,7 +87,7 @@ public static class VoicePreferences
         }
         catch (Exception unreadable) when (unreadable is GeneralSecurityException or FormatException)
         {
-            Android.Util.Log.Warn("KeyPlus", $"The voice password could not be read: {unreadable.Message}");
+            Log.Write($"The voice password could not be read: {unreadable.Message}");
             return "";
         }
     }
@@ -139,14 +144,37 @@ public static class VoicePreferences
     }
 }
 
-/// <summary>The device's microphone for 🎤 by ia-voice: Android's voice-recognition input, 16 kHz, mono, 16 bits, read in pieces of 50 ms on a thread of its own.</summary>
-public sealed class AndroidMicrophone : IMicrophone
+/// <summary>
+/// The microphone for 🎤 by ia-voice: Android's voice-recognition input, 16
+/// kHz, mono, 16 bits, read in pieces of 50 ms on a thread of its own; the
+/// one chosen (<see cref="VoicePreferences.Microphone"/>) where it is
+/// connected, a Bluetooth one made the call's device while it listens, as
+/// Android routes no other's sound from it; else the system's default.
+/// </summary>
+public sealed class AndroidMicrophone(Context context) : IMicrophone
 {
     private const int PieceBytes = VoiceTyping.Rate * 2 / 20;
+
+    /// <summary>The kinds offered besides the system's default, as Windows offers each microphone: a headset's, a USB or a Bluetooth one; the device's own are the default's.</summary>
+    private static readonly AudioDeviceType[] Offered =
+        [AudioDeviceType.WiredHeadset, AudioDeviceType.UsbDevice, AudioDeviceType.UsbHeadset, AudioDeviceType.UsbAccessory, AudioDeviceType.BluetoothSco, AudioDeviceType.BleHeadset];
 
     private AudioRecord? record;
     private Thread? reader;
     private volatile bool reading;
+
+    /// <summary>A Bluetooth microphone made the call's device for this dictation, given back when it stops.</summary>
+    private bool calling;
+
+    /// <summary>The microphones connected now that can be chosen, by name, each once.</summary>
+    public static IReadOnlyList<string> Names(Context context) => [.. Inputs(context).Select(NameOf).Distinct()];
+
+    private static AudioManager Audio(Context context) => (AudioManager)context.GetSystemService(Context.AudioService)!;
+
+    private static IEnumerable<AudioDeviceInfo> Inputs(Context context) =>
+        Audio(context).GetDevices(GetDevicesTargets.Inputs)!.Where(device => Offered.Contains(device.Type));
+
+    private static string NameOf(AudioDeviceInfo device) => device.ProductName?.ToString() is { Length: > 0 } name ? name : device.Type.ToString();
 
     public void Start(Action<byte[], int> heard)
     {
@@ -156,6 +184,22 @@ public sealed class AndroidMicrophone : IMicrophone
         {
             listening.Release();
             throw new InvalidOperationException("The microphone did not open.");
+        }
+
+        if (VoicePreferences.Microphone(context) is { Length: > 0 } wanted)
+        {
+            if (Inputs(context).FirstOrDefault(device => NameOf(device) == wanted) is { } chosen)
+            {
+                listening.SetPreferredDevice(chosen);
+                if (chosen.Type is AudioDeviceType.BluetoothSco or AudioDeviceType.BleHeadset)
+                {
+                    calling = Audio(context).SetCommunicationDevice(chosen);
+                }
+            }
+            else
+            {
+                Log.Write($"Voice typing: the microphone {wanted} is not connected, so the system's default listens");
+            }
         }
 
         record = listening;
@@ -193,6 +237,7 @@ public sealed class AndroidMicrophone : IMicrophone
         reader = null;
         stopping.Stop();
         stopping.Release();
+        EndCall();
     }
 
     public void Dispose()
@@ -200,6 +245,16 @@ public sealed class AndroidMicrophone : IMicrophone
         reading = false;
         record?.Release();
         record = null;
+        EndCall();
+    }
+
+    private void EndCall()
+    {
+        if (calling)
+        {
+            Audio(context).ClearCommunicationDevice();
+            calling = false;
+        }
     }
 }
 

@@ -9,8 +9,8 @@ using Orientation = Android.Widget.Orientation;
 
 namespace Berpiztu.KeyPlus;
 
-/// <summary>A button of the standard keyboard's grid or toolbar: its id, its name, its sign, what it does, and whether it opens more (›).</summary>
-public sealed record GridTile(string Id, string Label, int Icon, Action Chosen, bool More = false);
+/// <summary>A button of the standard keyboard's grid or toolbar: its id, its name, its sign, what it does, whether it opens more (›), and whether what it turns on is on (lit, in the accent's colour).</summary>
+public sealed record GridTile(string Id, string Label, int Icon, Action Chosen, bool More = false, bool On = false);
 
 /// <summary>
 /// The standard keyboard's grid, Gboard's (⊞) as the owner's Fold has it
@@ -328,7 +328,7 @@ public sealed class StandardGrid : FrameLayout
     public FrameLayout Pill(GridTile tile, Action<float, float>? held = null)
     {
         var shape = new GradientDrawable();
-        shape.SetColor(colors.Key);
+        shape.SetColor(tile.On ? colors.Primary : colors.Key);
         shape.SetCornerRadius(Dp(PillHeightDp) / 2f);
         var pill = new FrameLayout(Context!)
         {
@@ -345,10 +345,11 @@ public sealed class StandardGrid : FrameLayout
             HoldToDrag(pill, held);
         }
 
-        pill.AddView(Sign(tile.Icon, colors.Glyph), new LayoutParams(Dp(SignDp), Dp(SignDp), GravityFlags.Left | GravityFlags.CenterVertical) { LeftMargin = Dp(SignLeftDp) });
+        var glyph = tile.On ? colors.OnPrimary : colors.Glyph;
+        pill.AddView(Sign(tile.Icon, glyph), new LayoutParams(Dp(SignDp), Dp(SignDp), GravityFlags.Left | GravityFlags.CenterVertical) { LeftMargin = Dp(SignLeftDp) });
 
         var name = new TextView(Context) { Text = tile.Label, Ellipsize = Android.Text.TextUtils.TruncateAt.Marquee, Gravity = GravityFlags.CenterVertical };
-        name.SetTextColor(colors.Glyph);
+        name.SetTextColor(glyph);
         name.SetTextSize(ComplexUnitType.Sp, LabelSp);
         name.SetSingleLine(true);
         // A name longer than the room left scrolls along, as Gboard's do.

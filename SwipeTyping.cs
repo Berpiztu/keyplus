@@ -8,8 +8,11 @@ namespace Berpiztu.KeyPlus;
 /// A word swiped over Berpiztu AI Keyboard's letters, read by FUTO Swipe
 /// (SwipeDecoder.java, native/futo-swipe): its encoder, which reads a swipe
 /// over any layout, loaded once, and a trie of each language's AOSP word
-/// list, made the first time a swipe is read in it (Spanish at once), all
-/// away from the main thread. The trie knows a word by its letters alone,
+/// list, made the first time a swipe is read in it, all away from the main
+/// thread. Neither is carried: a language's Glide typing downloads its word
+/// list, and the encoder the first time (<see cref="SwipeData"/>); until
+/// they are here a swipe reads nothing, and once they are, the next loads
+/// them. The trie knows a word by its letters alone,
 /// so a word with an accent ("también") is kept there as "tambien" and written
 /// back as the word list spells it, the commonest spelling first ("está",
 /// then "esta").
@@ -19,12 +22,10 @@ public sealed class SwipeTyping
     /// <summary>The Java side (SwipeDecoder.java), reached through JNI: it is not bound to C#.</summary>
     private static readonly IntPtr Decoder = JNIEnv.FindClass("org/futo/ml/inference/SwipeDecoder");
 
-    private const string Tag = "KeyPlusSwipe";
-
     /// <summary>How many words a swipe offers: the one typed and one on each side of it in the toolbar, as Gboard's.</summary>
     private const int Offered = 3;
 
-    private readonly Task<bool> loaded;
+    private Task<bool> loaded;
 
     /// <summary>The native engine is used by one thread at a time.</summary>
     private readonly Lock engineLock = new();
@@ -70,6 +71,12 @@ public sealed class SwipeTyping
     /// <summary>The words a swipe reads as, the likeliest first; none where FUTO Swipe could not be loaded or read nothing.</summary>
     public async Task<IReadOnlyList<string>> Words(KeyPanel.SwipePath path)
     {
+        // Not loaded for want of the encoder, and it is here now: loaded again.
+        if (loaded.IsCompleted && !loaded.Result && SwipeData.ModelDownloaded)
+        {
+            loaded = Task.Run(Load);
+        }
+
         if (!await loaded)
         {
             return [];
@@ -89,7 +96,7 @@ public sealed class SwipeTyping
                 {
                     if (!SetLayout(path.Language.SwipeLetters, path.KeyX, path.KeyY, language.Trie))
                     {
-                        Log.Warn(Tag, "FUTO Swipe did not take the letters' places");
+                        Log.Write("FUTO Swipe did not take the letters' places");
                         return (IReadOnlyList<string>)[];
                     }
 
@@ -97,7 +104,7 @@ public sealed class SwipeTyping
                 }
 
                 var read = Recognize(path.X, path.Y, path.T);
-                Log.Debug(Tag, $"{path.X.Length} points read as: {string.Join(", ", read)}");
+                Log.Detail($"{path.X.Length} points read as: {string.Join(", ", read)}");
                 return SwipeWords.Spelled(read, language.Spellings, Offered);
             }
         });
@@ -105,34 +112,29 @@ public sealed class SwipeTyping
 
     private string Folder => Path.Combine(context.FilesDir!.AbsolutePath, "futo-swipe");
 
-    /// <summary>
-    /// The encoder copied out of the APK, where the native library reads it
-    /// from a path, with its metadata beside it; the engine made; Spanish's
-    /// trie made at once, the language the keyboard opens in.
-    /// </summary>
+    /// <summary>The engine made with the encoder downloaded, its metadata beside it, where the native library reads them from a path; false while it is not downloaded.</summary>
     private bool Load()
     {
+        if (!SwipeData.ModelDownloaded)
+        {
+            return false;
+        }
+
         try
         {
             Directory.CreateDirectory(Folder);
-            var encoder = Path.Combine(Folder, "model_fp32.pte");
-            CopyAsset("futo-swipe/honorable_sturgeon/model_fp32.pte", encoder);
-            CopyAsset("futo-swipe/honorable_sturgeon/metadata.json", Path.Combine(Folder, "metadata.json"));
-            engine = CallLong("create", "(Ljava/lang/String;)J", encoder);
-            Log.Info(Tag, $"FUTO Swipe loaded: engine {engine != 0}");
-            lock (engineLock)
-            {
-                return engine != 0 && Prepared(StandardKeys.Spanish) is not null;
-            }
+            engine = CallLong("create", "(Ljava/lang/String;)J", SwipeData.ModelPath);
+            Log.Write($"FUTO Swipe loaded: engine {engine != 0}");
+            return engine != 0;
         }
         catch (Exception failure)
         {
-            Log.Warn(Tag, $"FUTO Swipe could not be loaded: {failure}");
+            Log.Write($"FUTO Swipe could not be loaded: {failure}");
             return false;
         }
     }
 
-    /// <summary>A language's trie and spellings, made from its word list the first time; none where it could not be made.</summary>
+    /// <summary>A language's trie and spellings, made from its word list the first time; none where it is not downloaded or could not be made.</summary>
     private (long Trie, Dictionary<string, string[]> Spellings)? Prepared(StandardLanguage language)
     {
         if (languages.TryGetValue(language, out var prepared))
@@ -140,17 +142,22 @@ public sealed class SwipeTyping
             return prepared;
         }
 
+        if (!SwipeData.HasWordList(language))
+        {
+            return null;
+        }
+
         try
         {
             var words = Path.Combine(Folder, $"{language.Code}.letters.combined");
             Dictionary<string, string[]> spellings;
-            using (var wordList = context.Assets!.Open(language.WordList))
+            using (var wordList = File.OpenRead(SwipeData.WordListPath(language)))
             {
                 spellings = SwipeWords.WriteLetterForms(wordList, language, words, personal(language));
             }
 
             var trie = CallLong("loadDictionary", "(Ljava/lang/String;Ljava/lang/String;)J", language.SwipeLetters, words);
-            Log.Info(Tag, $"FUTO Swipe's {language.Code} words: {spellings.Count}");
+            Log.Write($"FUTO Swipe's {language.Code} words: {spellings.Count}");
             if (trie == 0)
             {
                 return null;
@@ -161,16 +168,9 @@ public sealed class SwipeTyping
         }
         catch (Exception failure)
         {
-            Log.Warn(Tag, $"FUTO Swipe's {language.Code} words could not be made: {failure}");
+            Log.Write($"FUTO Swipe's {language.Code} words could not be made: {failure}");
             return null;
         }
-    }
-
-    private void CopyAsset(string asset, string path)
-    {
-        using var from = context.Assets!.Open(asset);
-        using var to = File.Create(path);
-        from.CopyTo(to);
     }
 
     private bool SetLayout(string keys, float[] keyX, float[] keyY, long dictionary)

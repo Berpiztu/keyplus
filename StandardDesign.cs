@@ -40,7 +40,7 @@ public sealed class StandardDesign
         }
         catch (JsonException unreadable)
         {
-            Android.Util.Log.Warn("KeyPlus", $"A standard keyboard's design could not be read: {unreadable.Message}");
+            Log.Write($"A standard keyboard's design could not be read: {unreadable.Message}");
             return null;
         }
     }

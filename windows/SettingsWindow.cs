@@ -196,7 +196,7 @@ public sealed class SettingsWindow : Window
     /// <summary>
     /// A language's own page, opened from Languages, Spelling or Dictionary
     /// (← back to it, <paramref name="from"/>): its
-    /// Spelling, only what Spelling has for it (<see cref="SpellingChoices"/>),
+    /// Spelling, only what Spelling has for it (<see cref="LanguageOptions.SpellingChoices"/>),
     /// a choice that fetches files fetching them as it is turned on, its line
     /// under it saying how much while it does; and its words, your
     /// dictionary's (<see cref="WordsPart"/>).
@@ -212,7 +212,7 @@ public sealed class SettingsWindow : Window
         heading.Children.Add(new TextBlock { Text = language.Name, FontSize = 20, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         form.Children.Add(heading);
         form.Children.Add(Section(Resource.String.spelling));
-        foreach (var choice in SpellingChoices(code))
+        foreach (var choice in LanguageOptions.SpellingChoices(code, Texts.Get))
         {
             var box = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(KeyboardPreferences.Read().SpellingIn(code)) };
             form.Children.Add(FieldSaying(null, box, choice.Summary));
@@ -230,9 +230,8 @@ public sealed class SettingsWindow : Window
         // Glide typing, the language's own: its word list, and the model the first time.
         form.Children.Add(Section(Resource.String.glide));
         var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = KeyboardPreferences.Read().GlidesIn(code) };
-        form.Children.Add(FieldSaying(null, glide, Texts.Get(Resource.String.glide_summary_download,
-            SwipeData.WordListMegabytes(language).ToString("0.0#", CultureInfo.CurrentCulture), SwipeData.ModelMegabytes.ToString("0.0#", CultureInfo.CurrentCulture))));
-        form.Children.Add(Choosing(glide, GlideOf(language), on => KeyboardPreferences.Read().WithGlide(code, on).Keep())!);
+        form.Children.Add(FieldSaying(null, glide, LanguageOptions.GlideSummary(language, Texts.Get)));
+        form.Children.Add(Choosing(glide, LanguageOptions.GlideOf(language), on => KeyboardPreferences.Read().WithGlide(code, on).Keep())!);
         form.Children.Add(Section(Resource.String.dictionary));
         form.Children.Add(WordsPart(code));
         return form;
@@ -672,14 +671,17 @@ public sealed class SettingsWindow : Window
             (now with { SpellingOn = correcting.IsChecked == true }).Keep();
         };
         form.Children.Add(Field(null, correcting, Resource.String.spelling_on_summary));
+        var capitals = new CheckBox { Content = Texts.Get(Resource.String.spelling_capitalize), IsChecked = preferences.CapitalizeSentences };
+        capitals.Click += (_, _) => (KeyboardPreferences.Read() with { CapitalizeSentences = capitals.IsChecked == true }).Keep();
+        form.Children.Add(Field(null, capitals, Resource.String.spelling_capitalize_summary));
         form.Children.Add(Field(null, LanguageLines(choosing: false, SpellingPage), Resource.String.spelling_by_language));
 
         // What the languages' choices turned on fetched, each once, one after another in one line; with nothing turned on, hidden in its place.
         var turnedOn = StandardKeys.Languages
-            .SelectMany(language => SpellingChoices(language.Code)
+            .SelectMany(language => LanguageOptions.SpellingChoices(language.Code, Texts.Get)
                 .Where(choice => choice.Fetches is not null && choice.Get(preferences.SpellingIn(language.Code)))
                 .Select(choice => choice.Fetches!))
-            .Concat(StandardKeys.Languages.Where(language => preferences.GlidesIn(language.Code)).Select(GlideOf))
+            .Concat(StandardKeys.Languages.Where(language => preferences.GlidesIn(language.Code)).Select(LanguageOptions.GlideOf))
             .DistinctBy(fetched => fetched.Named)
             .ToList();
         var again = new Button
@@ -704,70 +706,6 @@ public sealed class SettingsWindow : Window
         form.Children.Add(state);
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.spelling_windows_note), TextWrapping = TextWrapping.Wrap }, null));
         return form;
-    }
-
-    /// <summary>What a Spelling choice fetches, never carried by the app: how it is named in the log, whether it is here, how it is fetched, and its line's words while it is, once it is and when it could not be.</summary>
-    private sealed record Fetched(string Named, Func<bool> Downloaded, Func<IProgress<(long Done, long Total)>, CancellationToken, Task> Download, int Downloading, int Done, int Failed);
-
-    /// <summary>Correct words' files for a language: its dictionary, and its word list, which offers words as they are typed and tells how common a correction is, so it works without glide typing.</summary>
-    private static Fetched DictionaryOf(StandardLanguage language) => new(
-        $"the {language.Code} dictionary and word list",
-        () => SpellingDictionary.DownloadedFor(language.Code) && SwipeData.HasWordList(language),
-        async (progress, cancel) =>
-        {
-            await Downloads.FilesAsync([.. SpellingDictionary.FilesFor(language.Code), SwipeData.WordListFile(language)], progress, cancel);
-            Log.Write($"Spelling: the {language.Code} dictionary and word list downloaded");
-        },
-        Resource.String.spelling_dictionary_downloading, Resource.String.spelling_dictionary_downloaded, Resource.String.spelling_dictionary_download_failed);
-
-    private static readonly Fetched Model = new(
-        "the accent model", () => AccentModel.Downloaded, AccentModel.DownloadAsync,
-        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
-
-    /// <summary>A language's Glide typing's files: its word list, and FUTO Swipe's model the first time.</summary>
-    private static Fetched GlideOf(StandardLanguage language) => new(
-        $"glide typing for {language.Code}", () => SwipeData.ReadyFor(language), (progress, cancel) => SwipeData.DownloadFor(language, progress, cancel),
-        Resource.String.glide_downloading, Resource.String.glide_downloaded, Resource.String.glide_download_failed);
-
-    private static readonly Fetched WikipediaList = new(
-        "the Wikipedia's common misspellings", () => CommonErrors.Downloaded, CommonErrors.DownloadAsync,
-        Resource.String.spelling_wikipedia_downloading, Resource.String.spelling_wikipedia_downloaded, Resource.String.spelling_wikipedia_download_failed);
-
-    /// <summary>A language's Spelling choice: its name and what it says, what it fetches if anything, and how it reads and changes the language's Spelling.</summary>
-    private sealed record SpellingChoice(int Label, string Summary, Fetched? Fetches, Func<LanguageSpelling, bool> Get, Func<LanguageSpelling, bool, LanguageSpelling> Set);
-
-    /// <summary>
-    /// What Spelling has for a language, in its page's order: its words where
-    /// it has a dictionary, named with its size; Spanish's common
-    /// misspellings and its accents; Autocorrect; Spanish's ¿ and ¡.
-    /// </summary>
-    private static IEnumerable<SpellingChoice> SpellingChoices(string language)
-    {
-        var spanish = LanguageSpelling.Offers(language);
-        if (SpellingDictionary.Has(language))
-        {
-            var named = Texts.Get(language == StandardKeys.Spanish.Code ? Resource.String.spelling_dictionary_es : Resource.String.spelling_dictionary_en);
-            var known = StandardKeys.Languages.First(standard => standard.Code == language);
-            var size = (SpellingDictionary.MegabytesFor(language) + SwipeData.WordListMegabytes(known)).ToString("0.0#", CultureInfo.CurrentCulture);
-            yield return new(Resource.String.spelling_words, Texts.Get(Resource.String.spelling_words_summary, named, size), DictionaryOf(known),
-                spelling => spelling.Words, (spelling, on) => spelling with { Words = on });
-        }
-
-        if (spanish)
-        {
-            yield return new(Resource.String.spelling_wikipedia, Texts.Get(Resource.String.spelling_wikipedia_summary), WikipediaList,
-                spelling => spelling.Wikipedia, (spelling, on) => spelling with { Wikipedia = on });
-            yield return new(Resource.String.spelling_accent_closing, Texts.Get(Resource.String.spelling_accent_closing_summary), Model,
-                spelling => spelling.Accents, (spelling, on) => spelling with { Accents = on });
-        }
-
-        yield return new(Resource.String.spelling_autocorrect, Texts.Get(Resource.String.spelling_autocorrect_summary), null,
-            spelling => spelling.Autocorrect, (spelling, on) => spelling with { Autocorrect = on });
-        if (spanish)
-        {
-            yield return new(Resource.String.spelling_open_mark, Texts.Get(Resource.String.spelling_open_mark_summary), null,
-                spelling => spelling.OpenMark, (spelling, on) => spelling with { OpenMark = on });
-        }
     }
 
     /// <summary>

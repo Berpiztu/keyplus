@@ -107,7 +107,21 @@ public sealed class KeyboardSurface : FrameworkElement
         public bool LongPressed { get; set; }
         public bool Repeated { get; set; }
         public bool Swiping { get; set; }
+
+        /// <summary>What its long press offers in a popup above it (<see cref="ChoicesFor"/>), and which is chosen now; none, nothing offered.</summary>
+        public Choices? Offered { get; set; }
+        public int Chosen { get; set; }
     }
+
+    /// <summary>A long press's popup: what it offers, each one's cell, and the popup's ground around them.</summary>
+    private sealed record Choices(IReadOnlyList<string> Texts, IReadOnlyList<Rect> Cells, Rect Ground);
+
+    /// <summary>How many a popup's row holds, as Gboard's: more go in rows above it.</summary>
+    private const int ChoicesAcross = 5;
+
+    /// <summary>The room around a popup's cells, and its corners' roundness: Gboard's, measured on the emulator.</summary>
+    private const double ChoicesPaddingDp = 6;
+    private const double ChoicesCornerDp = 24;
 
     /// <summary>The trail Gboard draws: 30 px wide at the finger, 14 px at its end, 93 % then 40 % opaque.</summary>
     private const double TrailDp = 30 / PixelsPerDp;
@@ -583,13 +597,13 @@ public sealed class KeyboardSurface : FrameworkElement
     /// </summary>
     private (string Typed, IReadOnlyList<string> Fixes, bool Applied)? FixWord()
     {
-        if (typingWord.Length >= 2 && !WordKnown)
+        if (typingWord.Length > 0 && !WordKnown)
         {
             Log.Detail("Spelling: a word left as it is: where it begins is not known (a click put the caret in the text, or a key of the computer's was pressed)");
             return null;
         }
 
-        if (typingWord.Length < 2 || Fixing?.Invoke(language, typingWord) is not { Words.Count: > 0 } fixes)
+        if (typingWord.Length == 0 || Fixing?.Invoke(language, typingWord) is not { Words.Count: > 0 } fixes)
         {
             return null;
         }
@@ -917,8 +931,14 @@ public sealed class KeyboardSurface : FrameworkElement
     {
         page = shown;
         shift = Shift.Off;
+        symbolTyped = false;
         Lay();
     }
+
+    /// <summary>A symbol (or a digit) typed on ?123 or =\&lt; since it was opened: the next space or Enter goes back to the letters, as Gboard's and Android's.</summary>
+    private bool symbolTyped;
+
+    private bool OnSymbols => page is StandardPage.Symbols or StandardPage.MoreSymbols;
 
     protected override void OnRender(DrawingContext context)
     {
@@ -950,6 +970,107 @@ public sealed class KeyboardSurface : FrameworkElement
         if (pressed is { Swiping: true } now && ShowsTrail)
         {
             DrawTrail(context, now);
+        }
+
+        if (pressed is { LongPressed: true, Offered: { } offered } choosing)
+        {
+            DrawChoices(context, offered, choosing.Chosen);
+        }
+    }
+
+    /// <summary>
+    /// What a key's long press offers, as Gboard's popup (measured on the
+    /// emulator): the symbol in its corner first, then the letters the
+    /// language has for it (<see cref="StandardLanguage.MoreLetters"/>), in
+    /// capitals with Shift; at most <see cref="ChoicesAcross"/> a row, the
+    /// rows going up from above the key, as many across as their number asks
+    /// (eleven, three rows of four). In each row the first stands over the
+    /// key and the next go right, then left, by turns (0, +1, −1, +2, …),
+    /// toward the side with room where one has none; above the key, over the
+    /// toolbar where it reaches it, as Gboard's and Android's, drawn past the
+    /// keys' top (nothing above them clips), and down over the keys only
+    /// where the keyboard's card has no room above.
+    /// </summary>
+    private Choices ChoicesFor(StandardKey key, Rect box)
+    {
+        List<string> texts = [key.Hint!];
+        if (key.Text is { Length: 1 } letter && language.MoreLetters.TryGetValue(char.ToLowerInvariant(letter[0]), out var more))
+        {
+            var capitals = ShiftedFor(key);
+            texts.AddRange(more.Select(character => capitals ? char.ToUpper(character, CultureInfo.CurrentCulture).ToString() : character.ToString()));
+        }
+
+        var rows = (texts.Count + ChoicesAcross - 1) / ChoicesAcross;
+        var across = (texts.Count + rows - 1) / rows;
+        var (width, height) = (box.Width, box.Height);
+        var centre = box.X + (width / 2);
+        var leftRoom = Math.Max(0, (int)Math.Floor((centre - (width / 2) - SideDp) / width));
+        var rightRoom = Math.Max(0, (int)Math.Floor((ActualWidth - SideDp - centre - (width / 2)) / width));
+        var left = (across - 1) / 2;
+        var right = across - 1 - left;
+        if (left > leftRoom)
+        {
+            (left, right) = (leftRoom, across - 1 - leftRoom);
+        }
+        else if (right > rightRoom)
+        {
+            (left, right) = (across - 1 - rightRoom, rightRoom);
+        }
+
+        List<int> offsets = [0];
+        for (var step = 1; offsets.Count < across; step++)
+        {
+            if (step <= right)
+            {
+                offsets.Add(step);
+            }
+
+            if (step <= left && offsets.Count < across)
+            {
+                offsets.Add(-step);
+            }
+        }
+
+        var cells = texts.Select((_, at) => new Rect(centre + (offsets[at % across] * width) - (width / 2), box.Top - ((at / across) + 1) * height, width, height)).ToList();
+        var ground = new Rect(centre - ((left + 0.5) * width), box.Top - (rows * height), across * width, rows * height);
+        ground.Inflate(ChoicesPaddingDp, ChoicesPaddingDp);
+
+        // Above the card's top, the popup comes down instead: all of it in sight.
+        var down = Math.Max(0, -(ground.Top + TopInCard()));
+        if (down > 0)
+        {
+            cells = [.. cells.Select(cell => new Rect(cell.X, cell.Y + down, cell.Width, cell.Height))];
+            ground.Offset(0, down);
+        }
+
+        return new Choices(texts, cells, ground);
+    }
+
+    /// <summary>How far the keys stand below the top of the keyboard's card (the window's content): the toolbar's room, which the popup may take.</summary>
+    private double TopInCard() =>
+        Window.GetWindow(this)?.Content is UIElement card ? TranslatePoint(new Point(0, 0), card).Y : 0;
+
+    /// <summary>The popup's choice under the point, or the nearest, as Gboard's follows the finger anywhere.</summary>
+    private static int Nearest(Choices offered, Point point) =>
+        offered.Cells.Select((cell, at) => (At: at, Far: Math.Pow(point.X - (cell.X + (cell.Width / 2)), 2) + Math.Pow(point.Y - (cell.Y + (cell.Height / 2)), 2)))
+            .MinBy(cell => cell.Far).At;
+
+    /// <summary>A long press's popup, as Gboard's: a rounded ground in the keys' colour, an outline, each choice's letter, the one chosen on a circle in the colour of a key that is on.</summary>
+    private void DrawChoices(DrawingContext context, Choices offered, int chosen)
+    {
+        context.DrawRoundedRectangle(new SolidColorBrush(colors.Key), new Pen(new SolidColorBrush(colors.FaintOutline), 1), offered.Ground, ChoicesCornerDp, ChoicesCornerDp);
+        var size = LetterRow * glyphScale * LabelShare;
+        for (var at = 0; at < offered.Texts.Count; at++)
+        {
+            var cell = offered.Cells[at];
+            var centre = new Point(cell.X + (cell.Width / 2), cell.Y + (cell.Height / 2));
+            if (at == chosen)
+            {
+                var radius = Math.Min(cell.Width, cell.Height) / 2;
+                context.DrawEllipse(new SolidColorBrush(colors.On), null, centre, radius, radius);
+            }
+
+            DrawText(context, offered.Texts[at], centre, size, colors.Glyph, Regular);
         }
     }
 
@@ -1069,7 +1190,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 return;
         }
 
-        var showsHint = key.Hint is not null && (altGr || pressed is { LongPressed: true } held && held.Key == key);
+        var showsHint = key.Hint is not null && (altGr || pressed is { LongPressed: true, Offered: null } held && held.Key == key);
 
         // Alt Gr on, a PC's keys show only its symbols: a key with none, blank.
         if (pc && altGr && key.Hint is null)
@@ -1269,6 +1390,18 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
+        if (now.LongPressed && now.Offered is { } offered)
+        {
+            var chosen = Nearest(offered, point);
+            if (chosen != now.Chosen)
+            {
+                now.Chosen = chosen;
+                InvalidateVisual();
+            }
+
+            return;
+        }
+
         if (now.LongPressed || now.Repeated)
         {
             return;
@@ -1345,6 +1478,8 @@ public sealed class KeyboardSurface : FrameworkElement
             Hold(() =>
             {
                 now.LongPressed = true;
+                now.Offered = ChoicesFor(now.Key, now.Box);
+                now.Chosen = 0;
                 StopHolding();
                 InvalidateVisual();
             }, LongPress);
@@ -1397,9 +1532,9 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else if (now.LongPressed)
         {
-            if (now.Key.Hint is { } hint)
+            if ((now.Offered?.Texts[now.Chosen] ?? now.Key.Hint) is { } chosen)
             {
-                Type(hint);
+                Type(chosen);
                 ModifiersUsed();
             }
         }
@@ -1413,6 +1548,12 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void Act(StandardKey key)
     {
+        // Gboard's: on ?123 or =\<, a space or Enter after a symbol typed there goes back to the letters.
+        var backToLetters = symbolTyped && !Combining && key.Action is StandardAction.Space or StandardAction.Enter;
+
+        // A sentence begins after . ? or ! and a space, and after Enter: what these keys typed is all Windows lets them see.
+        var sentenceBegins = CapitalizesSentences && !Combining
+            && (key.Action == StandardAction.Enter || (key.Action == StandardAction.Space && lastTyped is '.' or '?' or '!'));
         switch (key.Action)
         {
             case StandardAction.Type:
@@ -1493,8 +1634,25 @@ public sealed class KeyboardSurface : FrameworkElement
                 break;
         }
 
+        if (backToLetters)
+        {
+            ShowPage(pc ? StandardPage.Pc : StandardPage.Letters);
+        }
+
+        if (sentenceBegins && shift == Shift.Off)
+        {
+            shift = Shift.Once;
+            sentenceShift = true;
+        }
+
         InvalidateVisual();
     }
+
+    /// <summary>Spelling's Capital at the start of a sentence: Shift on by itself after . ? or ! and a space, and after Enter.</summary>
+    public bool CapitalizesSentences { get; set; }
+
+    /// <summary>Shift on for one key because a sentence began, not by a tap: ⌫ takes it off again.</summary>
+    private bool sentenceShift;
 
     /// <summary>The swipe made FUTO Swipe's: the points and the letters' centres from 0 to 1 over the room the letters take.</summary>
     private void ReadSwipe(Pressed now)
@@ -1581,6 +1739,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Text typed, a dead key's accent on it where it has one with it (´ then a: á), or before it; a space types the accent alone.</summary>
     private void Type(string typed)
     {
+        symbolTyped |= OnSymbols && typed != " ";
         if (deadKey is { } accent)
         {
             deadKey = null;
@@ -1651,6 +1810,13 @@ public sealed class KeyboardSurface : FrameworkElement
 
         EndSwipe(letter: false);
         lastTyped = null;
+        if (sentenceShift && shift == Shift.Once)
+        {
+            shift = Shift.Off;
+            sentenceShift = false;
+            InvalidateVisual();
+        }
+
         if (Combining)
         {
             Press(Keycode.Del);
@@ -1700,6 +1866,7 @@ public sealed class KeyboardSurface : FrameworkElement
     private void ModifiersUsed()
     {
         ctrl = alt = meta = altGr = false;
+        sentenceShift = false;
         if (shift == Shift.Once)
         {
             shift = Shift.Off;

@@ -39,15 +39,6 @@ namespace Android.Views
     }
 }
 
-namespace Android.Util
-{
-    /// <summary>Android's log, as the shared files warn: to the keyboard's own.</summary>
-    public static class Log
-    {
-        public static void Warn(string tag, string message) => Berpiztu.KeyPlus.Log.Write(message);
-    }
-}
-
 namespace Berpiztu.KeyPlus
 {
     /// <summary>The ids of the Android resources the shared files and the Windows app name, each field named as its resource.</summary>
@@ -233,6 +224,8 @@ namespace Berpiztu.KeyPlus
             public const int spelling_wikipedia_download_failed = 170;
             public const int spelling_on = 171;
             public const int spelling_on_summary = 172;
+            public const int spelling_capitalize = 190;
+            public const int spelling_capitalize_summary = 191;
             public const int voice_fallback_local = 173;
             public const int spelling_by_language = 174;
             public const int spelling_dictionary_es = 175;
