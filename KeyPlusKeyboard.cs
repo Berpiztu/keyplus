@@ -576,12 +576,17 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// </summary>
     public override View? OnCreateInputView()
     {
-        panel?.StopRepeat();
+        panel?.Release();
         shownColors = StandardColors.Chosen(this, StandardColors.App);
         var screen = KeyPlusPreferences.ScreenOf(this, Display?.DisplayId ?? Android.Views.Display.DefaultDisplay);
         var preferences = KeyPlusPreferences.ForScreen(this, screen);
         Watch(preferences);
         placed = new PanelPlacement(preferences);
+        if (!CanFloat)
+        {
+            placed.Floating = false;
+        }
+
         // It opens on its letters the first time, as a keyboard does, on a phone and on a headset;
         // on a phone, on the standard keyboard, Gboard's.
         panel = new KeyPanel(this, preferences, clipboard!, SendKey, TypeText, lettersFirst: true, keyboardScreen: OnHeadset ? null : screen, floating: placed.Floating)
@@ -738,20 +743,32 @@ public sealed class KeyPlusKeyboard : InputMethodService
         return container ?? panel.Root;
     }
 
-    /// <summary>⚙ on a phone, as Gboard's tiles: Mover, Redimensionar, the two modes, the one in use marked, and the keyboard picker.</summary>
+    /// <summary>⚙ on a phone, as Gboard's tiles: Mover, Redimensionar, the two modes, the one in use marked (where it may float), and the keyboard picker.</summary>
     private IReadOnlyList<KeyPanel.Setting> PhoneSettings()
     {
         var windowed = placed?.Floating == true;
+        KeyPanel.Setting[] modes = CanFloat
+            ?
+            [
+                new(GetString(Resource.String.mode_normal)!, () => SetWindowed(false), "⬓", InUse: !windowed),
+                new(GetString(Resource.String.mode_window)!, () => SetWindowed(true), "❐", InUse: windowed),
+            ]
+            : [];
         return
         [
             new(GetString(Resource.String.move)!, () => ShowFrame(resizing: false), "✥"),
             new(GetString(Resource.String.resize)!, () => ShowFrame(resizing: true), "⇲"),
             new(GetString(Resource.String.design)!, () => panel?.Design(), "✎"),
-            new(GetString(Resource.String.mode_normal)!, () => SetWindowed(false), "⬓", InUse: !windowed),
-            new(GetString(Resource.String.mode_window)!, () => SetWindowed(true), "❐", InUse: windowed),
+            .. modes,
             new(GetString(Resource.String.switch_keyboard)!, ShowKeyboardPicker, "🌐"),
         ];
     }
+
+    /// <summary>
+    /// Whether the keyboard may float: not as the phone's keyboard on a headset, whose window the headset places in a box
+    /// of its own, so floating only moved it inside that box, smaller or cut; there it is docked, filling the box.
+    /// </summary>
+    private bool CanFloat => !KeyPlusPreferences.IsHeadset(this) || OnHeadset;
 
     /// <summary>
     /// The standard keyboard's grid (⊞), Gboard's buttons in Gboard's order
@@ -761,12 +778,15 @@ public sealed class KeyPlusKeyboard : InputMethodService
     private IReadOnlyList<GridTile> GridTiles()
     {
         void NotMade(int name) => panel?.NotMadeYet(GetString(name));
+
+        // The owner's sign, a screen with keys; crossed while the keyboard floats, as Gboard's; a tap, the other state.
+        GridTile[] floating = !CanFloat ? []
+            : placed?.Floating == true
+                ? [new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating_off, () => SetWindowed(false))]
+                : [new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating, () => SetWindowed(true))];
         return
         [
-            // The owner's sign, a screen with keys; crossed while the keyboard floats, as Gboard's; a tap, the other state.
-            placed?.Floating == true
-                ? new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating_off, () => SetWindowed(false))
-                : new("floating", GetString(Resource.String.floating), Resource.Drawable.ic_grid_floating, () => SetWindowed(true)),
+            .. floating,
             new("share", GetString(Resource.String.share), Resource.Drawable.ic_grid_share, () => NotMade(Resource.String.share)),
             new("emojis", "Emojis", Resource.Drawable.ic_key_emoji, () => panel?.ShowEmojis(), More: true),
             new("undo", GetString(Resource.String.undo), Resource.Drawable.ic_grid_undo, () => SendKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn)),
@@ -1028,7 +1048,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Modo ventana or Modo normal chosen.</summary>
     private void SetWindowed(bool windowed)
     {
-        if (panel is null || placed is null)
+        if (panel is null || placed is null || (windowed && !CanFloat))
         {
             return;
         }
@@ -1056,16 +1076,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// (Bar), which a keyboard's window reaches under; and the height docked
     /// keys keep clear of under them (Below): the keyboard's own navigation
     /// bar, where Android draws ∨ and ⌨ (navigation_bar_frame_height, 48 dp),
-    /// taller than the gesture handle's inset, as Gboard keeps clear of it. A
-    /// window is held to the room and the bar alone: held taller, Android cut
-    /// it and the keys were laid out again and again.
+    /// taller than the gesture handle's inset, as Gboard keeps clear of it;
+    /// a headset draws none under its keyboard's window, so the keys keep
+    /// clear of nothing there. A window is held to the room and the bar
+    /// alone: held taller, Android cut it and the keys were laid out again
+    /// and again.
     /// </summary>
     private (int Width, int Height, int Below, int Bar) Room()
     {
         var metrics = GetSystemService(WindowService).JavaCast<IWindowManager>()!.CurrentWindowMetrics;
         var bars = metrics.WindowInsets.GetInsetsIgnoringVisibility(WindowInsets.Type.SystemBars());
-        var frame = Resources!.GetIdentifier("navigation_bar_frame_height", "dimen", "android");
-        var below = Math.Max(bars.Bottom, frame != 0 ? Resources.GetDimensionPixelSize(frame) : 0);
+        var frame = KeyPlusPreferences.IsHeadset(this) ? 0 : Resources!.GetIdentifier("navigation_bar_frame_height", "dimen", "android");
+        var below = Math.Max(bars.Bottom, frame != 0 ? Resources!.GetDimensionPixelSize(frame) : 0);
         return (metrics.Bounds.Width(), metrics.Bounds.Height() - bars.Top - bars.Bottom, below, bars.Bottom);
     }
 
@@ -1100,6 +1122,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             }
 
             var width = Math.Clamp(placed.Width, Dp(PanelPlacement.MinWidthDp), room.Width);
+            panel.FitBar(width);
             var left = Math.Clamp(placed.X, 0, room.Width - width);
             var top = Math.Clamp(placed.Y, 0, Math.Max(0, room.Height - Tall(width)));
             keys = new FrameLayout.LayoutParams(width, ViewGroup.LayoutParams.WrapContent, GravityFlags.Top | GravityFlags.Left)
@@ -1129,6 +1152,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // and the app gives way to all of it, as to any keyboard.
             var raised = placed.Lift + room.Below;
             var width = placed.DockedWidth > 0 ? Math.Clamp(placed.DockedWidth, Dp(PanelPlacement.MinWidthDp), room.Width) : room.Width;
+            panel.FitBar(width);
             if (KeyPlusPreferences.IsHeadset(this))
             {
                 FillHeadsetWindow(width, room.Height - raised);
@@ -1463,7 +1487,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     {
         var screens = watched is not null && preferences.Equals(watched);
         var reset = screens && (key is null || key == KeyboardDesign.ImportedPreference || Keyboards.IsSelection(key));
-        var popupChanged = screens && key == PanelPlacement.FloatingPreference && placed is not null
+        var popupChanged = screens && key == PanelPlacement.FloatingPreference && placed is not null && CanFloat
             && new PanelPlacement(preferences).Floating != placed.Floating;
         var keyboardChanged = ((key == KeyPlusPreferences.LanguageKey || Keyboards.IsList(key)) && ShowsAnother())
             || (KeyPlusPreferences.IsColors(key) && StandardColors.Chosen(this, StandardColors.App) != shownColors);
@@ -1570,38 +1594,43 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>
     /// On a headset, not in its own box (<see cref="FillBox"/>), the keyboard's window is a box all the same (1166 × 656 px on
-    /// the Galaxy XR), whose bottom Estándar XR left empty: its keys made as tall as fill it, as Gboard's there, the bar and
-    /// the band as they are. Again at each layout, until it does.
+    /// the Galaxy XR), whose bottom a standard keyboard (Standard XR, Standard PC) left empty: its keys made as tall as fill
+    /// it, as Gboard's there, the bar as it is. Measured and sized again at once, before it is drawn: sized a layout at a
+    /// time, each size was drawn, and the keyboard shook as Standard XR and Standard PC were swapped.
     /// </summary>
     private void FillHeadsetWindow(int width, int room)
     {
-        if (panel is not { ShowsXr: true } || room <= 0)
+        if (panel is not { ShowsStandard: true } || room <= 0)
         {
             return;
         }
 
-        var tall = Tall(width);
-        var keys = panel.StandardHeight;
-        if (keys <= 0 || Math.Abs(room - tall) <= 1)
+        for (var round = 0; round < FillRounds; round++)
         {
-            return;
+            var tall = Tall(width);
+            var keys = panel.StandardHeight;
+            if (keys <= 0 || Math.Abs(room - tall) <= 1)
+            {
+                return;
+            }
+
+            var scale = Math.Clamp(panel.Scale * (keys + room - tall) / keys, PanelPlacement.MinScale, PanelPlacement.MaxScale);
+            if (Math.Abs(scale - panel.Scale) < 0.003f)
+            {
+                return;
+            }
+
+            Log.Detail($"Headset's window {room}px: the standard keys {keys}px of {tall}px, scale {panel.Scale:0.###} to {scale:0.###}");
+            panel.Scale = scale;
         }
-
-        var scale = Math.Clamp(panel.Scale * (keys + room - tall) / keys, PanelPlacement.MinScale, PanelPlacement.MaxScale);
-        if (Math.Abs(scale - panel.Scale) < 0.003f)
-        {
-            return;
-        }
-
-        Log.Detail($"Headset's window {room}px: Estándar XR's keys {keys}px of {tall}px, scale {panel.Scale:0.###} to {scale:0.###}");
-
-        // Not in the middle of the layout pass that told the sizes.
-        panel.Root.Post(() => panel.Scale = scale);
     }
 
+    /// <summary>How many times the keys are measured and sized again to fill the headset's window: the keys' height is not quite in proportion to their scale.</summary>
+    private const int FillRounds = 4;
+
     /// <summary>
-    /// On a headset, Gboard's card there (docs/tODO/photos/gboard/xr-letters.png): the keys' box rounded, 55 px on its band of
-    /// 84 (our band the bar's height), and the room around it see-through, the window's ground and the keyboard's taken away.
+    /// On a headset, Gboard's card there (docs/tODO/photos/gboard/xr-letters.png): the keys' box rounded, 55 px on its bar of
+    /// 84 (ours the bar's height), and the room around it see-through, the window's ground and the keyboard's taken away.
     /// </summary>
     private void AsHeadsetCard(View keys, View under)
     {

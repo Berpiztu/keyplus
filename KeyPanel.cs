@@ -166,10 +166,15 @@ public sealed class KeyPanel
     private View? sideColumn;
     private readonly FrameLayout root;
     private readonly LinearLayout strip;
-    private readonly LinearLayout terminal;
 
-    /// <summary>The whole keyboard (ABC): as made, or as the screen's design has it, made again when it changes.</summary>
+    /// <summary>Keys: the terminal's two rows; empty until their mode is first shown (<see cref="MakeKeys"/>).</summary>
+    private LinearLayout terminal;
+
+    /// <summary>The whole keyboard (ABC): as made, or as the screen's design has it, made again when it changes; empty until first shown.</summary>
     private LinearLayout wholeKeyboard;
+
+    /// <summary>Which of the modes' keys are made: Keys, the whole keyboard, two rows.</summary>
+    private bool terminalMade, wholeKeyboardMade, compactMade;
 
     /// <summary>The keyboard of the list this screen shows in the keyboard's language (Ajustes › Tema); none in the popup.</summary>
     private KeyboardEntry? keyboard;
@@ -239,8 +244,8 @@ public sealed class KeyPanel
     /// <summary>The key marked by a tap while designing, which − and + make narrower or wider.</summary>
     private int? selectedKey;
 
-    /// <summary>Keys made small: two rows, no title bar.</summary>
-    private readonly LinearLayout compact;
+    /// <summary>Keys made small: two rows, no title bar; empty until first shown.</summary>
+    private LinearLayout compact;
 
     /// <summary>
     /// The standard keyboard, Gboard's (Berpiztu AI Keyboard on a phone),
@@ -351,9 +356,6 @@ public sealed class KeyPanel
     /// between them 3 px wide and 63 px tall.
     /// </summary>
     private readonly LinearLayout standardBar;
-
-    /// <summary>Gboard's band over the bar on a headset, in sight with the bar; none elsewhere.</summary>
-    private readonly View? headsetBand;
     private readonly StandardColors? standardColors;
 
     /// <summary>
@@ -732,14 +734,6 @@ public sealed class KeyPanel
             emojiRow.AddView(new View(context) { Background = new ColorDrawable(standardColors.Divider) }, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 1));
         }
 
-        // On a headset, Gboard's band over the bar there (docs/tODO/photos/gboard/xr-letters.png): as tall as the bar, the keys' colour.
-        if (standardKeys && KeyPlusPreferences.IsHeadset(context))
-        {
-            headsetBand = new View(context);
-            headsetBand.SetBackgroundColor(standardColors!.Key);
-            strip.AddView(headsetBand, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
-        }
-
         strip.AddView(emojiRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(EmojiRowDp)));
         strip.AddView(standardBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
         strip.AddView(menuBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ToolbarDp)));
@@ -811,13 +805,13 @@ public sealed class KeyPanel
         asideKeys = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         designBar = DesignBar();
         strip.AddView(designBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent));
-        terminal = Rows(PanelKeys.Terminal);
+        terminal = new LinearLayout(context);
         ShowsFloating = floating;
         this.keyboardScreen = keyboardScreen;
         keyboard = keyboardScreen is { } screen ? Keyboards.Selected(context, preferences, screen, KeyPlusPreferences.Language(context).Code) : null;
         design = ReadDesign();
-        wholeKeyboard = WholeKeyboard();
-        compact = Rows(PanelKeys.Compact);
+        wholeKeyboard = new LinearLayout(context);
+        compact = new LinearLayout(context);
         strip.AddView(terminal);
         strip.AddView(wholeKeyboard);
         strip.AddView(compact);
@@ -869,8 +863,9 @@ public sealed class KeyPanel
             ? new FrameLayout.LayoutParams(Dp(IconDp), Dp(IconDp)) { LeftMargin = Dp(IconShadowDp), TopMargin = Dp(IconShadowDp), RightMargin = Dp(IconShadowDp), BottomMargin = Dp(IconShadowDp) }
             : new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
         ShowFolded(preferences.GetBoolean(FoldedPreference, false));
-        ShowMode(preferences.GetBoolean(WholeKeyboardPreference, lettersFirst), preferences.GetBoolean(CompactPreference, false));
-        if (standard is not null && keyboard is { Standard: true })
+        var standardFirst = standard is not null && keyboard is { Standard: true };
+        ShowMode(preferences.GetBoolean(WholeKeyboardPreference, lettersFirst), preferences.GetBoolean(CompactPreference, false), makeKeys: !standardFirst);
+        if (standardFirst)
         {
             ShowStandard();
         }
@@ -1124,6 +1119,20 @@ public sealed class KeyPanel
     }
 
     /// <summary>
+    /// The panel let go, another made in its place: no longer told of copies, nothing of its own left to run. Held by the
+    /// clipboard's history, which lives as long as the keyboard, every panel made again (another keyboard, language or
+    /// colours) stayed alive with all its views, until Java's references ran short, every one more cost a full collection
+    /// and the keyboard stopped answering.
+    /// </summary>
+    public void Release()
+    {
+        clipboard.Changed -= NoteCopy;
+        clipboard.Changed -= RefillClipboard;
+        repeat = null;
+        handler.RemoveCallbacksAndMessages(null);
+    }
+
+    /// <summary>
     /// The labels fitted to the keys again, once they are in sight: a
     /// keyboard's keys may be laid out while it is out of sight, and come
     /// into sight at the same size, which no layout change says.
@@ -1288,6 +1297,7 @@ public sealed class KeyPanel
     private void FillStandardBar()
     {
         standardBar.RemoveAllViews();
+        barRoomShown = -1;
         if (editingTools)
         {
             FillEditingBar();
@@ -1325,6 +1335,7 @@ public sealed class KeyPanel
         else
         {
             var tools = Tools();
+            barRoomShown = BarRoom;
             foreach (var tool in Arranged().Bar.Select(id => tools[id]).Select(tool => StandardTool(tool.Icon, tool.Label, tool.Chosen,
                 tool.On ? colors.Primary : null, tool.On ? colors.OnPrimary : null)))
             {
@@ -1665,10 +1676,37 @@ public sealed class KeyPanel
         return ([.. bar.Take(room)], [.. bar.Skip(room), .. grid]);
     }
 
-    /// <summary>How many buttons the toolbar holds: as many of Gboard's pills, customising, as fit between ⊞ and 🎤 (five on a phone, as Gboard's).</summary>
-    private int BarRoom => standardBar.Width > 0
-        ? Math.Max(1, (standardBar.Width - (2 * ToolSlot) - (2 * Dp(StandardGrid.OutlineDp))) / Dp(EditToolDp + EditToolGapDp))
+    /// <summary>
+    /// How many buttons the toolbar holds: as many of Gboard's pills, customising, as fit between ⊞ and 🎤 (five on a phone,
+    /// as Gboard's); not laid out yet, at the width it was measured at (<see cref="FitBar"/>).
+    /// </summary>
+    private int BarRoom => (standardBar.Width > 0 ? standardBar.Width : standardBar.MeasuredWidth) is var width and > 0
+        ? Math.Max(1, (width - (2 * ToolSlot) - (2 * Dp(StandardGrid.OutlineDp))) / Dp(EditToolDp + EditToolGapDp))
         : BarFirst.Length;
+
+    /// <summary>The toolbar's room its buttons were placed for; -1 while it shows no buttons (words, a copy, customising).</summary>
+    private int barRoomShown = -1;
+
+    /// <summary>
+    /// The keyboard about to be laid out at a width: the toolbar measured at it and its buttons placed again where as many
+    /// do not fit, before it is drawn. Made again (another keyboard, another language), the toolbar was first drawn with
+    /// five buttons, as its width was not known, and then with all of them.
+    /// </summary>
+    public void FitBar(int width)
+    {
+        if (barRoomShown < 0 || standardBar.Visibility != ViewStates.Visible)
+        {
+            return;
+        }
+
+        Root.Measure(
+            View.MeasureSpec.MakeMeasureSpec(width, MeasureSpecMode.Exactly),
+            View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
+        if (BarRoom != barRoomShown)
+        {
+            FillStandardBar();
+        }
+    }
 
     /// <summary>✏: the grid customised, as Gboard's.</summary>
     private void StartEditingTools()
@@ -2005,11 +2043,6 @@ public sealed class KeyPanel
             menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             toolbar.Visibility = asking is null && !small && covered is null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             standardBar.Visibility = asking is null && standardShown && (emojiPanel is null || covered?.Cover != emojiPanel) ? ViewStates.Visible : ViewStates.Gone;
-            if (headsetBand is not null)
-            {
-                headsetBand.Visibility = standardBar.Visibility;
-            }
-
             ShowEmojiRow();
             if (toolbar.Visibility == ViewStates.Visible)
             {
@@ -2227,8 +2260,8 @@ public sealed class KeyPanel
         ModeChanged?.Invoke();
     }
 
-    /// <summary>The whole keyboard, Keys made small, or Keys in full, with the title bar where it has one.</summary>
-    private void ShowMode(bool whole, bool small)
+    /// <summary>The whole keyboard, Keys made small, or Keys in full, with the title bar where it has one; its keys made first unless the standard keyboard is shown right after.</summary>
+    private void ShowMode(bool whole, bool small, bool makeKeys = true)
     {
         StopRepeat();
         Uncover();
@@ -2238,6 +2271,11 @@ public sealed class KeyPanel
         }
 
         small &= !whole;
+        if (makeKeys)
+        {
+            MakeKeys(whole, small);
+        }
+
         if (standard is not null)
         {
             standard.Visibility = ViewStates.Gone;
@@ -2257,6 +2295,46 @@ public sealed class KeyPanel
         switchKeys.Text = whole ? "Keys" : "ABC";
         chipSwitchKeys.Text = switchKeys.Text;
         ApplyLook();
+    }
+
+    /// <summary>
+    /// The keys of the mode shown made, the first time it is: Berpiztu AI Keyboard shows the standard keyboard, and made
+    /// with every panel the popup's three cost it some 136 text views each time it was made again (another language,
+    /// keyboard or colours), most of the 0.7 s it took on a headset.
+    /// </summary>
+    private void MakeKeys(bool whole, bool small)
+    {
+        if (whole && !wholeKeyboardMade)
+        {
+            wholeKeyboard = InPlaceOf(wholeKeyboard, WholeKeyboard());
+            wholeKeyboardMade = true;
+        }
+        else if (small && !compactMade)
+        {
+            compact = InPlaceOf(compact, Rows(PanelKeys.Compact));
+            compactMade = true;
+        }
+        else if (!whole && !small && !terminalMade)
+        {
+            terminal = InPlaceOf(terminal, Rows(PanelKeys.Terminal));
+            terminalMade = true;
+        }
+        else
+        {
+            return;
+        }
+
+        // Made at the keys' size now; their legends and modifiers as held now.
+        ShowHeld();
+    }
+
+    /// <summary>A view put in the strip where another was.</summary>
+    private LinearLayout InPlaceOf(LinearLayout old, LinearLayout made)
+    {
+        var at = strip.IndexOfChild(old);
+        strip.RemoveViewAt(at);
+        strip.AddView(made, at);
+        return made;
     }
 
     /// <summary>The standard keyboard ⊞ switches to: Estándar PC from Estándar (on a headset, Estándar XR), the other from any other.</summary>
@@ -2291,8 +2369,8 @@ public sealed class KeyPanel
     /// <summary>The ground under the keys: the device's, Gboard's, under the standard keyboard; the panel's own under PC.</summary>
     public Color GroundColor => standard is { Visibility: ViewStates.Visible } ? standardColors!.Ground : PanelColor;
 
-    /// <summary>Whether Estándar XR is in sight, and its keys' height as last measured.</summary>
-    public bool ShowsXr => standard is { Visibility: ViewStates.Visible, Xr: true };
+    /// <summary>Whether a standard keyboard is in sight (Standard XR, Standard PC…), and its keys' height as last measured.</summary>
+    public bool ShowsStandard => standard is { Visibility: ViewStates.Visible };
 
     public int StandardHeight => standard?.MeasuredHeight ?? 0;
 
@@ -2626,12 +2704,20 @@ public sealed class KeyPanel
         EndSwipe(letter: false);
         var languages = StandardKeys.Languages;
         var next = languages[(languages.ToList().IndexOf(standard!.Language) + 1) % languages.Count];
+        var remade = false;
         if (keyboard is { } shown && keyboardScreen is { } screen)
         {
             Keyboards.Carry(context, preferences, screen, next.Code, shown);
+            remade = Keyboards.Selected(context, preferences, screen, next.Code) != shown;
         }
 
-        standard.Language = next;
+        // Another keyboard in the new language (Standard PC's design is its language's) is made again whole: these keys are
+        // left as they are until then, or the new language's letters were drawn on them first and the keyboard twice.
+        if (!remade)
+        {
+            standard.Language = next;
+        }
+
         KeyPlusPreferences.Global(context).Edit()!.PutString(KeyPlusPreferences.LanguageKey, next.Code)!.Apply();
         LanguageChanged?.Invoke(next);
     }

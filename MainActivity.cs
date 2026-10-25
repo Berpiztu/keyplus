@@ -548,8 +548,7 @@ public sealed class MainActivity : Activity
         [
             showing,
             [
-                new(GetString(Resource.String.popup), GetString(Resource.String.popup_summary), On: new PanelPlacement(KeyPlusPreferences.ForScreen(this, here)).Floating, Switched: SetPopup),
-                Switch(Resource.String.dock_by_drag, Resource.String.dock_by_drag_summary, KeyPlusPreferences.DockByDragKey, byDefault: false),
+                .. FloatingRows(here),
                 Switch(Resource.String.avoid_caret, Resource.String.avoid_caret_summary, KeyPlusPreferences.AvoidCaretKey),
                 .. HeadsetRows(),
                 new(GetString(Resource.String.avoid_menus), GetString(Resource.String.avoid_menus_summary), On: kept.GetBoolean(KeyPlusPreferences.AvoidMenusKey, true), Switched: on =>
@@ -578,6 +577,19 @@ public sealed class MainActivity : Activity
         if (KeyPlusPreferences.IsHeadset(this))
         {
             yield return Switch(Resource.String.headset_box, Resource.String.headset_box_summary, KeyPlusPreferences.HeadsetBoxKey, byDefault: false);
+        }
+    }
+
+    /// <summary>
+    /// The pop-up keyboard and docking by dragging, off a headset alone: there the headset places the keyboard's window in
+    /// a box of its own, and the keyboard stays docked, filling it.
+    /// </summary>
+    private IEnumerable<SettingsRow> FloatingRows(KeyPlusPreferences.Screen here)
+    {
+        if (!KeyPlusPreferences.IsHeadset(this))
+        {
+            yield return new(GetString(Resource.String.popup), GetString(Resource.String.popup_summary), On: new PanelPlacement(KeyPlusPreferences.ForScreen(this, here)).Floating, Switched: SetPopup);
+            yield return Switch(Resource.String.dock_by_drag, Resource.String.dock_by_drag_summary, KeyPlusPreferences.DockByDragKey, byDefault: false);
         }
     }
 

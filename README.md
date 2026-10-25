@@ -60,7 +60,11 @@ mode docks it at the bottom on a ground as wide as the screen, which the
 app gives way to as to any keyboard: the keys as wide as it, or narrower,
 for a finger to reach them, where Move left them, across and up; Window mode makes it a window of its own over the app, which
 keeps the whole screen and its touches outside the keyboard. Each screen
-and mode keeps its own place and size.
+and mode keeps its own place and size. On a headset (Galaxy XR) there is
+no Window mode, no Floating tile and no Pop-up keyboard in Preferences:
+the headset places the keyboard's window in a box of its own, and the
+keyboard stays docked, its standard keys (Standard XR, Standard PC) as
+tall as fill the box.
 
 The popup on a headset puts its keys in an app's window of its own
 ([KeyWindowActivity.cs](KeyWindowActivity.cs)), a panel the user places
@@ -194,8 +198,10 @@ a window that does.
 - **On a headset (Galaxy XR), a third: Standard XR**, Gboard's there
   (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
   keys, the digits over the letters, Tab, Caps Lock, ⇧ at both ends, ◀ and
-  ▶ by the space bar; the headset's first keyboard, with Gboard's band over
-  the bar and, in the dark, the keys darker than the ground, as there.
+  ▶ by the space bar; the headset's first keyboard, as tall as the
+  headset's window lets it, as Standard PC is there too (no band over the
+  bar, no room kept for a navigation bar the headset does not draw) and,
+  in the dark, the keys darker than the ground, as there.
 - **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
   and the device's colours: **Standard**, Gboard's keys, and **Standard PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
   keycap, its Shift's symbol in its top corner and its Alt Gr's in its

@@ -85,7 +85,8 @@ it; a tablet's keys, 13 across, each 84 by 78 px, 26 px apart, its corners
 20 px round, the card's 55. Tried by the owner, alike: Estándar XR
 (`StandardPage.XrLetters`, `XrSymbols`, `Keyboards.StandardXrId`), listed and
 first on a headset alone, made as tall as the headset's window
-(`KeyPlusKeyboard.FillHeadsetWindow`), the band (`KeyPanel.headsetBand`), the
+(`KeyPlusKeyboard.FillHeadsetWindow`; no band over the bar and no room for a
+navigation bar, as the owner asked, so the keys take the whole window), the
 round card on a see-through window (`AsHeadsetCard`), the dark keys and
 Personalizado as Gboard's there (`StandardColors.Read`). Still to do: the
 .com key Gboard adds in a web address's field, once captured where it goes.
