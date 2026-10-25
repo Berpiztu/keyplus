@@ -54,6 +54,8 @@
   <string name="glide_summary">Desliza el dedo de una letra a otra</string>
   <string name="glide_trail">Recorrido del deslizamiento</string>
   <string name="glide_trail_summary">Muestra cómo se mueve el dedo por el teclado</string>
+  <string name="glide_delete_word">Borrar entera la palabra deslizada</string>
+  <string name="glide_delete_word_summary">⌫ justo después de una palabra deslizada la borra entera, como Gboard, no solo su última letra</string>
   <string name="futo">Escritura deslizando con tecnología de FUTO Swipe</string>
   <string name="screenshots">Guardar capturas de pantalla recientes en el portapapeles</string>
   <string name="design">Diseñar</string>

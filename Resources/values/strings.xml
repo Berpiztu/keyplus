@@ -60,6 +60,8 @@
   <string name="glide_summary">Input a word by sliding through the letters</string>
   <string name="glide_trail">Show gesture trail</string>
   <string name="glide_trail_summary">Show how the finger moves over the keyboard</string>
+  <string name="glide_delete_word">Delete a swiped word whole</string>
+  <string name="glide_delete_word_summary">⌫ right after a swiped word deletes all of it, as Gboard does, not only its last letter</string>
   <string name="futo">Swipe typing powered by FUTO Swipe</string>
   <string name="screenshots">Save recent screenshots in the clipboard</string>
   <string name="design">Design</string>

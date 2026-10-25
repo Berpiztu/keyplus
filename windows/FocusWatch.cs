@@ -101,9 +101,12 @@ public sealed class FocusWatch : IDisposable
         focusSettling.Tick += (_, _) =>
         {
             focusSettling.Stop();
+            // A caret still shown is text being typed in: VS Code's editor, come back to, tells only a pane
+            // focused; told as text, so a keyboard that hid shows again and one in sight stays.
             if (CaretInForeground())
             {
                 Log.Write("Focus: no caret came, but the window still shows one: still writing");
+                TellTextFocused(FrontApp());
                 return;
             }
 

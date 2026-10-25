@@ -248,6 +248,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Whether a swipe draws its trail over the keys.</summary>
     public bool ShowsTrail { get; set; } = true;
 
+    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed, as Gboard's.</summary>
+    public bool DeletesSwipedWord { get; set; } = true;
+
     /// <summary>The words a swipe read as, the one typed among them, for the toolbar; none, the toolbar as it was.</summary>
     public event Action<IReadOnlyList<string>, string?>? Suggestions;
 
@@ -1218,6 +1221,19 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void DeleteOnce()
     {
+        // Right after a swipe, with Delete a swiped word whole on: the word and the space it put before it; held, ⌫ goes on letter by letter.
+        if (DeletesSwipedWord && swipedText is { } typed && !Combining && deadKey is null)
+        {
+            foreach (var _ in typed)
+            {
+                KeySender.Press(Keycode.Del, KeySender.Held.None);
+            }
+
+            EndSwipe(letter: false);
+            lastTyped = null;
+            return;
+        }
+
         EndSwipe(letter: false);
         lastTyped = null;
         if (Combining)

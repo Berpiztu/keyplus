@@ -513,7 +513,7 @@ public sealed class SettingsWindow : Window
         return button;
     }
 
-    /// <summary>Escritura deslizando el dedo, as Android's: swiping over the letters and its trail; FUTO Swipe's notice in sight, as its licence asks.</summary>
+    /// <summary>Glide typing, as Android's: swiping over the letters, its trail and ⌫ deleting a swiped word whole; FUTO Swipe's notice in sight, as its licence asks.</summary>
     private static FrameworkElement GlidePage()
     {
         var preferences = KeyboardPreferences.Read();
@@ -524,6 +524,9 @@ public sealed class SettingsWindow : Window
         trail.Click += (_, _) => (KeyboardPreferences.Read() with { GlideTrail = trail.IsChecked == true }).Keep();
         form.Children.Add(Field(null, glide, Resource.String.glide_summary));
         form.Children.Add(Field(null, trail, Resource.String.glide_trail_summary));
+        var deleteWord = new CheckBox { Content = Texts.Get(Resource.String.glide_delete_word), IsChecked = preferences.GlideDeleteWord };
+        deleteWord.Click += (_, _) => (KeyboardPreferences.Read() with { GlideDeleteWord = deleteWord.IsChecked == true }).Keep();
+        form.Children.Add(Field(null, deleteWord, Resource.String.glide_delete_word_summary));
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
         return form;
     }

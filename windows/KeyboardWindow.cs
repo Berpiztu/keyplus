@@ -711,6 +711,7 @@ public sealed class KeyboardWindow : Window
 
         keys.Glides = kept.Glide;
         keys.ShowsTrail = kept.GlideTrail;
+        keys.DeletesSwipedWord = kept.GlideDeleteWord;
     }
 
     /// <summary>Each language's words to offer as a word is typed, read from its word list the first time it is asked for, away from the window's thread.</summary>
@@ -1394,6 +1395,7 @@ public sealed class KeyboardWindow : Window
         keys.Design = StandardDesign.FromText(keyboard.DesignFor(docked));
         keys.Glides = preferences.Glide;
         keys.ShowsTrail = preferences.GlideTrail;
+        keys.DeletesSwipedWord = preferences.GlideDeleteWord;
         FitKeys(state?.RowScale ?? 1);
         if (state is not null && area.Contains(new Point(state.Left + 40, state.Top + 40)))
         {

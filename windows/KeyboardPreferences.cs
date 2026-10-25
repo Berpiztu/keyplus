@@ -35,6 +35,7 @@ public sealed record KeyboardPreferences(
     string? Language = null,
     bool Glide = true,
     bool GlideTrail = true,
+    bool GlideDeleteWord = true,
     string? Keyboard = null,
     Dictionary<string, string>? Chosen = null,
     bool Docked = false,

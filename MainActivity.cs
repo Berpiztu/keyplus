@@ -625,6 +625,7 @@ public sealed class MainActivity : Activity
         [
             Switch(Resource.String.glide, Resource.String.glide_summary, KeyPlusPreferences.SwipeTypingKey),
             Switch(Resource.String.glide_trail, Resource.String.glide_trail_summary, KeyPlusPreferences.SwipeTrailKey),
+            Switch(Resource.String.glide_delete_word, Resource.String.glide_delete_word_summary, KeyPlusPreferences.SwipeDeleteWordKey),
         ],
         // FUTO Swipe's model weights license asks for this notice in sight.
         [new(GetString(Resource.String.futo))],

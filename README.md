@@ -139,6 +139,10 @@ a window that does.
   Windows' MSI, or Android's own installer, which asks too (and, the first
   time, to allow installing from the app). The popup has Check now on its
   screen. On Windows and Android alike.
+- **Settings › Glide typing › Delete a swiped word whole** (on, as Gboard's):
+  ⌫ right after a swiped word deletes all the swipe typed, the word and the
+  space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes
+  only the last letter. On Windows and Android alike.
 - **On a headset (Galaxy XR), a third: Standard XR**, Gboard's there
   (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
   keys, the digits over the letters, Tab, Caps Lock, ⇧ at both ends, ◀ and

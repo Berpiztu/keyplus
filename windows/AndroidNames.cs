@@ -197,6 +197,8 @@ namespace Berpiztu.KeyPlus
             public const int update_no = 114;
             public const int update_current = 115;
             public const int update_failed = 116;
+            public const int glide_delete_word = 117;
+            public const int glide_delete_word_summary = 118;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

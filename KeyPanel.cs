@@ -2436,8 +2436,12 @@ public sealed class KeyPanel
         },
         Deleted = () =>
         {
-            EndSwipe(letter: false);
-            Send(Keycode.Del, MetaKeyStates.None);
+            if (!DeleteSwiped())
+            {
+                EndSwipe(letter: false);
+                Send(Keycode.Del, MetaKeyStates.None);
+            }
+
             OfferWordsSoon();
         },
         KeyPressed = (code, meta) =>
@@ -2477,6 +2481,7 @@ public sealed class KeyPanel
         vibrates = kept.GetBoolean(KeyPlusPreferences.VibrateKey, true);
         sounds = kept.GetBoolean(KeyPlusPreferences.SoundKey, false);
         showsTrail = kept.GetBoolean(KeyPlusPreferences.SwipeTrailKey, true);
+        deletesSwipedWord = kept.GetBoolean(KeyPlusPreferences.SwipeDeleteWordKey, true);
         if (standard is not null)
         {
             standard.LongPressMs = kept.GetInt(KeyPlusPreferences.LongPressKey, KeyPlusPreferences.LongPressDefault);
@@ -2490,6 +2495,9 @@ public sealed class KeyPanel
     private bool vibrates = true;
     private bool sounds;
     private bool showsTrail = true;
+
+    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed.</summary>
+    private bool deletesSwipedWord = true;
 
     /// <summary>🌐, or a swipe along the space bar: the standard keyboard in its next language, kept for every screen, the kind of keyboard in sight kept in it (Estándar, Estándar PC); where the screen shows another keyboard in it, the keyboard is made again with that one (KeyPlusKeyboard).</summary>
     private void NextLanguage()
@@ -3966,6 +3974,35 @@ public sealed class KeyPanel
     }
 
     /// <summary>
+    /// ⌫ right after a swiped word, with Delete a swiped word whole on (as
+    /// Gboard's): all the swipe typed deleted, the word and the space it put
+    /// before it, and the swipe's words gone; ⌫ held goes on letter by letter.
+    /// Whether it was.
+    /// </summary>
+    private bool DeleteSwiped()
+    {
+        if (!deletesSwipedWord || swipedText is not { } typed)
+        {
+            return false;
+        }
+
+        if (ReplaceBeforeCaret is { } replace)
+        {
+            replace(typed.Length, "");
+        }
+        else
+        {
+            foreach (var _ in typed)
+            {
+                Send(Keycode.Del, MetaKeyStates.None);
+            }
+        }
+
+        ForgetSwipe();
+        return true;
+    }
+
+    /// <summary>
     /// Something other than a swiped word typed: the swipe's words gone from
     /// the toolbar; whether a space is owed first, a letter right after a
     /// swiped word starting the next word, as Gboard's.
@@ -4409,6 +4446,11 @@ public sealed class KeyPanel
             }
 
             SetHeld(held ^ key.Modifier);
+            return;
+        }
+
+        if (key.Code == Keycode.Del && (held & KeyModifiers) == Held.None && DeleteSwiped())
+        {
             return;
         }
 
