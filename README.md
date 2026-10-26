@@ -145,9 +145,10 @@ a window that does.
   once; a new one asks whether to update (on Android a notification first,
   which opens the app), and a yes downloads it and opens its installer:
   Windows' MSI; on Android a yes opens the release's page on GitHub, where
-  its APK is downloaded and handed to Android's installer (the apps install nothing themselves:
-  `KeyPlusSelfInstall` in `Berpiztu.KeyPlus.csproj`, off, keeps their own
-  installer, which Play Protect calls harmful). The popup has Check now on its
+  its APK is downloaded and handed to Android's installer. The apps install
+  nothing themselves: Play Protect calls them harmful while they may
+  (`KeyPlusSelfInstall` in `Berpiztu.KeyPlus.csproj`, off, keeps their own
+  installer). The popup has Check now on its
   screen. On Windows and Android alike.
 - **Settings › Dictionary**, the personal dictionary, kept on the device and
   sent nowhere: your words, which swiping reads with the language's word
@@ -387,8 +388,14 @@ Then on the phone, for the popup:
    apps not installed from a store), choose **Open app info** in KeyPlus,
    then **⋮ → Allow restricted settings**, and turn it on again.
 
-Where Settings has no such menu (INAIR's pod, a headset), a computer's
-`enable.ps1` turns the service on over adb, keeping the others that are on:
+Where Settings has no such menu (INAIR's pod, a headset), choose **Turn it
+on with Wireless debugging**, with Wi-Fi on and Developer options turned on:
+it opens Wireless debugging; turn it on yourself, tap **Pair device with
+pairing code**, then pull down the shade and type the code in KeyPlus's
+notification, without leaving Settings, which would close the code. KeyPlus
+pairs with the device's own adb, as an ADB app on it would, and turns the
+service on there and then, keeping the others that are on, as a computer's
+`enable.ps1` does over adb:
 
 ```
 settings put secure enabled_accessibility_services '<the others>:ai.berpiztu.keyplus/.KeyPlusService'
@@ -417,13 +424,11 @@ For the keyboard, on a phone or a headset:
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
    keyboard**.
 
-Where Android's choice will not take it (INAIR's pod), a computer's
-`enable.ps1` turns it on and makes it the keyboard in use (`ime enable`,
-`ime set`), and so do `deploy.ps1` and `debug.ps1`. Turning the apps on over
-the device's own Wireless debugging, no computer needed, is in both APKs
-again to see whether Play Protect lets it in without the apps' own
-installer: `KeyPlusAdb` in `Berpiztu.KeyPlus.csproj`; if not, it goes to a
-utility of its own ([docs/tODO/adb-utility.md](docs/tODO/adb-utility.md)). The
+Where Android's choice will not take it (INAIR's pod), **Turn it on with
+Wireless debugging** does it over the device's own Wireless debugging, which
+you turn on yourself, as for the popup above: it runs `ime enable` and `ime
+set` there and then. A computer's `enable.ps1` does the same, and so do
+`deploy.ps1` and `debug.ps1`. The
 same screen sets where the keyboard stands, on every screen: **Pop-up** puts
 it in a window of its own over the app, or docks it again, at once; **Reset
 the keyboard**, after asking, brings it back as first installed, docked at

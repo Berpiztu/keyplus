@@ -12,10 +12,6 @@ name: Release
 # Its caches are cache.yml's, kept on main: a tag reads only its own caches
 # and main's, so one saved here would be read by no later release. They are
 # only restored here.
-#
-# FOR ONE TEST ONLY, to be put back after it: Berpiztu AI Keyboard's APK
-# alone (no popup, no Windows installer), published as a pre-release, so
-# Latest stays the last whole release and no other app is offered it.
 on:
   push:
     tags: ['v*']
@@ -33,7 +29,7 @@ jobs:
     name: Build ${{ matrix.product }}
     strategy:
       matrix:
-        product: [Keyboard]
+        product: [Popup, Keyboard]
     runs-on: windows-latest
     defaults:
       run:
@@ -122,7 +118,6 @@ jobs:
 
   windows:
     name: Build the Windows installer
-    if: false
     runs-on: windows-latest
     defaults:
       run:
@@ -168,7 +163,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [build]
+    needs: [build, windows]
     runs-on: ubuntu-latest
     steps:
       - name: Built locally?
@@ -198,7 +193,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           tag="${{ github.ref_name }}"
-          files=(dist/Berpiztu-AI-Keyboard.apk)
+          files=(dist/KeyPlus-Popup.apk dist/Berpiztu-AI-Keyboard.apk dist/Berpiztu-AI-Keyboard-Windows.msi)
           for file in "${files[@]}"; do [ -f "$file" ] || { echo "Missing $file"; exit 1; }; done
           # What the version brings, written beside the code (docs/release-notes/<version>.md),
           # goes first on the release's page, above the list GitHub writes itself.
@@ -207,5 +202,5 @@ jobs:
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "KeyPlus ${tag#v}" --prerelease --generate-notes "${notes[@]}"
+            gh release create "$tag" "${files[@]}" --title "KeyPlus ${tag#v}" --generate-notes "${notes[@]}"
           fi

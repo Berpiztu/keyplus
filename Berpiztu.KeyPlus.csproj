@@ -106,15 +106,13 @@
   <!-- Parts a build may leave out, each set to true or false here:
        KeyPlusAdb, turning the app on over Wireless debugging (AdbGrant.cs,
        AdbShell.java and their libraries, with the notification the code is
-       typed in), on again in both apps to see whether Play Protect, which
-       let 1.0.58 in with no ADB and no installer, calls it harmful with ADB
-       alone; if so, it goes to a utility of its own (docs/tODO/adb-utility.md);
-       KeyPlusSelfInstall,
-       an update installed by the app itself (REQUEST_INSTALL_PACKAGES), else
-       its release's page opened on GitHub, off in both apps too: 1.0.55 alone, without it,
-       went through Play Protect (1.0.57 with it, no ADB, did not); KeyPlusFieldColor, the menu watch's screenshot
+       typed in), on; KeyPlusSelfInstall, an update installed by the app
+       itself (REQUEST_INSTALL_PACKAGES), else its release's page opened on
+       GitHub, off: Play Protect calls the apps harmful while they may
+       install packages (1.0.54, 1.0.56 and 1.0.57 with it, 1.0.55, 1.0.58
+       and 1.0.59 without); KeyPlusFieldColor, the menu watch's screenshot
        of the field's colour (App's as the application shows), else App's
-       takes its theme's. -->
+       takes its theme's, on. -->
   <PropertyGroup>
     <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">true</KeyPlusAdb>
     <KeyPlusSelfInstall Condition="'$(KeyPlusSelfInstall)' == ''">false</KeyPlusSelfInstall>

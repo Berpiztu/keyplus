@@ -3,8 +3,7 @@
 KeyPlus is MIT-licensed ([LICENSE](LICENSE)). The libraries below turn the
 app on over the device's own Wireless debugging ([AdbShell.java](AdbShell.java));
 both APKs carry them while `KeyPlusAdb` is on in
-[Berpiztu.KeyPlus.csproj](Berpiztu.KeyPlus.csproj), as it is now
-([docs/tODO/adb-utility.md](docs/tODO/adb-utility.md)). Each keeps its own
+[Berpiztu.KeyPlus.csproj](Berpiztu.KeyPlus.csproj), as it is. Each keeps its own
 licence; their versions are the ones in
 [Berpiztu.KeyPlus.csproj](Berpiztu.KeyPlus.csproj).
 
