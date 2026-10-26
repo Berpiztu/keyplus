@@ -88,14 +88,14 @@
        that compiles the standard keyboards' layouts from here: none of it
        is Android's. -->
   <ItemGroup>
-    <Compile Remove="windows\**;packaging\windows-install\**" />
-    <None Remove="windows\**;packaging\windows-install\**" />
-    <EmbeddedResource Remove="windows\**;packaging\windows-install\**" />
+    <Compile Remove="windows\**;packaging\windows-install\**;adb\**" />
+    <None Remove="windows\**;packaging\windows-install\**;adb\**" />
+    <EmbeddedResource Remove="windows\**;packaging\windows-install\**;adb\**" />
   </ItemGroup>
   <!-- Nothing under windows\ is gathered by Android's own globs either: the Windows build's output carries ONNX Runtime
        for every platform (an .aar, Linux .so files), never Android's libraries. -->
   <PropertyGroup>
-    <DefaultItemExcludes>$(DefaultItemExcludes);windows\**;packaging\windows-install\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);windows\**;packaging\windows-install\**;adb\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
@@ -106,16 +106,17 @@
   <!-- Parts a build may leave out, each set to true or false here:
        KeyPlusAdb, turning the app on over Wireless debugging (AdbGrant.cs,
        AdbShell.java and their libraries, with the notification the code is
-       typed in), off in both apps: Play Protect calls an app that carries an
-       ADB client harmful (1.0.56 with it, 1.0.55 without), so it is to go
-       to a utility of its own (docs/tODO/adb-utility.md); KeyPlusSelfInstall,
+       typed in), on again in both apps to see whether Play Protect, which
+       let 1.0.58 in with no ADB and no installer, calls it harmful with ADB
+       alone; if so, it goes to a utility of its own (docs/tODO/adb-utility.md);
+       KeyPlusSelfInstall,
        an update installed by the app itself (REQUEST_INSTALL_PACKAGES), else
-       opened in the browser, off in both apps too: 1.0.55 alone, without it,
+       its release's page opened on GitHub, off in both apps too: 1.0.55 alone, without it,
        went through Play Protect (1.0.57 with it, no ADB, did not); KeyPlusFieldColor, the menu watch's screenshot
        of the field's colour (App's as the application shows), else App's
        takes its theme's. -->
   <PropertyGroup>
-    <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">false</KeyPlusAdb>
+    <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">true</KeyPlusAdb>
     <KeyPlusSelfInstall Condition="'$(KeyPlusSelfInstall)' == ''">false</KeyPlusSelfInstall>
     <KeyPlusFieldColor Condition="'$(KeyPlusFieldColor)' == ''">true</KeyPlusFieldColor>
     <DefineConstants Condition="'$(KeyPlusAdb)' == 'true'">$(DefineConstants);ADB</DefineConstants>

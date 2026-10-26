@@ -144,8 +144,8 @@ a window that does.
   GitHub once a day whether a new version is out, and **Check now** at
   once; a new one asks whether to update (on Android a notification first,
   which opens the app), and a yes downloads it and opens its installer:
-  Windows' MSI; on Android a yes opens the APK in the browser, which hands
-  it to Android's installer (the apps install nothing themselves:
+  Windows' MSI; on Android a yes opens the release's page on GitHub, where
+  its APK is downloaded and handed to Android's installer (the apps install nothing themselves:
   `KeyPlusSelfInstall` in `Berpiztu.KeyPlus.csproj`, off, keeps their own
   installer, which Play Protect calls harmful). The popup has Check now on its
   screen. On Windows and Android alike.
@@ -420,10 +420,10 @@ For the keyboard, on a phone or a headset:
 Where Android's choice will not take it (INAIR's pod), a computer's
 `enable.ps1` turns it on and makes it the keyboard in use (`ime enable`,
 `ime set`), and so do `deploy.ps1` and `debug.ps1`. Turning the apps on over
-the device's own Wireless debugging, no computer needed, is out of both
-APKs for now: Play Protect calls an app that carries an ADB client harmful.
-`KeyPlusAdb` in `Berpiztu.KeyPlus.csproj` keeps it, off, to go to a utility
-of its own ([docs/tODO/adb-utility.md](docs/tODO/adb-utility.md)). The
+the device's own Wireless debugging, no computer needed, is in both APKs
+again to see whether Play Protect lets it in without the apps' own
+installer: `KeyPlusAdb` in `Berpiztu.KeyPlus.csproj`; if not, it goes to a
+utility of its own ([docs/tODO/adb-utility.md](docs/tODO/adb-utility.md)). The
 same screen sets where the keyboard stands, on every screen: **Pop-up** puts
 it in a window of its own over the app, or docks it again, at once; **Reset
 the keyboard**, after asking, brings it back as first installed, docked at

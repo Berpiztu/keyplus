@@ -19,8 +19,9 @@ namespace Berpiztu.KeyPlus;
 /// Buscar ahora), and a yes downloads the product's APK and hands it to
 /// Android's installer, which asks the user too (and, the first time, to
 /// allow installing from this app); in a build without the installer
-/// (SELF_INSTALL, KeyPlusSelfInstall in the csproj) a yes opens the APK in
-/// the browser, which hands it to Android's installer.
+/// (SELF_INSTALL, KeyPlusSelfInstall in the csproj) a yes opens the release's
+/// page on GitHub in the browser, where its APK is downloaded and handed to
+/// Android's installer.
 /// </summary>
 public static class AndroidUpdates
 {
@@ -177,12 +178,12 @@ public static class AndroidUpdates
         }
     }
 #else
-    /// <summary>The release's APK opened in the browser, which downloads it and hands it to Android's installer; its page when it has no APK.</summary>
+    /// <summary>The release's page on GitHub opened in the browser: what it brings, and its APK to download and install.</summary>
     private static void Open(Activity activity, Updates.Release release)
     {
         try
         {
-            activity.StartActivity(new Intent(Intent.ActionView, Android.Net.Uri.Parse(release.Download ?? release.Page)));
+            activity.StartActivity(new Intent(Intent.ActionView, Android.Net.Uri.Parse(release.Page)));
             Log.Write($"Updates: {release.Version} opened in the browser");
         }
         catch (ActivityNotFoundException failed)
