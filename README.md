@@ -50,7 +50,7 @@ keyboard itself, and kept as a layout of your own (at twice the speed).
 
 <p><img src="docs/img/designer.gif" width="420" alt="The designer: keys moved on the keyboard"></p>
 
-**Glide typing**: a word written by sliding over its letters, read by FUTO
+**AI-assisted glide typing**: a word written by sliding over its letters, read by FUTO
 Swipe's neural model on the device itself; the words it may be take the
 toolbar, the likeliest in the middle, in bold.
 
