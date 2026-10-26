@@ -53,6 +53,7 @@ public sealed class MainActivity : Activity
 
     private const int NotificationsRequest = 1;
     private const int MicrophoneRequest = 2;
+    private const int UpdatesNotificationsRequest = 9;
 
     /// <summary>The keyboard's 🎤 without the microphone's permission: this app opens on Escribir por voz and asks for it.</summary>
     public const string AskMicrophoneExtra = "askMicrophone";
@@ -113,6 +114,7 @@ public sealed class MainActivity : Activity
         content.AddView(status);
 
         content.AddView(Button("Turn on KeyPlus keys", TurnOn));
+#if ADB
         content.AddView(Text(
             "Where Android hides that switch (a headset), the button below turns KeyPlus on over this device's " +
             "Wireless debugging, which you turn on yourself in Developer options, with Wi-Fi on, no computer needed: " +
@@ -120,6 +122,7 @@ public sealed class MainActivity : Activity
             "notification, without leaving Settings. KeyPlus is turned on there and then, and the app keeps no way " +
             "to turn anything on by itself."));
         content.AddView(Button("Turn it on with Wireless debugging", () => PairWithWirelessDebugging(menus: false)));
+#endif
         content.AddView(Button("Open accessibility settings", () =>
             StartActivity(new Intent(Settings.ActionAccessibilitySettings))));
         content.AddView(Button("Open app info", () =>
@@ -191,6 +194,13 @@ public sealed class MainActivity : Activity
         {
             Intent?.RemoveExtra(AndroidUpdates.AskExtra);
             _ = AndroidUpdates.CheckAsync(this, asked: false);
+        }
+
+        // The day's check tells a new version in a notification, which Android shows only once allowed.
+        if (KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.UpdatesAutomaticKey, true)
+            && CheckSelfPermission(Android.Manifest.Permission.PostNotifications) != Android.Content.PM.Permission.Granted)
+        {
+            RequestPermissions([Android.Manifest.Permission.PostNotifications], UpdatesNotificationsRequest);
         }
     }
 

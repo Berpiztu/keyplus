@@ -1,0 +1,110 @@
+name: Caches
+
+# The caches the release (release.yml) restores, kept on main: a release tag
+# reads only its own caches and main's, so they are made here, once, when
+# what they hold changes (global.json, a csproj, a wixproj), or by hand: the
+# .NET SDK with its Android workload, and each build's NuGet packages under
+# the keys the release asks for.
+on:
+  push:
+    branches: [main]
+    paths:
+      - global.json
+      - '**/*.csproj'
+      - '**/*.wixproj'
+      - .github/workflows/cache.yml
+  workflow_dispatch:
+
+jobs:
+  sdk:
+    name: SDK and Android workload
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      # Absolute, with no ..: a cache whose path has .. is never saved.
+      - name: SDK folder
+        run: |
+          "DOTNET_INSTALL_DIR=$(Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'dotnet')" >> $env:GITHUB_ENV
+
+      - id: sdk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DOTNET_INSTALL_DIR }}
+          key: dotnet-${{ hashFiles('global.json') }}-android-${{ runner.os }}
+
+      - uses: actions/setup-dotnet@v4
+        if: steps.sdk.outputs.cache-hit != 'true'
+        with:
+          global-json-file: global.json
+
+      - name: Install workloads
+        if: steps.sdk.outputs.cache-hit != 'true'
+        run: dotnet workload install android
+
+  android:
+    name: NuGet packages, ${{ matrix.product }}
+    needs: sdk
+    strategy:
+      matrix:
+        product: [Popup, Keyboard]
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SDK folder
+        run: |
+          "DOTNET_INSTALL_DIR=$(Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'dotnet')" >> $env:GITHUB_ENV
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.DOTNET_INSTALL_DIR }}
+          key: dotnet-${{ hashFiles('global.json') }}-android-${{ runner.os }}
+          fail-on-cache-miss: true
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - id: nuget
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ matrix.product }}-${{ hashFiles('**/*.csproj') }}
+
+      # What build-apk.ps1's publish restores.
+      - name: Restore
+        if: steps.nuget.outputs.cache-hit != 'true'
+        run: dotnet restore Berpiztu.KeyPlus.csproj -p:Configuration=Release -p:KeyPlusProduct=${{ matrix.product }}
+
+  windows:
+    name: NuGet packages, Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - id: nuget
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-windows-${{ hashFiles('windows/*.csproj', 'packaging/windows-install/*.wixproj') }}
+
+      # What build-windows-installer.ps1 restores.
+      - name: Restore
+        if: steps.nuget.outputs.cache-hit != 'true'
+        run: |
+          Get-ChildItem windows -Filter *.csproj | ForEach-Object { dotnet restore $_.FullName -p:Configuration=Release -r win-x64; if ($LASTEXITCODE -ne 0) { throw "restore of $($_.Name) failed" } }
+          Get-ChildItem packaging\windows-install -Filter *.wixproj | ForEach-Object { dotnet restore $_.FullName -p:Configuration=Release; if ($LASTEXITCODE -ne 0) { throw "restore of $($_.Name) failed" } }

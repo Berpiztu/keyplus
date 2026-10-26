@@ -103,21 +103,18 @@
     <DefineConstants>$(DefineConstants);KEYBOARD</DefineConstants>
   </PropertyGroup>
 
-  <!-- What a product may leave out, each part on unless its property is set
-       to false here, to see what Play Protect calls harmful: KeyPlusAdb,
-       turning it on over Wireless debugging (AdbGrant.cs, AdbShell.java and
-       their libraries, with the notification the code is typed in);
-       KeyPlusSelfInstall, an update installed by the app itself
-       (REQUEST_INSTALL_PACKAGES), else opened in the browser;
-       KeyPlusFieldColor, the menu watch's screenshot of the field's colour
-       (App's as the application shows), else App's takes its theme's.
-       Berpiztu AI Keyboard leaves the screenshot out for now: without the
-       three, Play Protect let it in. -->
-  <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
-    <KeyPlusFieldColor>false</KeyPlusFieldColor>
-  </PropertyGroup>
+  <!-- Parts a build may leave out, each set to true or false here:
+       KeyPlusAdb, turning the app on over Wireless debugging (AdbGrant.cs,
+       AdbShell.java and their libraries, with the notification the code is
+       typed in), off in both apps: Play Protect calls an app that carries an
+       ADB client harmful (1.0.56 with it, 1.0.55 without), so it is to go
+       to a utility of its own (docs/tODO/adb-utility.md); KeyPlusSelfInstall,
+       an update installed by the app itself (REQUEST_INSTALL_PACKAGES), else
+       opened in the browser; KeyPlusFieldColor, the menu watch's screenshot
+       of the field's colour (App's as the application shows), else App's
+       takes its theme's. -->
   <PropertyGroup>
-    <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">true</KeyPlusAdb>
+    <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">false</KeyPlusAdb>
     <KeyPlusSelfInstall Condition="'$(KeyPlusSelfInstall)' == ''">true</KeyPlusSelfInstall>
     <KeyPlusFieldColor Condition="'$(KeyPlusFieldColor)' == ''">true</KeyPlusFieldColor>
     <DefineConstants Condition="'$(KeyPlusAdb)' == 'true'">$(DefineConstants);ADB</DefineConstants>

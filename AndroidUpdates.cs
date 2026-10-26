@@ -3,6 +3,8 @@ using Android.Content;
 using Android.Content.PM;
 using System.Text.Json;
 
+// The notification that tells a new version, asked for as the app opens (MainActivity.HandleUpdates).
+[assembly: UsesPermission(Android.Manifest.Permission.PostNotifications)]
 #if SELF_INSTALL
 [assembly: UsesPermission(Android.Manifest.Permission.RequestInstallPackages)]
 #endif

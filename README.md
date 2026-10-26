@@ -385,25 +385,17 @@ Then on the phone, for the popup:
    apps not installed from a store), choose **Open app info** in KeyPlus,
    then **⋮ → Allow restricted settings**, and turn it on again.
 
-Where Settings has no such menu (INAIR's pod, a headset), choose **Turn it
-on with Wireless debugging**, with Wi-Fi on and Developer options turned on:
-it opens Wireless debugging; turn it on, tap **Pair device with pairing
-code**, then pull down the shade and type the code in KeyPlus's
-notification, without leaving Settings, which would close the code. KeyPlus
-pairs with the device's own adb, as an ADB app on it would, and turns the
-service on there and then, keeping the others that are on:
+Where Settings has no such menu (INAIR's pod, a headset), a computer's
+`enable.ps1` turns the service on over adb, keeping the others that are on:
 
 ```
 settings put secure enabled_accessibility_services '<the others>:ai.berpiztu.keyplus/.KeyPlusService'
 settings put secure accessibility_enabled 1
 ```
 
-Berpiztu AI Keyboard's does the same with `ime enable` and `ime set`, and
-its menu watch as KeyPlus's service. The app is granted nothing to keep:
-it never turns anything on by itself, and each of its accessibility
-services says first what it sees and why. The key it pairs with is made
-for that one time and never kept. A computer's `adb shell` does the same,
-and `deploy.ps1` and `debug.ps1` do it too. Berpiztu AI Keyboard's
+and `deploy.ps1` and `debug.ps1` do it too. The app is granted nothing to
+keep: it never turns anything on by itself, and each of its accessibility
+services says first what it sees and why. Berpiztu AI Keyboard's
 screen has at its top, two by two, a box for each kind of field to try the
 keys in: text, 123 (a number's), @ (an e-mail address's) and www (a web
 address's), on Android and in the Windows settings alike.
@@ -423,14 +415,13 @@ For the keyboard, on a phone or a headset:
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
    keyboard**.
 
-Where Android's choice will not take it (INAIR's pod), **Turn it on with
-Wireless debugging** does it over the device's own Wireless debugging, as
-for the popup above: it runs `ime enable` and `ime set` there and then. A
-computer's `enable.ps1` does the same, and so do `deploy.ps1` and
-`debug.ps1`. The keyboard's menu watch takes no screenshot for now (App's
-theme takes the application's theme): `KeyPlusFieldColor` in
-`Berpiztu.KeyPlus.csproj` brings it back, as `KeyPlusAdb` and
-`KeyPlusSelfInstall` set to false would leave out the other two. The
+Where Android's choice will not take it (INAIR's pod), a computer's
+`enable.ps1` turns it on and makes it the keyboard in use (`ime enable`,
+`ime set`), and so do `deploy.ps1` and `debug.ps1`. Turning the apps on over
+the device's own Wireless debugging, no computer needed, is out of both
+APKs for now: Play Protect calls an app that carries an ADB client harmful.
+`KeyPlusAdb` in `Berpiztu.KeyPlus.csproj` keeps it, off, to go to a utility
+of its own ([docs/tODO/adb-utility.md](docs/tODO/adb-utility.md)). The
 same screen sets where the keyboard stands, on every screen: **Pop-up** puts
 it in a window of its own over the app, or docks it again, at once; **Reset
 the keyboard**, after asking, brings it back as first installed, docked at
@@ -490,8 +481,9 @@ Android app's, drawn at Windows' sizes by `packaging\Make-WindowsIcon.ps1`.
 `.\deploy-release.ps1`, as wslc-ai-agent's, raises the release's version
 to the next patch (or `-Version`), commits it, tags `v<version>` and pushes;
 [the Release workflow](.github/workflows/release.yml) builds each APK in a
-job of its own, with caches of its own, and the Windows installer in a
-third, at that version, and publishes the three on the repository's
+job of its own, and the Windows installer in a third, from the caches
+[cache.yml](.github/workflows/cache.yml) keeps on `main` (the SDK with its
+Android workload, and the NuGet packages), at that version, and publishes the three on the repository's
 **Releases** page, to download on a phone, a headset or a Windows computer
 and install there. `-Local` builds them here instead, `-Local -Publish`
 uploads them from here too.
