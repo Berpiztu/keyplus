@@ -103,18 +103,17 @@
     <DefineConstants>$(DefineConstants);KEYBOARD</DefineConstants>
   </PropertyGroup>
 
-  <!-- What Berpiztu AI Keyboard leaves out for now, to see whether Play
-       Protect still calls it harmful without them; each comes back with its
-       property set to true here, and the popup keeps all three:
-       KeyPlusAdb, turning it on over Wireless debugging (AdbGrant.cs,
-       AdbShell.java and their libraries, with the notification the code is
-       typed in); KeyPlusSelfInstall, an update installed by the app itself
+  <!-- What a product may leave out, each part on unless its property is set
+       to false here, to see what Play Protect calls harmful: KeyPlusAdb,
+       turning it on over Wireless debugging (AdbGrant.cs, AdbShell.java and
+       their libraries, with the notification the code is typed in);
+       KeyPlusSelfInstall, an update installed by the app itself
        (REQUEST_INSTALL_PACKAGES), else opened in the browser;
        KeyPlusFieldColor, the menu watch's screenshot of the field's colour
-       (App's as the application shows), else App's takes its theme's. -->
+       (App's as the application shows), else App's takes its theme's.
+       Berpiztu AI Keyboard leaves the screenshot out for now: without the
+       three, Play Protect let it in. -->
   <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
-    <KeyPlusAdb>false</KeyPlusAdb>
-    <KeyPlusSelfInstall>false</KeyPlusSelfInstall>
     <KeyPlusFieldColor>false</KeyPlusFieldColor>
   </PropertyGroup>
   <PropertyGroup>
