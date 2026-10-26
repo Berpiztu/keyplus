@@ -1,9 +1,24 @@
 # KeyPlus
 
-The keys a phone's keyboard lacks (Esc, Tab, Ctrl, Alt, Shift, the arrows,
-Home, End, Page up and Page down), sent to the field being typed in: a
-terminal, an SSH app, or a web editor such as vscode.dev or code-server in
-the browser. Two products, two apps built from the same code, which can be
+**A keyboard made for productivity, that uses AI to do more, privately**: for working
+remotely, adding the keys you miss on Android (Esc, Tab, Ctrl, Alt, F1–F12,
+the arrows, Home, End, Page up and Page down), and for XR devices such as XREAL glasses, the INAIR Pod, the
+Galaxy XR and Meta Quest. Real keyboards for remote programming, from any
+device based on Android.
+
+**Three AI models, all local**:
+
+1. **Glide typing** reads your finger's trail with a neural model (FUTO
+   Swipe's), on the device itself.
+2. **Accents** put back by a model that reads the whole sentence ("como
+   estas hoy?" becomes "cómo estás hoy?"), on the device itself.
+3. **Voice typing** writes what you say with NVIDIA's speech model
+   (Nemotron), on a computer of your own.
+
+Your words never go to anyone else's cloud.
+
+Those keys go to the field being typed in: a terminal, an SSH app, or a
+web editor such as vscode.dev or code-server in the browser. Two products, two apps built from the same code, which can be
 on one phone together:
 
 - **KeyPlus** (the popup, `ai.berpiztu.keyplus`): the keys in a strip right
@@ -12,6 +27,83 @@ on one phone together:
 - **Berpiztu AI Keyboard** (`ai.berpiztu.keyboard`): the same keys and
   title bar as a keyboard of its own, for any Android, and the one for a
   headset (Galaxy XR).
+
+And with it:
+
+- **On INAIR's pod too**, which lets you use only the keyboards it comes
+  with: Berpiztu AI Keyboard turns itself on there, from the keyboard
+  itself.
+- **Multilingual**: Spanish and English today, each with its own keyboard,
+  changed with a tap.
+- **Keyboards you can extend**: add keys, rows and columns, and make the
+  layout your own.
+- **Familiar from the first key**: Standard looks and works much like
+  Gboard, and goes further for productivity: Standard PC with F1–F12, Esc,
+  Ctrl, Alt, ⊞ and the arrows; shortcuts sent as a real keyboard's;
+  glide typing and spelling in each of its languages; voice typing on a computer
+  of your own; what you copied, kept; and the same keyboard on Windows.
+
+## A look at it
+
+### Berpiztu AI Keyboard on Android
+
+**Standard PC**, a PC's keyboard on the phone: F1–F12, Esc, Insert and
+Delete, Tab, Caps Lock, Ctrl, ⊞ and Alt, Home, End, Page up and Page down
+around the arrows. Each key shows, as a PC's keycap, what it types with
+Shift in its top corner and with Alt Gr in its bottom one. Over the keys,
+the toolbar: the tools' grid, what was copied, the keyboards, emoji,
+the floating keyboard, Standard and Standard PC, and the microphone.
+
+![Berpiztu AI Keyboard on Android: Standard PC, in Spanish](docs/img/Android1.jpg)
+
+The same keyboard in colours of your own (**Theme › Colours**), with the
+extra line over the toolbar for the words offered as you type, or the
+emoji used lately (**Preferences › Extra line for suggestions and recent
+emoji**).
+
+![Berpiztu AI Keyboard on Android in colours of its own, with the recent emoji's line](docs/img/Android2.jpg)
+
+### Berpiztu AI Keyboard for Windows
+
+The same keyboard in a card that floats over every window, or docked at the
+bottom of the screen: Standard PC in the system's dark theme, and in its
+light one. The toolbar holds the keyboards, emoji, spelling, glide typing
+(lit while on), the floating keyboard, the designer, the settings, voice
+typing and ✕.
+
+![Berpiztu AI Keyboard for Windows: Standard PC, dark theme](docs/img/Win1.png)
+
+![Berpiztu AI Keyboard for Windows: Standard PC, light theme](docs/img/win5.png)
+
+**Glide typing**: a word written by sliding over its letters, the trail
+drawn on the keys; the words it may be take the toolbar, the likeliest in
+the middle, in bold. Shift, at the end, shows on each key what it types
+then.
+
+![Glide typing on Berpiztu AI Keyboard for Windows](docs/img/glide-typing.gif)
+
+**Standard**, in a smaller card; while you type, the words
+offered take the toolbar's middle, the likeliest in bold, and a tap writes
+it.
+
+![Berpiztu AI Keyboard for Windows: Standard](docs/img/win2.png)
+
+![The words offered while typing, in the toolbar](docs/img/win4.png)
+
+**Emoji** take the keys' place, the toolbar staying where it is: the
+recent ones and each category, Fluent's emoji drawn by Windows.
+
+![The emoji panel in the keys' place](docs/img/win3.png)
+
+**The designer**: keys and rows added, removed and resized on the keyboard
+itself, a key at a time, and kept as a layout of your own.
+
+![The designer: + Key, + Row, + Column, Remove](docs/img/design1.png)
+
+A key dragged to another place, and the keyboard made again around it
+(at twice the speed):
+
+![The designer: keys moved on the keyboard](docs/img/designer.gif)
 
 ## How it works
 
@@ -37,17 +129,17 @@ there the whole keyboard has no column at its right, so its keys are wider
 keyboard the title bar does not move it nor ⤓ dock it, for Android places
 it; in ✕'s place it has **⚙**, its settings, whose first is **Switch keyboard**, Android's keyboard picker.
 
-On a phone the keyboard's title bar is Gboard's toolbar, one height and one
+On a phone the keyboard's title bar is its toolbar, one height and one
 size of words whatever the keys' size: **⚙** at its left, **ABC** (or
 **Keys**) at its right, and between them the chip of what was copied last,
-for five minutes after it was copied, else **📋**; nothing is drawn over
+for five minutes after it was copied, else **Clipboard**; nothing is drawn over
 anything else. A tap on the chip pastes it, a long press opens its menu
 (Pegar, Fijar, Editar, Eliminar). Editar shows its card above the keyboard,
-over the app, as Gboard does: one line that scrolls across, so neither the
+over the app: one line that scrolls across, so neither the
 card nor the keys change size with the text, and the keys type into it
 until Cancel or Save. A long press on the bar's buttons, its free room
 or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
-bar into **✕** and **📋** and opens, in the keys' place and as Gboard's
+bar into **✕** and **Clipboard** and opens, in the keys' place as
 rounded tiles, **Smaller text**, **Larger text**, **Normal
 size**, **Two rows** (in Keys), **Minimize**, **App settings**,
 **Move**, **Resize**, **Design**, **Normal mode**, **Window
@@ -99,44 +191,44 @@ a window that does.
 | [ScreenshotWatcher.cs](ScreenshotWatcher.cs) | Each new screenshot into the keyboard's copied list |
 | [ScanCodes.cs](ScanCodes.cs) | The scan code a hardware keyboard sends with each key, which remote desktop apps go by |
 | [SelectionInputMethod.cs](SelectionInputMethod.cs) | The service's input method, which says when the editor's caret moves |
-| [MainActivity.cs](MainActivity.cs) | The app's one screen. The popup's: what it does, whether it is on, the way to Settings. The keyboard's: its two first steps (turn it on, choose it), then its settings as Gboard's |
-| [SettingsScreen.cs](SettingsScreen.cs) | The keyboard's settings as Gboard's: a big title, rows in rounded groups, a page beside the list on a wide screen, in the device's colours |
+| [MainActivity.cs](MainActivity.cs) | The app's one screen. The popup's: what it does, whether it is on, the way to Settings. The keyboard's: its two first steps (turn it on, choose it), then its settings |
+| [SettingsScreen.cs](SettingsScreen.cs) | The keyboard's settings: a big title, rows in rounded groups, a page beside the list on a wide screen, in the device's colours |
 | [AdbGrant.cs](AdbGrant.cs) | The app turned on over the device's own Wireless debugging: the pairing code taken in a notification, the ADB commands run, no computer |
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
 | [EmojiList.cs](EmojiList.cs) | The emoji list both keyboards offer (Unicode's, by group) and the recent ones' line |
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
-| [VoiceTyping.cs](VoiceTyping.cs) | 🎤 by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
+| [VoiceTyping.cs](VoiceTyping.cs) | Voice typing by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
 | [PersonalWords.cs](PersonalWords.cs) | The personal dictionary and the words chosen for swipes, on Android and Windows: kept by language in `personal-words.json`, the e-mail addresses every language's, a word no list has learnt with a tap, a swipe's choice put first |
 | [SpanishMarks.cs](SpanishMarks.cs) | Spelling's opening marks, on Android and Windows: a sentence closed with ? or ! given its "¿" or "¡" at its start |
 | [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
 | [AndroidUpdates.cs](AndroidUpdates.cs) | Updates on Android: the day's check from the keyboard or the service, its notification, the app's question, Android's installer |
-| [AndroidVoice.cs](AndroidVoice.cs) | 🎤 on Android: Voice typing's settings (the password sealed by Android's keystore), the microphone chosen or the device's own, and Android's own recognizer for Local |
-| [VoiceBars.cs](VoiceBars.cs) | 🎤 while it listens, on Android and Windows, as Gboard's: bars in the microphone's place rising and falling with the voice heard |
+| [AndroidVoice.cs](AndroidVoice.cs) | Voice typing on Android: its settings (the password sealed by Android's keystore), the microphone chosen or the device's own, and Android's own recognizer for Local |
+| [VoiceBars.cs](VoiceBars.cs) | The microphone while it listens, on Android and Windows: bars in the microphone's place rising and falling with the voice heard |
 | [Log.cs](Log.cs) | The keyboard's log, on Android and Windows: a line each with its time, every warning and error, what names what is on the screen only with Troubleshooting's Detailed log on; on Android in the app's files and logcat |
 | [MenuWatchService.cs](MenuWatchService.cs) | Also move out of the way of menus on Android: an accessibility service of the keyboard's own, on where the user turns it on, that sees a menu open (a window with the app's as its parent) and close, and tells the keyboard where; and, for Theme's Per app, the colour beside the field typed in, on a screenshot |
-| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages as Gboard lays them out: letters with the number row and the corners' symbols, ?123, =\<; Standard PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
+| [StandardKeys.cs](StandardKeys.cs) | The standard keyboard's languages (Spanish, English) and their pages: letters with the number row and the corners' symbols, ?123, =\<; Standard PC's page, a Spanish (ISO) or US (ANSI) PC's keys |
 | [Keyboards.cs](Keyboards.cs) | The keyboards of the list (Settings › Theme), by language: Standard, Standard PC and those saved; each screen's one in each language |
 | [ColorsRow.cs](ColorsRow.cs) | Theme's Colours, two lines on a card as Windows': System, Light, Dark, Custom, Per application, the two colours on hue, saturation and brightness bars, Undo (Tema's or the application's); Application and App's theme; a part that does not apply turned off, never hidden |
 | [AppThemes.cs](AppThemes.cs) | Per app's applications typed in, by package, with their colours: their theme's background made light or dark as the device is, or the colour seen on the screen |
 | [ThemeView.cs](ThemeView.cs) | Settings › Theme: the language and the keyboard, Save as and Delete, and the keyboard drawn as the screen shows it, designed there |
 | [StandardDesigner.cs](StandardDesigner.cs) | Design's pills, + Key's list and Done's saving, the keyboard's and Theme's alike |
 | [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |
-| [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞), Gboard's: pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
+| [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞): pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
 | [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji in the keys' place, the toolbar over it, as on Windows: ←, the tabs and ⌫, the list by group (emoji 30 dp, 4 apart) |
 | [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design, on Android and Windows: its letters' rows as places of the keyboard it was made from, keys added and holes, with their widths |
 | [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys and the designer, [Keyboards.cs](windows/Keyboards.cs) the keyboards saved, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
-| [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard, Gboard's copied: drawn in the device's own colours, typed, held, swiped |
+| [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard: drawn in the device's own colours, typed, held, swiped |
 | [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder and each language's word list, downloaded with its Glide typing ([SwipeData.cs](SwipeData.cs)), loaded once, a swipe read as words, accents put back |
 | [SwipeDecoder.java](SwipeDecoder.java) | FUTO Swipe's Java side over its native library ([native/futo-swipe](native/futo-swipe)), GPL-3.0 |
 | [SwipeTrail.cs](SwipeTrail.cs) | The line a swiping finger draws over the keys, thinning behind it |
 
 ## Using it
 
-- **Settings › Preferences**: **Sound on keypress** (off, as Gboard's)
+- **Settings › Preferences**: **Sound on keypress** (off)
   plays Android's keypress sounds, the space's, the delete's and Enter's
   their own, at the system's volume; **Haptic feedback on keypress** (on)
   makes each touch felt. Android only: Windows has neither.
@@ -155,7 +247,7 @@ a window that does.
   list and the words offered as you type show first (a web domain, a name);
   each with ✏ to write it again and a red ✕ to delete it, a word added by
   hand. **Offer new words to learn** (on): a word no word list has shows as
-  typed at the toolbar's left, in quotes, as Gboard's; a tap writes it and
+  typed at the toolbar's left, in quotes; a tap writes it and
   learns it. Nothing is learnt by itself, nor while Autocorrect or Spelling
   is off (writing code). **Learn from the words I choose**
   (on): a word taken from the toolbar in place of a swiped one is typed
@@ -194,19 +286,18 @@ a window that does.
   the Spanish and English word lists (AOSP LatinIME), 4.7 MB, each file
   checked by its SHA-256. The word lists also give the words offered as you
   type and how common a correction is. The installer carries none of it.
-- **Settings › Glide typing › Delete a swiped word whole** (on, as Gboard's):
+- **Settings › Glide typing › Delete a swiped word whole** (on):
   ⌫ right after a swiped word deletes all the swipe typed, the word and the
   space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes
   only the last letter. On Windows and Android alike.
-- **On a headset (Galaxy XR), a third: Standard XR**, Gboard's there
-  (docs/tODO/photos/gboard/xr-letters.png and xr-symbols.png): a tablet's
+- **On a headset (Galaxy XR), a third: Standard XR**: a tablet's
   keys, the digits over the letters, Tab, Caps Lock, ⇧ at both ends, ◀ and
   ▶ by the space bar; the headset's first keyboard, as tall as the
   headset's window lets it, as Standard PC is there too (no band over the
   bar, no room kept for a navigation bar the headset does not draw) and,
   in the dark, the keys darker than the ground, as there.
-- **Berpiztu AI Keyboard comes with two keyboards**, both in Gboard's look
-  and the device's colours: **Standard**, Gboard's keys, and **Standard PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
+- **Berpiztu AI Keyboard comes with two keyboards**, both in the
+  device's colours: **Standard**, and **Standard PC**, a PC's (Spanish ISO, or US in English): F1–F12, each key as a PC's
   keycap, its Shift's symbol in its top corner and its Alt Gr's in its
   bottom one (a letter's capital going without saying), and with Shift or
   Alt Gr on only what the keys type then (Alt Gr's, the others blank), ´ and ` as dead
@@ -217,7 +308,7 @@ a window that does.
   Enter, Home, End, Page up and Page down). The keyboards go by language, a
   PC's keys differing between them: each screen (phone, tablet upright or
   on its side, DeX) shows one in each language, docked and floating alike,
-  chosen in **Settings › Theme**, 🌐 changing it with the language; at first
+  chosen in **Settings › Theme**, the language key changing it with the language; at first
   Standard on a phone, Standard PC on a tablet on its side and on DeX.
   Theme shows the keyboard chosen as the screen does, in a box of one size,
   copies it under a new name with Save as, deletes a saved one with
@@ -239,7 +330,7 @@ a window that does.
   Done saves Standard or Standard PC as a new keyboard of the language,
   this screen's in it; designed floating, the design is the keyboard's
   floating one, docked it stays as it was.
-- **⊞ › ✏** customises the toolbar and the grid as Gboard's: a button held
+- **⊞ › ✏** customises the toolbar and the grid: a button held
   is dragged between them, its name in sight; the toolbar's buttons show
   their names as the mouse rests on them.
 - **Emoji**: the comma held, or ⊞'s Emojis, opens them in the keys' place,
@@ -248,13 +339,13 @@ a window that does.
 - **Words as you type**: while a word is typed letter by letter, the
   toolbar offers the commonest words that start so, accents aside ("cafe" offers "café"), the likeliest in the centre; a tap writes it with a
   space after it.
-- **🎤** writes what you say, the words in the field as they are heard,
+- **The microphone** writes what you say, the words in the field as they are heard,
   until it is tapped again or, if Voice typing says so, after a
   silence. Local is Android's own recognizer; Local network is ia-voice
   (NVIDIA Nemotron 3.5 ASR) on a computer at home, by its IP; Remote is a
   published one, with the user and password its proxy asks for, kept
   sealed on the device.
-- **What was copied** is kept to paste again, the last 20. **📋** in the
+- **What was copied** is kept to paste again, the last 20. **Clipboard** in the
   title bar shows it in the keys' place; a tap pastes it, **✕** takes it out
   of the list. Berpiztu AI Keyboard keeps whatever is copied in any app,
   images too (Chrome's "Copy image"), and, once its app is let read the
@@ -459,7 +550,7 @@ over the letters is read by FUTO Swipe, built for Windows
 (`native/futo-swipe/windows/build.ps1`), and its words show in the
 toolbar as on Android. The comma held, or ☺ on the toolbar, opens the
 emoji, in colour as Windows draws them (Direct2D), those typed lately
-first; Windows draws no flags, so they are left out. 🎤 types what
+first; Windows draws no flags, so they are left out. The microphone types what
 ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens

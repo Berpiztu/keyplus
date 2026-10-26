@@ -10,5 +10,7 @@ doc/clicbo/
 *.mp4
 *.jpg
 *.jpeg
+# Except the README's own pictures, chosen to be published.
+!docs/img/*.jpg
 # Other apps' APKs tried on the emulator, never published.
 test/
