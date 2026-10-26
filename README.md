@@ -43,7 +43,18 @@ And with it:
   glide typing and spelling in each of its languages; voice typing on a computer
   of your own; what you copied, kept; and the same keyboard on Windows.
 
-## A look at it
+## Features
+
+**The designer**: keys and rows added, removed, resized and moved on the
+keyboard itself, and kept as a layout of your own (at twice the speed).
+
+<p><img src="docs/img/designer.gif" width="420" alt="The designer: keys moved on the keyboard"></p>
+
+**Glide typing**: a word written by sliding over its letters, read by FUTO
+Swipe's neural model on the device itself; the words it may be take the
+toolbar, the likeliest in the middle, in bold.
+
+<p><img src="docs/img/glide-typing.gif" width="420" alt="Glide typing on Berpiztu AI Keyboard for Windows"></p>
 
 ### Berpiztu AI Keyboard on Android
 
@@ -72,12 +83,6 @@ typing and ✕.
   <img src="docs/img/win5.png" width="320" alt="Berpiztu AI Keyboard for Windows: Standard PC, light theme">
 </p>
 
-**Glide typing**: a word written by sliding over its letters, the trail
-drawn on the keys; the words it may be take the toolbar, the likeliest in
-the middle, in bold.
-
-<p><img src="docs/img/glide-typing.gif" width="420" alt="Glide typing on Berpiztu AI Keyboard for Windows"></p>
-
 **Standard** in a smaller card; the words offered while you type, in the
 toolbar; and **emoji** in the keys' place, the toolbar staying where it is.
 
@@ -85,15 +90,6 @@ toolbar; and **emoji** in the keys' place, the toolbar staying where it is.
   <img src="docs/img/win2.png" width="220" alt="Berpiztu AI Keyboard for Windows: Standard">
   <img src="docs/img/win4.png" width="220" alt="The words offered while typing, in the toolbar">
   <img src="docs/img/win3.png" width="220" alt="The emoji panel in the keys' place">
-</p>
-
-**The designer**: keys and rows added, removed, resized and moved on the
-keyboard itself, and kept as a layout of your own (at the right, at twice
-the speed).
-
-<p>
-  <img src="docs/img/design1.png" width="320" alt="The designer: + Key, + Row, + Column, Remove">
-  <img src="docs/img/designer.gif" width="320" alt="The designer: keys moved on the keyboard">
 </p>
 
 ## How it works
