@@ -1,7 +1,7 @@
 # Third-party notices
 
 KeyPlus is MIT-licensed ([LICENSE](LICENSE)). Both of its APKs carry the
-libraries below, which the app uses to turn itself on over the device's own
+libraries below, which the app uses to be turned on over the device's own
 Wireless debugging ([AdbShell.java](AdbShell.java)). Each keeps its own
 licence; their versions are the ones in
 [Berpiztu.KeyPlus.csproj](Berpiztu.KeyPlus.csproj).

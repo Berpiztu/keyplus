@@ -4,6 +4,7 @@ using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.OS;
+using Android.Provider;
 using Android.Runtime;
 using Icon = Android.Graphics.Drawables.Icon;
 
@@ -14,12 +15,14 @@ using Icon = Android.Graphics.Drawables.Icon;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The ADB commands that let the app turn itself on (<see cref="Commands"/>),
-/// run by the app itself over the device's own Wireless debugging, as an ADB
-/// app on the device would run them (AdbShell.java, libadb-android): it waits
-/// for Settings' "Pair device with pairing code", takes the code in its
-/// notification, since leaving Settings would close that dialog and end the
-/// pairing, pairs, runs the commands as the shell user and turns the app on.
+/// The ADB commands that turn the app on (<see cref="Commands"/>), run by the
+/// app itself over the device's own Wireless debugging, as an ADB app on the
+/// device or a computer's adb would run them (AdbShell.java, libadb-android):
+/// it waits for Settings' "Pair device with pairing code", takes the code in
+/// its notification, since leaving Settings would close that dialog and end
+/// the pairing, pairs, and runs the commands as the shell user. They turn on
+/// what the user asked for there and then; the app is granted nothing to
+/// keep, and never writes Android's secure settings itself.
 /// A short foreground service: Android gives it three minutes.
 /// </summary>
 [Service(Exported = false, ForegroundServiceType = ForegroundService.TypeShortService)]
@@ -28,6 +31,7 @@ public sealed class AdbGrant : Service
     private const string StartAction = "ai.berpiztu.keyplus.adb.START";
     private const string CodeAction = "ai.berpiztu.keyplus.adb.CODE";
     private const string CodeKey = "code";
+    private const string MenusKey = "menus";
     private const string Channel = "wireless-debugging";
     private const int NotificationId = 1;
 
@@ -40,9 +44,12 @@ public sealed class AdbGrant : Service
     private TaskCompletionSource<string>? code;
     private bool running;
 
-    /// <summary>The pairing started, from the app's screen, which then opens Wireless debugging.</summary>
-    public static void Start(Context context) =>
-        context.StartForegroundService(new Intent(context, typeof(AdbGrant)).SetAction(StartAction));
+    /// <summary>Berpiztu AI Keyboard's menu watch to turn on, not the keyboard.</summary>
+    private bool menus;
+
+    /// <summary>The pairing started, from the app's screen, which then opens Wireless debugging; menus, the keyboard's menu watch rather than the keyboard.</summary>
+    public static void Start(Context context, bool menus = false) =>
+        context.StartForegroundService(new Intent(context, typeof(AdbGrant)).SetAction(StartAction).PutExtra(MenusKey, menus));
 
     public override IBinder? OnBind(Intent? intent) => null;
 
@@ -56,6 +63,7 @@ public sealed class AdbGrant : Service
                 if (!running)
                 {
                     running = true;
+                    menus = intent.GetBooleanExtra(MenusKey, false);
                     Task.Run(Grant);
                 }
 
@@ -77,7 +85,7 @@ public sealed class AdbGrant : Service
     public override void OnTimeout(int startId) =>
         Finish("Wireless debugging took too long. Try again, and type the code as soon as Settings shows it.", done: false);
 
-    /// <summary>The pairing dialog found, its code taken, the commands run and the app turned on; or what failed.</summary>
+    /// <summary>The pairing dialog found, its code taken, and the commands run, which turn the app on; or what failed.</summary>
     private async Task Grant()
     {
         try
@@ -94,16 +102,13 @@ public sealed class AdbGrant : Service
             var typed = await code.Task.WaitAsync(PairingWait);
             Notify(Working());
 
-            var output = Run(port, typed, Commands(this));
-            if (CheckSelfPermission(MainActivity.WriteSecureSettings) != Permission.Granted)
+            var output = Run(port, typed, Commands());
+            if (!TurnedOn())
             {
-                Finish($"Wireless debugging did not grant it. {output}".Trim(), done: false);
+                Finish($"Wireless debugging did not turn it on. {output}".Trim(), done: false);
                 return;
             }
 
-#if !KEYBOARD
-            MainActivity.TurnOnService(this);
-#endif
             Finish($"{Label} is on.", done: true);
         }
         catch (TimeoutException)
@@ -117,22 +122,51 @@ public sealed class AdbGrant : Service
     }
 
     /// <summary>
-    /// The shell commands that let the app turn itself on later, as a
-    /// computer's adb or an ADB app on the device would run them.
+    /// The shell commands that turn the app on, as a computer's adb would run
+    /// them (enable.ps1): the keyboard turned on and made the one in use, or
+    /// an accessibility service added to the ones already on.
     /// </summary>
-    private static string[] Commands(Context context)
+    private string[] Commands()
     {
-        var package = context.PackageName!;
 #if KEYBOARD
-        // Turned on, made the keyboard in use, and the secure settings granted
-        // so the app does it by itself later (MainActivity.UseKeyboard).
-        var keyboard = MainActivity.KeyboardId(context);
-        return [$"ime enable {keyboard}", $"ime set {keyboard}", $"pm grant {package} {MainActivity.WriteSecureSettings}"];
+        if (!menus)
+        {
+            var keyboard = MainActivity.KeyboardId(this);
+            return [$"ime enable {keyboard}", $"ime set {keyboard}"];
+        }
+
+        return AccessibilityOn(MenuWatchService.Id(this));
 #else
-        // Restricted settings allowed (Android 13 and later keep an app
-        // installed outside a store from being an accessibility service until
-        // they are), and the secure settings granted.
-        return [$"appops set {package} ACCESS_RESTRICTED_SETTINGS allow", $"pm grant {package} {MainActivity.WriteSecureSettings}"];
+        return AccessibilityOn(MainActivity.ServiceId(this));
+#endif
+    }
+
+    /// <summary>
+    /// The service written into the accessibility services on, those of other
+    /// apps kept, and accessibility turned on: the shell writes them, which
+    /// Android lets no app do for itself. Quoted, since a service's class may
+    /// hold a $.
+    /// </summary>
+    private string[] AccessibilityOn(string service)
+    {
+        var listed = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledAccessibilityServices) ?? "";
+        var others = listed.Split(':', StringSplitOptions.RemoveEmptyEntries).Where(name => !name.StartsWith($"{PackageName}/", StringComparison.Ordinal));
+        return [$"settings put secure enabled_accessibility_services '{string.Join(':', others.Append(service))}'", "settings put secure accessibility_enabled 1"];
+    }
+
+    /// <summary>Whether what the commands turn on is on, as Android's settings have it now.</summary>
+    private bool TurnedOn()
+    {
+#if KEYBOARD
+        if (!menus)
+        {
+            return Settings.Secure.GetString(ContentResolver, Settings.Secure.DefaultInputMethod) == MainActivity.KeyboardId(this);
+        }
+
+        return MenuWatchService.On(this);
+#else
+        var listed = Settings.Secure.GetString(ContentResolver, Settings.Secure.EnabledAccessibilityServices) ?? "";
+        return listed.Split(':').Contains(MainActivity.ServiceId(this));
 #endif
     }
 

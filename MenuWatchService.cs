@@ -84,10 +84,13 @@ public sealed class MenuWatchService : AccessibilityService
     /// <summary>Whether the service is turned on, as Android's secure setting of the accessibility services on has it (written at once, where Android's manager tells it a moment later).</summary>
     public static bool On(Context context)
     {
-        var watch = new ComponentName(context, Java.Lang.Class.FromType(typeof(MenuWatchService))).FlattenToString();
         var on = Android.Provider.Settings.Secure.GetString(context.ContentResolver, Android.Provider.Settings.Secure.EnabledAccessibilityServices) ?? "";
-        return on.Split(':').Contains(watch);
+        return on.Split(':').Contains(Id(context));
     }
+
+    /// <summary>The service as Android names it among the accessibility services on.</summary>
+    public static string Id(Context context) =>
+        new ComponentName(context, Java.Lang.Class.FromType(typeof(MenuWatchService))).FlattenToString()!;
 
     public override void OnAccessibilityEvent(AccessibilityEvent? e)
     {

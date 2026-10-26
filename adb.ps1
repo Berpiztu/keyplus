@@ -128,9 +128,6 @@ function Enable-KeyPlusService {
     # an accessibility service until they are.
     Invoke-Adb @("-s", $Target, "shell", "appops", "set", $PopupPackageId, "ACCESS_RESTRICTED_SETTINGS", "allow") | Out-Null
 
-    # The secure settings granted too, so the app's own "Turn on KeyPlus keys"
-    # turns the service on again later without a computer.
-    Invoke-Adb @("-s", $Target, "shell", "pm", "grant", $PopupPackageId, "android.permission.WRITE_SECURE_SETTINGS") | Out-Null
     if (Test-ServiceBound $Target) {
         return
     }
@@ -179,9 +176,6 @@ function Test-Headset {
 function Enable-KeyPlusKeyboard {
     param([string]$Target)
     $current = ""
-    # The secure settings granted, so the app's "Make it the keyboard in use"
-    # does this by itself later, without a computer.
-    Invoke-Adb @("-s", $Target, "shell", "pm", "grant", $KeyboardPackageId, "android.permission.WRITE_SECURE_SETTINGS") | Out-Null
     for ($i = 0; $i -lt 5; $i++) {
         Invoke-Adb @("-s", $Target, "shell", "ime", "enable", $KeyboardId) | Out-Null
         Invoke-Adb @("-s", $Target, "shell", "ime", "set", $KeyboardId) | Out-Null

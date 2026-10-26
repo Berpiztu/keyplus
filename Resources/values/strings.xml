@@ -33,7 +33,7 @@
   <string name="setup_choose_summary">Make it the keyboard you type with</string>
   <string name="setup_done">Done ✓</string>
   <string name="setup_how">Turn it on</string>
-  <string name="setup_wireless">With Wireless debugging, no computer: pair once, then it turns itself on</string>
+  <string name="setup_wireless">With Wireless debugging, no computer: pair, and it is turned on and chosen</string>
   <string name="setup_android">In Android\'s keyboard settings</string>
   <string name="languages">Languages</string>
   <string name="languages_summary">Español (España) (QWERTY (Ñ)), English (US) (QWERTY)</string>
@@ -121,7 +121,7 @@
   <string name="focus_lost_stay">Stay on screen</string>
   <string name="choose_keyboard">Choose the keyboard</string>
   <string name="wireless_debugging">Turn it on with Wireless debugging</string>
-  <string name="wireless_debugging_summary">Pair again when Android has forgotten it</string>
+  <string name="wireless_debugging_summary">Turns it on and chooses it, no computer needed</string>
   <string name="delete">Delete</string>
   <string name="ok">OK</string>
   <string name="cancel">Cancel</string>
@@ -195,7 +195,6 @@
   <string name="voice_lan_hint">The IP of the computer with ia-voice on your network, such as 192.168.1.20; port 8060 unless you write another.</string>
   <string name="headset_box">The headset\'s own keyboard</string>
   <string name="headset_box_summary">On the glasses, the keys filling the box the headset gives a keyboard; off, the phone\'s keyboard, as any Android keyboard. It changes when the keyboard opens again</string>
-  <string name="menus_watch_grant">First let the app turn things on by itself: pair it in Wireless debugging, then tap Let it see the menus again</string>
   <string name="windows_licences_summary">FUTO swipe-library (GPL-3.0), FUTO Swipe models (FUTO Model Weights License 1.0), ExecuTorch (BSD), AOSP LatinIME word lists, Vortice.Windows (MIT), NAudio (MIT), ONNX Runtime (MIT), WeCantSpell.Hunspell (MPL-1.1), Material Symbols (Apache-2.0)</string>
   <string name="avoid_menus_electron">VS Code and other Electron apps tell their menus only when started with --force-renderer-accessibility: add it to their shortcut (Properties › Target, after Code.exe).</string>
   <string name="troubleshooting">Troubleshooting</string>
@@ -314,4 +313,6 @@
   <string name="troubleshooting_log_save_summary">A file where you choose, to send it: Android keeps the log where no other app can open it</string>
   <string name="troubleshooting_log_saved">A copy of the log was saved</string>
   <string name="troubleshooting_log_save_failed">The copy of the log could not be saved: %1$s</string>
+  <string name="accessibility_open">Open Android\'s switch</string>
+  <string name="restricted_settings">You turn it on yourself, in Android\'s switch for it. If Android says the setting is restricted, open the app\'s info, choose ⋮ at the top right, then Allow restricted settings, and try again. Where Android hides the switch (a headset), Wireless debugging turns it on, no computer needed.</string>
 </resources>

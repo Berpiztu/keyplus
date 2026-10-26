@@ -385,24 +385,25 @@ Then on the phone, for the popup:
    apps not installed from a store), choose **Open app info** in KeyPlus,
    then **⋮ → Allow restricted settings**, and turn it on again.
 
-Where Settings has no such menu (INAIR's pod), or to have KeyPlus turn
-itself on, choose **Turn it on with Wireless debugging**, once after each
-new install (installing over the app keeps it), with Wi-Fi on and Developer
-options turned on: it opens Wireless debugging; turn it on, tap **Pair
-device with pairing code**, then pull down the shade and type the code in
-KeyPlus's notification, without leaving Settings, which would close the
-code. KeyPlus pairs with the device's own adb, as an ADB app on it would,
-runs these two commands and turns itself on:
+Where Settings has no such menu (INAIR's pod, a headset), choose **Turn it
+on with Wireless debugging**, with Wi-Fi on and Developer options turned on:
+it opens Wireless debugging; turn it on, tap **Pair device with pairing
+code**, then pull down the shade and type the code in KeyPlus's
+notification, without leaving Settings, which would close the code. KeyPlus
+pairs with the device's own adb, as an ADB app on it would, and turns the
+service on there and then, keeping the others that are on:
 
 ```
-appops set ai.berpiztu.keyplus ACCESS_RESTRICTED_SETTINGS allow
-pm grant ai.berpiztu.keyplus android.permission.WRITE_SECURE_SETTINGS
+settings put secure enabled_accessibility_services '<the others>:ai.berpiztu.keyplus/.KeyPlusService'
+settings put secure accessibility_enabled 1
 ```
 
-From then on **Turn on KeyPlus keys** turns the service on by itself,
-keeping the others that are on. The key it pairs with is made for that one
-time and never kept. A computer's `adb shell` runs the same two commands,
-and `deploy.ps1` and `debug.ps1` run them too. Berpiztu AI Keyboard's
+Berpiztu AI Keyboard's does the same with `ime enable` and `ime set`, and
+its menu watch as KeyPlus's service. The app is granted nothing to keep:
+it never turns anything on by itself, and each of its accessibility
+services says first what it sees and why. The key it pairs with is made
+for that one time and never kept. A computer's `adb shell` does the same,
+and `deploy.ps1` and `debug.ps1` do it too. Berpiztu AI Keyboard's
 screen has at its top, two by two, a box for each kind of field to try the
 keys in: text, 123 (a number's), @ (an e-mail address's) and www (a web
 address's), on Android and in the Windows settings alike.
