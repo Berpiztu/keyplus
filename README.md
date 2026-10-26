@@ -49,19 +49,15 @@ And with it:
 
 **Standard PC**, a PC's keyboard on the phone: F1–F12, Esc, Insert and
 Delete, Tab, Caps Lock, Ctrl, ⊞ and Alt, Home, End, Page up and Page down
-around the arrows. Each key shows, as a PC's keycap, what it types with
-Shift in its top corner and with Alt Gr in its bottom one. Over the keys,
-the toolbar: the tools' grid, what was copied, the keyboards, emoji,
-the floating keyboard, Standard and Standard PC, and the microphone.
+around the arrows, each key showing what it types with Shift and with Alt
+Gr, as a PC's keycap. At the right, in colours of your own (**Theme ›
+Colours**), with the extra line for the words offered as you type or the
+emoji used lately.
 
-![Berpiztu AI Keyboard on Android: Standard PC, in Spanish](docs/img/Android1.jpg)
-
-The same keyboard in colours of your own (**Theme › Colours**), with the
-extra line over the toolbar for the words offered as you type, or the
-emoji used lately (**Preferences › Extra line for suggestions and recent
-emoji**).
-
-![Berpiztu AI Keyboard on Android in colours of its own, with the recent emoji's line](docs/img/Android2.jpg)
+<p>
+  <img src="docs/img/Android1.jpg" width="360" alt="Berpiztu AI Keyboard on Android: Standard PC, in Spanish">
+  <img src="docs/img/Android2.jpg" width="360" alt="Berpiztu AI Keyboard on Android in colours of its own, with the recent emoji's line">
+</p>
 
 ### Berpiztu AI Keyboard for Windows
 
@@ -71,39 +67,34 @@ light one. The toolbar holds the keyboards, emoji, spelling, glide typing
 (lit while on), the floating keyboard, the designer, the settings, voice
 typing and ✕.
 
-![Berpiztu AI Keyboard for Windows: Standard PC, dark theme](docs/img/Win1.png)
-
-![Berpiztu AI Keyboard for Windows: Standard PC, light theme](docs/img/win5.png)
+<p>
+  <img src="docs/img/Win1.png" width="320" alt="Berpiztu AI Keyboard for Windows: Standard PC, dark theme">
+  <img src="docs/img/win5.png" width="320" alt="Berpiztu AI Keyboard for Windows: Standard PC, light theme">
+</p>
 
 **Glide typing**: a word written by sliding over its letters, the trail
 drawn on the keys; the words it may be take the toolbar, the likeliest in
-the middle, in bold. Shift, at the end, shows on each key what it types
-then.
+the middle, in bold.
 
-![Glide typing on Berpiztu AI Keyboard for Windows](docs/img/glide-typing.gif)
+<p><img src="docs/img/glide-typing.gif" width="420" alt="Glide typing on Berpiztu AI Keyboard for Windows"></p>
 
-**Standard**, in a smaller card; while you type, the words
-offered take the toolbar's middle, the likeliest in bold, and a tap writes
-it.
+**Standard** in a smaller card; the words offered while you type, in the
+toolbar; and **emoji** in the keys' place, the toolbar staying where it is.
 
-![Berpiztu AI Keyboard for Windows: Standard](docs/img/win2.png)
+<p>
+  <img src="docs/img/win2.png" width="220" alt="Berpiztu AI Keyboard for Windows: Standard">
+  <img src="docs/img/win4.png" width="220" alt="The words offered while typing, in the toolbar">
+  <img src="docs/img/win3.png" width="220" alt="The emoji panel in the keys' place">
+</p>
 
-![The words offered while typing, in the toolbar](docs/img/win4.png)
+**The designer**: keys and rows added, removed, resized and moved on the
+keyboard itself, and kept as a layout of your own (at the right, at twice
+the speed).
 
-**Emoji** take the keys' place, the toolbar staying where it is: the
-recent ones and each category, Fluent's emoji drawn by Windows.
-
-![The emoji panel in the keys' place](docs/img/win3.png)
-
-**The designer**: keys and rows added, removed and resized on the keyboard
-itself, a key at a time, and kept as a layout of your own.
-
-![The designer: + Key, + Row, + Column, Remove](docs/img/design1.png)
-
-A key dragged to another place, and the keyboard made again around it
-(at twice the speed):
-
-![The designer: keys moved on the keyboard](docs/img/designer.gif)
+<p>
+  <img src="docs/img/design1.png" width="320" alt="The designer: + Key, + Row, + Column, Remove">
+  <img src="docs/img/designer.gif" width="320" alt="The designer: keys moved on the keyboard">
+</p>
 
 ## How it works
 
