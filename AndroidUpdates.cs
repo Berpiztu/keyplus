@@ -3,7 +3,9 @@ using Android.Content;
 using Android.Content.PM;
 using System.Text.Json;
 
+#if SELF_INSTALL
 [assembly: UsesPermission(Android.Manifest.Permission.RequestInstallPackages)]
+#endif
 
 namespace Berpiztu.KeyPlus;
 
@@ -14,15 +16,19 @@ namespace Berpiztu.KeyPlus;
 /// the app; the app asks whether to update (also when it opens, and from
 /// Buscar ahora), and a yes downloads the product's APK and hands it to
 /// Android's installer, which asks the user too (and, the first time, to
-/// allow installing from this app).
+/// allow installing from this app); in a build without the installer
+/// (SELF_INSTALL, KeyPlusSelfInstall in the csproj) a yes opens the APK in
+/// the browser, which hands it to Android's installer.
 /// </summary>
 public static class AndroidUpdates
 {
     /// <summary>The app opened from the notification: it asks whether to update.</summary>
     public const string AskExtra = "askUpdate";
 
+#if SELF_INSTALL
     /// <summary>The app opened by Android's installer with how the install went (PackageInstaller.ExtraStatus).</summary>
     public const string InstallExtra = "installStatus";
+#endif
 
     private const string Channel = "updates";
     private const int NotificationId = 7;
@@ -97,7 +103,11 @@ public static class AndroidUpdates
             new AlertDialog.Builder(activity)
                 .SetTitle(Resource.String.update_title)!
                 .SetMessage(Say(activity, Resource.String.update_ask, release.Version.ToString(), Running(activity)))!
+#if SELF_INSTALL
                 .SetPositiveButton(Resource.String.update_yes, async (_, _) => await InstallAsync(activity, release))!
+#else
+                .SetPositiveButton(Resource.String.update_yes, (_, _) => Open(activity, release))!
+#endif
                 .SetNegativeButton(Resource.String.update_no, (_, _) => { })!
                 .Show();
         }
@@ -115,6 +125,7 @@ public static class AndroidUpdates
         }
     }
 
+#if SELF_INSTALL
     /// <summary>
     /// The installer's word on the install, brought back to the app: it needs
     /// the user's yes (Android's own dialog, started here), or it failed.
@@ -163,6 +174,22 @@ public static class AndroidUpdates
             Tell(activity, Say(activity, Resource.String.update_failed, failed.Message));
         }
     }
+#else
+    /// <summary>The release's APK opened in the browser, which downloads it and hands it to Android's installer; its page when it has no APK.</summary>
+    private static void Open(Activity activity, Updates.Release release)
+    {
+        try
+        {
+            activity.StartActivity(new Intent(Intent.ActionView, Android.Net.Uri.Parse(release.Download ?? release.Page)));
+            Log.Write($"Updates: {release.Version} opened in the browser");
+        }
+        catch (ActivityNotFoundException failed)
+        {
+            Log.Write($"Updates: {failed.Message}");
+            Tell(activity, Say(activity, Resource.String.update_failed, failed.Message ?? failed.GetType().Name));
+        }
+    }
+#endif
 
     private static void Notify(Context context, Updates.Release release)
     {

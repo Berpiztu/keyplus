@@ -145,7 +145,8 @@ a window that does.
   once; a new one asks whether to update (on Android a notification first,
   which opens the app), and a yes downloads it and opens its installer:
   Windows' MSI, or Android's own installer, which asks too (and, the first
-  time, to allow installing from the app). The popup has Check now on its
+  time, to allow installing from the app); Berpiztu AI Keyboard opens its
+  APK in the browser instead, which hands it to Android's installer. The popup has Check now on its
   screen. On Windows and Android alike.
 - **Settings › Dictionary**, the personal dictionary, kept on the device and
   sent nowhere: your words, which swiping reads with the language's word
@@ -423,11 +424,15 @@ For the keyboard, on a phone or a headset:
 3. Turn on **Berpiztu AI Keyboard**, then go back and choose **Choose the
    keyboard**.
 
-Where Android's choice will not take it (INAIR's pod), **Turn it on with
-Wireless debugging** does it over the device's own Wireless debugging, as
-for the popup above: it runs `ime enable`, `ime set` and grants the secure
-settings; then **Make it the keyboard in use** does it by itself.
-`deploy.ps1` and `debug.ps1` grant that too. The
+Where Android's choice will not take it (INAIR's pod), a computer's
+`enable.ps1` turns it on and makes it the keyboard in use (`ime enable`,
+`ime set`), and so do `deploy.ps1` and `debug.ps1`. The keyboard leaves
+out, for now, its own turning on over Wireless debugging, its installer of
+updates (a yes opens the APK in the browser) and the menu watch's
+screenshot (App's theme takes the application's theme): each comes back
+with its switch in `Berpiztu.KeyPlus.csproj`, `KeyPlusAdb`,
+`KeyPlusSelfInstall` and `KeyPlusFieldColor`; the popup keeps the first
+two. The
 same screen sets where the keyboard stands, on every screen: **Pop-up** puts
 it in a window of its own over the app, or docks it again, at once; **Reset
 the keyboard**, after asking, brings it back as first installed, docked at

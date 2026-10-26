@@ -314,5 +314,9 @@
   <string name="troubleshooting_log_saved">A copy of the log was saved</string>
   <string name="troubleshooting_log_save_failed">The copy of the log could not be saved: %1$s</string>
   <string name="accessibility_open">Open Android\'s switch</string>
-  <string name="restricted_settings">You turn it on yourself, in Android\'s switch for it. If Android says the setting is restricted, open the app\'s info, choose ⋮ at the top right, then Allow restricted settings, and try again. Where Android hides the switch (a headset), Wireless debugging turns it on, no computer needed.</string>
+  <string name="restricted_settings">You turn it on yourself, in Android\'s switch for it. If Android says the setting is restricted, open the app\'s info, choose ⋮ at the top right, then Allow restricted settings, and try again.</string>
+  <string name="menus_only_service_label">Berpiztu AI Keyboard: menus</string>
+  <string name="menus_only_service_summary">Moves the keyboard out of the way of the menus that open</string>
+  <string name="menus_only_service_description">Berpiztu AI Keyboard sees only the field it types in. With this on, it also sees where a menu opens, an app\'s or a list that drops down, to move out of its way (Preferences › Also move out of the way of menus). It reads nothing else, and takes no screenshot.</string>
+  <string name="restricted_settings_wireless">Where Android hides the switch (a headset), Wireless debugging turns it on, no computer needed.</string>
 </resources>

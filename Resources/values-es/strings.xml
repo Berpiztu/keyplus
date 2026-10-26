@@ -308,5 +308,9 @@
   <string name="troubleshooting_log_saved">Se guardó una copia del log</string>
   <string name="troubleshooting_log_save_failed">No se pudo guardar la copia del log: %1$s</string>
   <string name="accessibility_open">Abrir el interruptor de Android</string>
-  <string name="restricted_settings">Lo activas tú, en su interruptor de Android. Si Android dice que el ajuste está restringido, abre la información de la app, elige ⋮ arriba a la derecha, luego Permitir ajustes restringidos, y vuelve a probar. Donde Android esconde el interruptor (unas gafas), la depuración inalámbrica lo activa, sin ordenador.</string>
+  <string name="restricted_settings">Lo activas tú, en su interruptor de Android. Si Android dice que el ajuste está restringido, abre la información de la app, elige ⋮ arriba a la derecha, luego Permitir ajustes restringidos, y vuelve a probar.</string>
+  <string name="menus_only_service_label">Berpiztu AI Keyboard: menús</string>
+  <string name="menus_only_service_summary">Aparta el teclado de los menús que se abren</string>
+  <string name="menus_only_service_description">Berpiztu AI Keyboard solo ve el campo en el que escribe. Con esto activado ve también dónde se abre un menú, de una app o una lista que se despliega, para apartarse (Preferencias › Apartarse también de los menús). No lee nada más ni hace capturas.</string>
+  <string name="restricted_settings_wireless">Donde Android esconde el interruptor (unas gafas), la depuración inalámbrica lo activa, sin ordenador.</string>
 </resources>

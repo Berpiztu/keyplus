@@ -14,14 +14,29 @@ namespace Berpiztu.KeyPlus;
 /// autocompletion's list is) and tells the keyboard where it is, then that it
 /// closed; and, for Tema's Por app, sees the colour just inside the corner of
 /// the field typed in, on a screenshot (Android 11 and later), for De la app
-/// to take an application's colour as it shows. It reads nothing else.
+/// to take an application's colour as it shows, where the build carries it
+/// (FIELD_COLOR, KeyPlusFieldColor in the csproj). It reads nothing else.
 /// </summary>
+#if FIELD_COLOR
 [Service(Name = "ai.berpiztu.keyboard.MenuWatchService", Label = "@string/menus_service_label",
     Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
-[IntentFilter(["android.accessibilityservice.AccessibilityService"])]
+[MetaData("android.accessibilityservice", Resource = "@xml/keyboard_menus_color")]
+#else
+[Service(Name = "ai.berpiztu.keyboard.MenuWatchService", Label = "@string/menus_only_service_label",
+    Permission = "android.permission.BIND_ACCESSIBILITY_SERVICE", Exported = true)]
 [MetaData("android.accessibilityservice", Resource = "@xml/keyboard_menus")]
+#endif
+[IntentFilter(["android.accessibilityservice.AccessibilityService"])]
 public sealed class MenuWatchService : AccessibilityService
 {
+#if FIELD_COLOR
+    /// <summary>The service's name and what it sees, as Android shows them.</summary>
+    public const int Label = Resource.String.menus_service_label, Description = Resource.String.menus_service_description;
+#else
+    /// <summary>The service's name and what it sees, as Android shows them.</summary>
+    public const int Label = Resource.String.menus_only_service_label, Description = Resource.String.menus_only_service_description;
+#endif
+
     /// <summary>A menu opened: its place on the screen, in pixels.</summary>
     public static event System.Action<Android.Graphics.Rect>? MenuOpened;
 
@@ -46,6 +61,7 @@ public sealed class MenuWatchService : AccessibilityService
         return base.OnUnbind(intent);
     }
 
+#if FIELD_COLOR
     /// <summary>The colour just inside the corner of the field typed in, as the screen shows it, told once seen; nothing where it cannot be seen.</summary>
     public void SeeFieldColor(System.Action<Rgb> seen)
     {
@@ -80,6 +96,7 @@ public sealed class MenuWatchService : AccessibilityService
 
         public void OnFailure(int errorCode) => Log.Write($"Screenshot refused: {errorCode}");
     }
+#endif
 
     /// <summary>Whether the service is turned on, as Android's secure setting of the accessibility services on has it (written at once, where Android's manager tells it a moment later).</summary>
     public static bool On(Context context)

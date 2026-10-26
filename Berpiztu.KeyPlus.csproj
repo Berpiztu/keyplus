@@ -76,7 +76,7 @@
        the 1.81 libadb asks for; Conscrypt for TLS 1.3 and its keying
        material, so no hidden Android API is used. Java alone calls them, so
        no C# binding is generated. -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(KeyPlusAdb)' == 'true'">
     <AndroidMavenLibrary Include="com.github.MuntashirAkon:libadb-android" Version="3.1.1" Repository="https://jitpack.io" Bind="false" VerifyDependencies="false" />
     <AndroidMavenLibrary Include="com.github.MuntashirAkon.spake2-java:spake2-android" Version="2.2.1" Repository="https://jitpack.io" Bind="false" VerifyDependencies="false" />
     <AndroidMavenLibrary Include="org.bouncycastle:bcprov-jdk15to18" Version="1.86" Bind="false" />
@@ -103,6 +103,39 @@
     <DefineConstants>$(DefineConstants);KEYBOARD</DefineConstants>
   </PropertyGroup>
 
+  <!-- What Berpiztu AI Keyboard leaves out for now, to see whether Play
+       Protect still calls it harmful without them; each comes back with its
+       property set to true here, and the popup keeps all three:
+       KeyPlusAdb, turning it on over Wireless debugging (AdbGrant.cs,
+       AdbShell.java and their libraries, with the notification the code is
+       typed in); KeyPlusSelfInstall, an update installed by the app itself
+       (REQUEST_INSTALL_PACKAGES), else opened in the browser;
+       KeyPlusFieldColor, the menu watch's screenshot of the field's colour
+       (App's as the application shows), else App's takes its theme's. -->
+  <PropertyGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
+    <KeyPlusAdb>false</KeyPlusAdb>
+    <KeyPlusSelfInstall>false</KeyPlusSelfInstall>
+    <KeyPlusFieldColor>false</KeyPlusFieldColor>
+  </PropertyGroup>
+  <PropertyGroup>
+    <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">true</KeyPlusAdb>
+    <KeyPlusSelfInstall Condition="'$(KeyPlusSelfInstall)' == ''">true</KeyPlusSelfInstall>
+    <KeyPlusFieldColor Condition="'$(KeyPlusFieldColor)' == ''">true</KeyPlusFieldColor>
+    <DefineConstants Condition="'$(KeyPlusAdb)' == 'true'">$(DefineConstants);ADB</DefineConstants>
+    <DefineConstants Condition="'$(KeyPlusSelfInstall)' == 'true'">$(DefineConstants);SELF_INSTALL</DefineConstants>
+    <DefineConstants Condition="'$(KeyPlusFieldColor)' == 'true'">$(DefineConstants);FIELD_COLOR</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(KeyPlusAdb)' != 'true'">
+    <Compile Remove="AdbGrant.cs" />
+    <AndroidJavaSource Remove="AdbShell.java" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(KeyPlusFieldColor)' == 'true'">
+    <AndroidResource Remove="Resources\xml\keyboard_menus.xml" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(KeyPlusFieldColor)' != 'true'">
+    <AndroidResource Remove="Resources\xml\keyboard_menus_color.xml" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
     <Compile Remove="KeyPlusService.cs;SelectionInputMethod.cs;KeyWindowActivity.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_accessibility.xml" />
@@ -128,7 +161,7 @@
 
   <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
     <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs;LanguageChoices.cs;SpellingEngine.cs;LanguageOptions.cs" />
-    <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml;Resources\xml\keyboard_menus.xml" />
+    <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml;Resources\xml\keyboard_menus.xml;Resources\xml\keyboard_menus_color.xml" />
     <AndroidJavaSource Remove="SwipeDecoder.java" />
     <AndroidAsset Remove="Assets\**" />
     <AndroidNativeLibrary Remove="native\**" />

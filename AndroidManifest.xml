@@ -7,6 +7,8 @@
   <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
+  <!-- ONNX Runtime's, for its telemetry alone, which is taken out below. -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
   <!-- Android's own recognizer for 🎤 Local (AndroidSpeech): since Android 11
        an app sees the recognition services it names here. -->
   <queries>

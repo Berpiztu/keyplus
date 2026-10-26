@@ -1518,10 +1518,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
             // Its colour as it shows, seen once as the application is come to (each look a screenshot), the keyboard made
             // again in it if it differs, through the preference written.
+#if FIELD_COLOR
             if (cameTo && AppThemes.For(this, app).Look == AppLook.Own && KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.PerAppKey, false))
             {
                 MenuWatchService.Running?.SeeFieldColor(seen => AppThemes.SeenOnScreen(this, app, seen));
             }
+#endif
         }
 
         if (panel is not null && !OnHeadset && StandardColors.Chosen(this, StandardColors.App) != shownColors)

@@ -38,14 +38,18 @@ public sealed class MainActivity : Activity
     private TextView? status;
 #endif
 
+#if ADB
     /// <summary>Settings' Developer options scrolled to Wireless debugging, as Shizuku opens it.</summary>
     private const string WirelessDebuggingKey = "toggle_adb_wireless";
+#endif
 
     /// <summary>Android's page for one accessibility service, with its switch (Settings.ACTION_ACCESSIBILITY_DETAILS_SETTINGS, Android 13), which .NET does not name.</summary>
     private const string AccessibilityDetailsSettings = "android.settings.ACCESSIBILITY_DETAILS_SETTINGS";
 
+#if ADB
     /// <summary>The pairing asked for is the keyboard's menu watch: kept while notifications are asked for.</summary>
     private bool pairingMenus;
+#endif
 
     private const int NotificationsRequest = 1;
     private const int MicrophoneRequest = 2;
@@ -174,18 +178,23 @@ public sealed class MainActivity : Activity
     /// </summary>
     private void HandleUpdates()
     {
+#if SELF_INSTALL
         if (Intent?.GetBooleanExtra(AndroidUpdates.InstallExtra, false) == true)
         {
             Intent.RemoveExtra(AndroidUpdates.InstallExtra);
             AndroidUpdates.Installed(this, Intent);
+            return;
         }
-        else if (Intent?.GetBooleanExtra(AndroidUpdates.AskExtra, false) == true || AndroidUpdates.Due(this))
+
+#endif
+        if (Intent?.GetBooleanExtra(AndroidUpdates.AskExtra, false) == true || AndroidUpdates.Due(this))
         {
             Intent?.RemoveExtra(AndroidUpdates.AskExtra);
             _ = AndroidUpdates.CheckAsync(this, asked: false);
         }
     }
 
+#if ADB
     /// <summary>
     /// The app turned on over Wireless debugging (<see cref="AdbGrant"/>):
     /// its notification takes the pairing code, so notifications are asked
@@ -211,6 +220,7 @@ public sealed class MainActivity : Activity
             Toast.MakeText(this, "Turn Developer options on first: tap Build number seven times in About phone.", ToastLength.Long)!.Show();
         }
     }
+#endif
 
     public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Android.Content.PM.Permission[] grantResults)
     {
@@ -222,6 +232,7 @@ public sealed class MainActivity : Activity
             return;
         }
 #endif
+#if ADB
         if (requestCode != NotificationsRequest)
         {
             return;
@@ -235,6 +246,7 @@ public sealed class MainActivity : Activity
         {
             Toast.MakeText(this, "The pairing code is typed in a notification: allow notifications to go on.", ToastLength.Long)!.Show();
         }
+#endif
     }
 
     /// <summary>Whether KeyPlus is on: the keyboard's steps or settings; the popup's line under its description.</summary>
@@ -297,8 +309,12 @@ public sealed class MainActivity : Activity
     /// <summary>
     /// Turn it on: a choice, Wireless debugging (no computer: turned on and
     /// made the keyboard in use there and then) or Android's keyboard
-    /// settings, where a device has no Wireless debugging (a pod).
+    /// settings, where a device has no Wireless debugging (a pod); Android's
+    /// settings alone in a build without ADB.
     /// </summary>
+#if !ADB
+    private void TurnOnKeyboard() => StartActivity(new Intent(Settings.ActionInputMethodSettings));
+#else
     private void TurnOnKeyboard()
     {
         new AlertDialog.Builder(this)
@@ -316,6 +332,7 @@ public sealed class MainActivity : Activity
             })!
             .Show();
     }
+#endif
 
     /// <summary>Choose it: Android's choice of keyboard, or its settings while it is not on.</summary>
     private void ChooseKeyboard() => UseKeyboard();
@@ -323,11 +340,13 @@ public sealed class MainActivity : Activity
     /// <summary>The settings, Gboard's in Gboard's order: ours where they are made, the others saying they are not yet.</summary>
     private SettingsPage MainPage() => new(GetString(Resource.String.settings_title),
     [
-        // The keyboard chosen, and turned on again over Wireless debugging when Android forgot the pairing.
+        // The keyboard chosen, and turned on over Wireless debugging where the build carries it.
         [
             new(GetString(Resource.String.choose_keyboard), Icon: Resource.Drawable.ic_grid_keyboard, Tapped: () =>
                 ((InputMethodManager)GetSystemService(InputMethodService)!).ShowInputMethodPicker()),
+#if ADB
             new(GetString(Resource.String.wireless_debugging), GetString(Resource.String.wireless_debugging_summary), Resource.Drawable.ic_settings_adb, () => PairWithWirelessDebugging(menus: false)),
+#endif
         ],
         [
             new(GetString(Resource.String.languages), GetString(Resource.String.languages_summary), Resource.Drawable.ic_key_language, () => settings!.Open(LanguagesPage), Opens: true),
@@ -600,14 +619,18 @@ public sealed class MainActivity : Activity
     /// page for it or over Wireless debugging. The app never turns it on by
     /// itself.
     /// </summary>
-    private void TurnOnMenuWatch() =>
-        new AlertDialog.Builder(this)
-            .SetTitle(Resource.String.menus_service_label)!
-            .SetMessage($"{GetString(Resource.String.menus_service_description)}\n\n{GetString(Resource.String.restricted_settings)}")!
+    private void TurnOnMenuWatch()
+    {
+        var asked = new AlertDialog.Builder(this)
+            .SetTitle(MenuWatchService.Label)!
+            .SetMessage($"{GetString(MenuWatchService.Description)}\n\n{RestrictedSettings()}")!
             .SetPositiveButton(Resource.String.accessibility_open, (_, _) => OpenAccessibilityPage(MenuWatchService.Id(this)))!
-            .SetNeutralButton(Resource.String.wireless_debugging, (_, _) => PairWithWirelessDebugging(menus: true))!
-            .SetNegativeButton(Resource.String.update_no, (_, _) => { })!
-            .Show();
+            .SetNegativeButton(Resource.String.update_no, (_, _) => { })!;
+#if ADB
+        asked.SetNeutralButton(Resource.String.wireless_debugging, (_, _) => PairWithWirelessDebugging(menus: true));
+#endif
+        asked.Show();
+    }
 
     /// <summary>Mostrar el teclado al escribir: turned, the page made again, the icon's choice under it while it is off.</summary>
     private SettingsRow ShowKeyboardRow(bool on) =>
@@ -1320,7 +1343,7 @@ public sealed class MainActivity : Activity
     private void TurnOn() =>
         new AlertDialog.Builder(this)
             .SetTitle("Turn on KeyPlus keys")!
-            .SetMessage($"{GetString(Resource.String.service_description)}\n\n{GetString(Resource.String.restricted_settings)}")!
+            .SetMessage($"{GetString(Resource.String.service_description)}\n\n{RestrictedSettings()}")!
             .SetPositiveButton(Resource.String.accessibility_open, (_, _) => OpenAccessibilityPage(ServiceId(this)))!
             .SetNegativeButton(Resource.String.update_no, (_, _) => { })!
             .Show();
@@ -1335,6 +1358,13 @@ public sealed class MainActivity : Activity
         return (accessibility.GetEnabledAccessibilityServiceList(FeedbackFlags.AllMask) ?? [])
             .Any(service => service.ResolveInfo?.ServiceInfo?.PackageName == PackageName);
     }
+#endif
+
+    /// <summary>How an accessibility service is turned on, Wireless debugging's way too where the build carries it.</summary>
+#if ADB
+    private string RestrictedSettings() => $"{GetString(Resource.String.restricted_settings)} {GetString(Resource.String.restricted_settings_wireless)}";
+#else
+    private string RestrictedSettings() => GetString(Resource.String.restricted_settings);
 #endif
 
     /// <summary>Android's page for one accessibility service, with its switch; the list of them where a device has no such page.</summary>

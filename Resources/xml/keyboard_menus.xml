@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Berpiztu AI Keyboard's menu watch (MenuWatchService): a popup window
-     opening (typeWindowStateChanged) and the windows changing, to see it
-     close (typeWindowsChanged, with flagRetrieveInteractiveWindows); only
-     the windows' places are read, nothing in them; and a screenshot
-     (canTakeScreenshot) for the colour beside the field typed in. -->
+<!-- Berpiztu AI Keyboard's menu watch (MenuWatchService) without the
+     field's colour (KeyPlusFieldColor false): a popup window opening
+     (typeWindowStateChanged) and the windows changing, to see it close
+     (typeWindowsChanged, with flagRetrieveInteractiveWindows); only the
+     windows' places are read, nothing in them, and no screenshot is taken.
+     keyboard_menus_color.xml is the one with the screenshot. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/menus_service_description"
-    android:summary="@string/menus_service_summary"
+    android:description="@string/menus_only_service_description"
+    android:summary="@string/menus_only_service_summary"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
-    android:canTakeScreenshot="true"
     android:notificationTimeout="50" />
