@@ -144,8 +144,10 @@ a window that does.
   GitHub once a day whether a new version is out, and **Check now** at
   once; a new one asks whether to update (on Android a notification first,
   which opens the app), and a yes downloads it and opens its installer:
-  Windows' MSI, or Android's own installer, which asks too (and, the first
-  time, to allow installing from the app). The popup has Check now on its
+  Windows' MSI; on Android a yes opens the APK in the browser, which hands
+  it to Android's installer (the apps install nothing themselves:
+  `KeyPlusSelfInstall` in `Berpiztu.KeyPlus.csproj`, off, keeps their own
+  installer, which Play Protect calls harmful). The popup has Check now on its
   screen. On Windows and Android alike.
 - **Settings › Dictionary**, the personal dictionary, kept on the device and
   sent nowhere: your words, which swiping reads with the language's word

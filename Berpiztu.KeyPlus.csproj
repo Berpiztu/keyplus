@@ -110,12 +110,13 @@
        ADB client harmful (1.0.56 with it, 1.0.55 without), so it is to go
        to a utility of its own (docs/tODO/adb-utility.md); KeyPlusSelfInstall,
        an update installed by the app itself (REQUEST_INSTALL_PACKAGES), else
-       opened in the browser; KeyPlusFieldColor, the menu watch's screenshot
+       opened in the browser, off in both apps too: 1.0.55 alone, without it,
+       went through Play Protect (1.0.57 with it, no ADB, did not); KeyPlusFieldColor, the menu watch's screenshot
        of the field's colour (App's as the application shows), else App's
        takes its theme's. -->
   <PropertyGroup>
     <KeyPlusAdb Condition="'$(KeyPlusAdb)' == ''">false</KeyPlusAdb>
-    <KeyPlusSelfInstall Condition="'$(KeyPlusSelfInstall)' == ''">true</KeyPlusSelfInstall>
+    <KeyPlusSelfInstall Condition="'$(KeyPlusSelfInstall)' == ''">false</KeyPlusSelfInstall>
     <KeyPlusFieldColor Condition="'$(KeyPlusFieldColor)' == ''">true</KeyPlusFieldColor>
     <DefineConstants Condition="'$(KeyPlusAdb)' == 'true'">$(DefineConstants);ADB</DefineConstants>
     <DefineConstants Condition="'$(KeyPlusSelfInstall)' == 'true'">$(DefineConstants);SELF_INSTALL</DefineConstants>
