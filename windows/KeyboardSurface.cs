@@ -220,6 +220,7 @@ public sealed class KeyboardSurface : FrameworkElement
             }
 
             EndSwipe(letter: false);
+            ShiftOnceUsed();
             spokenLead = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? "" : " ";
             spokenText = "";
         }
@@ -1689,6 +1690,7 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             shift = Shift.Once;
             sentenceShift = true;
+            sentenceShiftAt = Environment.TickCount64;
         }
 
         InvalidateVisual();
@@ -1697,8 +1699,36 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Spelling's Capital at the start of a sentence: Shift on by itself after . ? or ! and a space, and after Enter.</summary>
     public bool CapitalizesSentences { get; set; }
 
-    /// <summary>Shift on for one key because a sentence began, not by a tap: ⌫ takes it off again.</summary>
+    /// <summary>Shift on for one key because a sentence began, not by a tap, and since when: ⌫ takes it off again.</summary>
     private bool sentenceShift;
+    private long sentenceShiftAt;
+
+    /// <summary>
+    /// Shift put on by a sentence's start let go where the mouse or the
+    /// computer's keys touched the text since, for the caret may stand in the
+    /// middle of a sentence now (a word put right after a dictation) and
+    /// Windows does not tell a keyboard where.
+    /// </summary>
+    private void DropSentenceShift()
+    {
+        if (sentenceShift && ((PressedAt?.Invoke() ?? long.MaxValue) >= sentenceShiftAt || (KeyedAt?.Invoke() ?? long.MaxValue) >= sentenceShiftAt))
+        {
+            ShiftOnceUsed();
+        }
+    }
+
+    /// <summary>Shift on for one key, by a tap or a sentence's start, let go: a dictation wrote in its place. Locked, it stays.</summary>
+    private void ShiftOnceUsed()
+    {
+        if (shift != Shift.Once)
+        {
+            return;
+        }
+
+        shift = Shift.Off;
+        sentenceShift = false;
+        InvalidateVisual();
+    }
 
     /// <summary>The swipe made FUTO Swipe's: the points and the letters' centres from 0 to 1 over the room the letters take.</summary>
     private void ReadSwipe(Pressed now)
@@ -1723,6 +1753,7 @@ public sealed class KeyboardSurface : FrameworkElement
             [.. centres.Select(box => X(box.X + (box.Width / 2)))],
             [.. centres.Select(box => Y(box.Y + (box.Height / 2)))],
             language);
+        DropSentenceShift();
         var capitals = shift == Shift.Locked || capsLock;
         var capital = shift == Shift.Once;
         if (shift == Shift.Once)
@@ -1762,6 +1793,7 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else
         {
+            DropSentenceShift();
             var typed = ShiftedFor(key) && key.Shifted is not null ? key.Shifted : key.Text!;
             if (EndSwipe(typed.Length == 1 && char.IsLetter(typed[0])))
             {
