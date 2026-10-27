@@ -280,8 +280,9 @@ public sealed class KeyPanel
     private readonly TextView clipboardButton;
     private readonly ScrollView clipboardView;
 
-    /// <summary>An image copied seen whole in the keys' place (its menu's View).</summary>
+    /// <summary>An image copied seen whole in the keys' place (its menu's Preview), and which one it is.</summary>
     private readonly ImageView imageViewer;
+    private ClipboardHistory.Entry? previewed;
     private readonly LinearLayout clipboardRows;
 
     /// <summary>The copied texts side by side in one row above the keys (<see cref="ClipboardAbove"/>).</summary>
@@ -469,6 +470,9 @@ public sealed class KeyPanel
 
     /// <summary>Whether 📋 asked for the things copied in the line over the toolbar, until it is tapped again.</summary>
     private bool copiesAsked;
+
+    /// <summary>How far the chips of the things copied are scrolled across, from the start once they show anew.</summary>
+    private int copiesScroll;
 
     /// <summary>What the clipboard's list held, to tell a new copy from a pin, an edit or a removal.</summary>
     private HashSet<(string? Text, string? Image)> knownCopies = [];
@@ -755,6 +759,13 @@ public sealed class KeyPanel
         strip.AddView(clipboardView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
         imageViewer = new ImageView(context) { Visibility = ViewStates.Gone, ContentDescription = "The image copied" };
         imageViewer.SetScaleType(ImageView.ScaleType.FitCenter);
+        imageViewer.Click += (_, _) =>
+        {
+            if (previewed is { } image)
+            {
+                ViewImage?.Invoke(image);
+            }
+        };
         strip.AddView(imageViewer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
         clipboardItems = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         clipboardLine = new HorizontalScrollView(context) { Visibility = ViewStates.Gone };
@@ -1097,6 +1108,9 @@ public sealed class KeyPanel
     /// <summary>Opens an image copied in the phone's own editor, where the panel can (Berpiztu AI Keyboard); none, its menu has no Edit.</summary>
     public Action<ClipboardHistory.Entry>? EditImage { get; set; }
 
+    /// <summary>Opens an image copied in the phone's own viewer, its preview tapped, where the panel can (Berpiztu AI Keyboard).</summary>
+    public Action<ClipboardHistory.Entry>? ViewImage { get; set; }
+
     /// <summary>The keys' size, 1 for the usual one; the strip grows or shrinks with it.</summary>
     public float Scale
     {
@@ -1312,7 +1326,7 @@ public sealed class KeyPanel
     private void HideCopy(ClipboardHistory.Entry entry)
     {
         hiddenCopies.Add(CopyKey(entry));
-        if (CopiesInRow().Count == 0)
+        if (CopiesToShow().Count == 0)
         {
             copiesAsked = false;
         }
@@ -1321,18 +1335,19 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// 📋: with the line over the toolbar and the keys in sight, the things copied in that line, every one, or gone from
-    /// it again, the emoji back; with something in the keys' place (⊞), the clipboard there, or gone from there.
+    /// 📋: with the keys in sight, the things copied, every one, in the line over the toolbar where it shows, else in the
+    /// toolbar, or gone from there again, the emoji or the buttons back; with something in the keys' place (⊞), the
+    /// clipboard there, or gone from there.
     /// </summary>
     private void ClipboardTapped()
     {
-        if (!EmojiRowShown || covered is not null)
+        if (covered is not null)
         {
             Toggle(clipboardView!, ShowClipboard);
             return;
         }
 
-        var shown = CopiesInRowShown;
+        var shown = CopiesShown;
         copiesAsked = !shown;
         if (shown)
         {
@@ -1341,20 +1356,62 @@ public sealed class KeyPanel
         else
         {
             hiddenCopies.Clear();
+            copiesScroll = 0;
         }
 
         ShowBars();
     }
 
-    /// <summary>Whether the line over the toolbar shows the things copied: 📋 lit.</summary>
-    private bool CopiesInRowShown => EmojiRowShown && !OffersWords && (copiesAsked || CopiesInRow().Count > 0);
+    /// <summary>Whether the things copied show, in the line over the toolbar or in the toolbar: 📋 lit.</summary>
+    private bool CopiesShown => !OffersWords && (copiesAsked || CopiesToShow().Count > 0);
 
     /// <summary>
-    /// In the line over the toolbar while the last copy is recent, or 📋 asked for them: the last copy first, then the
-    /// pinned, then the others from the newest, as the clipboard's list keeps them, none of those hidden with ✕; none,
-    /// the emoji again.
+    /// The things copied as chips that scroll across, each with ✕ (<see cref="CopiesToShow"/>), or that nothing is copied
+    /// where 📋 asked for them; none, the emoji or the buttons in their place.
     /// </summary>
-    private List<ClipboardHistory.Entry> CopiesInRow()
+    private View? CopiesView()
+    {
+        if (copiesAsked && clipboard.Entries.Count == 0)
+        {
+            return NothingCopied();
+        }
+
+        var copies = CopiesToShow();
+        if (copies.Count == 0)
+        {
+            return null;
+        }
+
+        ExpireCopyLater();
+        var chips = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        foreach (var entry in copies)
+        {
+            var place = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent);
+            place.SetMargins(Dp(ChipApartDp), Dp(6), Dp(ChipApartDp), Dp(6));
+            // The one previewed has its ✕ hidden in its place, which would read as closing the preview.
+            chips.AddView(Chip(entry, () => HideCopy(entry), closeShown: !IsPreviewed(entry)), place);
+        }
+
+        // Made again (a preview opened, a chip hidden), the chips stay where they were scrolled to, set before they are drawn.
+        var across = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false };
+        across.AddView(chips, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        var kept = copiesScroll;
+        void Restore(object? sender, View.LayoutChangeEventArgs e)
+        {
+            across.LayoutChange -= Restore;
+            across.ScrollTo(kept, 0);
+            across.ScrollChange += (_, scrolled) => copiesScroll = scrolled.ScrollX;
+        }
+
+        across.LayoutChange += Restore;
+        return across;
+    }
+
+    /// <summary>
+    /// The things copied shown while the last copy is recent, or 📋 asked for them: the last copy first, then the
+    /// pinned, then the others from the newest, as the clipboard's list keeps them, none of those hidden with ✕.
+    /// </summary>
+    private List<ClipboardHistory.Entry> CopiesToShow()
     {
         if (!CopiedLately && !copiesAsked)
         {
@@ -1402,8 +1459,8 @@ public sealed class KeyPanel
 
         var colors = standardColors!;
         var wordsInBar = OffersWords && !EmojiRowShown;
-        var recent = OffersWords || EmojiRowShown ? null : RecentCopy();
-        var suggesting = wordsInBar || recent is not null;
+        var copies = OffersWords || EmojiRowShown ? null : CopiesView();
+        var suggesting = wordsInBar || copies is not null;
         var first = covered is not null
             ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
             : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
@@ -1417,11 +1474,12 @@ public sealed class KeyPanel
         {
             standardBar.AddView(SwipeWordsRow(SuggestionSp, colors.Divider), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
-        else if (recent is not null)
+        else if (copies is not null)
         {
-            var middle = new FrameLayout(context);
-            middle.AddView(RecentChip(recent), RecentChipPlace());
-            standardBar.AddView(middle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            // 📋 lit before them, as it stands in the buttons' place: a tap takes them all away.
+            standardBar.AddView(StandardTool(Resource.Drawable.ic_clipboard, context.GetString(Resource.String.clipboard), ClipboardTapped,
+                colors.Primary, colors.OnPrimary, diameter: ToolDiameter), new LinearLayout.LayoutParams(ToolDiameter, ViewGroup.LayoutParams.MatchParent));
+            standardBar.AddView(copies, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
         else
         {
@@ -1647,8 +1705,8 @@ public sealed class KeyPanel
     /// <summary>
     /// Over the toolbar, while it shows and Preferencias' Extra line for suggestions and recent emoji is on, a line of
     /// one height whatever it holds, as the Windows keyboard's: the words offered while typing, else, after a copy, the
-    /// things copied as chips (<see cref="CopiesInRow"/>), so the toolbar keeps its buttons, else the emoji typed lately,
-    /// as Gboard's on the Fold, as many as fit, a tap typing one. Off, no line, the words and the copy's chip in the toolbar.
+    /// things copied as chips (<see cref="CopiesView"/>), so the toolbar keeps its buttons, else the emoji typed lately,
+    /// as Gboard's on the Fold, as many as fit, a tap typing one. Off, no line, the words and the things copied in the toolbar.
     /// </summary>
     private void ShowEmojiRow()
     {
@@ -1666,26 +1724,9 @@ public sealed class KeyPanel
             return;
         }
 
-        if (copiesAsked && clipboard.Entries.Count == 0)
+        if (CopiesView() is { } copies)
         {
-            emojiRowItems.AddView(NothingCopied(), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-            return;
-        }
-
-        if (CopiesInRow() is { Count: > 0 } copies)
-        {
-            ExpireCopyLater();
-            var chips = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-            foreach (var entry in copies)
-            {
-                var place = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent);
-                place.SetMargins(Dp(ChipApartDp), Dp(6), Dp(ChipApartDp), Dp(6));
-                chips.AddView(Chip(entry, () => HideCopy(entry)), place);
-            }
-
-            var across = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false };
-            across.AddView(chips, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
-            emojiRowItems.AddView(across, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+            emojiRowItems.AddView(copies, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
             return;
         }
 
@@ -1729,7 +1770,7 @@ public sealed class KeyPanel
     {
         GridTile[] all =
         [
-            new("clipboard", context.GetString(Resource.String.clipboard), Resource.Drawable.ic_clipboard, ClipboardTapped, On: CopiesInRowShown),
+            new("clipboard", context.GetString(Resource.String.clipboard), Resource.Drawable.ic_clipboard, ClipboardTapped, On: CopiesShown),
             new("resize", context.GetString(Resource.String.resize), Resource.Drawable.ic_tool_resize, () => ResizeRequested?.Invoke()),
             new("settings", context.GetString(Resource.String.keyboard_settings), Resource.Drawable.ic_tool_settings, OpenApp),
             .. gridTiles,
@@ -2082,6 +2123,7 @@ public sealed class KeyPanel
         {
             (recentCopy, recentCopyAt) = (CopyKey(fresh), DateTime.UtcNow);
             hiddenCopies.Remove(CopyKey(fresh));
+            copiesScroll = 0;
         }
 
         knownCopies = [.. now.Select(CopyKey)];
@@ -2327,12 +2369,12 @@ public sealed class KeyPanel
     /// it can be hidden. A tap pastes it, a long press opens its menu (Pegar,
     /// Fijar, Editar, Eliminar).
     /// </summary>
-    private LinearLayout Chip(ClipboardHistory.Entry entry, Action? dismissed = null)
+    private LinearLayout Chip(ClipboardHistory.Entry entry, Action? dismissed = null, bool closeShown = true)
     {
         var chip = new LinearLayout(context)
         {
             Orientation = Orientation.Horizontal,
-            Background = Pill(standard is { Visibility: ViewStates.Visible } ? standardColors!.Key : CardColor),
+            Background = Pill(ChipColor(entry)),
             ContentDescription = entry.IsImage ? "Paste the image" : $"Paste: {entry.Text}",
         };
         chip.SetGravity(GravityFlags.CenterVertical);
@@ -2376,7 +2418,13 @@ public sealed class KeyPanel
         if (dismissed is not null)
         {
             var reach = Dp(ChipCloseReachDp);
-            var close = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(ToolGlyph), ContentDescription = "Hide", Clickable = true };
+            var close = new ImageView(context)
+            {
+                ImageTintList = ColorStateList.ValueOf(ToolGlyph),
+                ContentDescription = "Hide",
+                Clickable = true,
+                Visibility = closeShown ? ViewStates.Visible : ViewStates.Invisible,
+            };
             close.SetImageResource(Resource.Drawable.ic_tool_close);
             close.SetPadding(reach, reach, reach, reach);
             close.Click += (_, _) => dismissed();
@@ -2390,10 +2438,28 @@ public sealed class KeyPanel
         chip.LongClick += (_, e) =>
         {
             e.Handled = true;
-            ShowMenu(chip, entry, () => Paste(entry));
+            // The chip held marked while its menu is open (and its preview, which marks it again as the bar is made anew).
+            chip.Background = Pill(SelectedChipColor);
+            ShowMenu(chip, entry, () => Paste(entry), closed: () => chip.Background = Pill(ChipColor(entry)));
         };
         return chip;
     }
+
+    /// <summary>
+    /// A chip's ground: the standard keyboard's keys', whether the keys are in sight or something stands in their place
+    /// (a preview), else the cards'; the one previewed, as the one held, <see cref="SelectedChipColor"/>.
+    /// </summary>
+    private Color ChipColor(ClipboardHistory.Entry entry) =>
+        IsPreviewed(entry) ? SelectedChipColor
+        : StandardKeysShown ? standardColors!.Key
+        : CardColor;
+
+    private bool IsPreviewed(ClipboardHistory.Entry entry) => previewed is { } shown && CopyKey(shown) == CopyKey(entry);
+
+    private Color SelectedChipColor => StandardKeysShown ? CardColor : HeldColor;
+
+    /// <summary>Whether the standard keyboard is the one in use, its keys in sight or covered.</summary>
+    private bool StandardKeysShown => standard is { } keys && (keys.Visibility == ViewStates.Visible || covered?.Keys == keys);
 
     /// <summary>A ground rounded at both ends, as Gboard's chips and settings are.</summary>
     private GradientDrawable Pill(Color color)
@@ -2976,6 +3042,7 @@ public sealed class KeyPanel
         if (now.Cover == imageViewer)
         {
             imageViewer.SetImageDrawable(null);
+            previewed = null;
         }
 
         now.Button.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
@@ -2984,9 +3051,15 @@ public sealed class KeyPanel
         ShowBars();
     }
 
-    /// <summary>An image copied seen whole in the keys' place, as large as their room lets it, nothing outside the keyboard used; ✕ the keys again.</summary>
-    private void ViewImage(ClipboardHistory.Entry entry)
+    /// <summary>
+    /// An image copied previewed whole in the keys' place, as large as their room lets it, nothing outside the keyboard
+    /// used; a tap on it opens it in the phone's own viewer (<see cref="ViewImage"/>), ✕ the keys again.
+    /// </summary>
+    private void PreviewImage(ClipboardHistory.Entry entry)
     {
+        // Which one it is known before the bars are made again, so its chip is the one marked.
+        Uncover();
+        previewed = entry;
         Cover(imageViewer, clipboardButton);
         imageViewer.SetImageBitmap(Thumbnail(clipboard.PathOf(entry), imageViewer.LayoutParameters!.Height));
     }
@@ -3307,7 +3380,7 @@ public sealed class KeyPanel
     /// sign in the text's colour; a touch outside it closes it. It never takes
     /// the focus, so the field keeps it.
     /// </summary>
-    private void ShowMenu(View anchor, ClipboardHistory.Entry entry, Action pasted)
+    private void ShowMenu(View anchor, ClipboardHistory.Entry entry, Action pasted, Action? closed = null)
     {
         var menu = new LinearLayout(context) { Orientation = Orientation.Vertical, Background = Card() };
         menu.SetPadding(0, Dp(4), 0, Dp(4));
@@ -3317,6 +3390,10 @@ public sealed class KeyPanel
             Elevation = Dp(8),
         };
         popup.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
+        if (closed is not null)
+        {
+            popup.DismissEvent += (_, _) => closed();
+        }
 
         void Item(int sign, string label, Action chosen)
         {
@@ -3345,7 +3422,7 @@ public sealed class KeyPanel
         Item(Resource.Drawable.ic_menu_paste, context.GetString(Resource.String.paste)!, pasted);
         if (entry.IsImage)
         {
-            Item(Resource.Drawable.ic_menu_view, context.GetString(Resource.String.view)!, () => ViewImage(entry));
+            Item(Resource.Drawable.ic_menu_view, context.GetString(Resource.String.preview)!, () => PreviewImage(entry));
         }
 
         Item(entry.Pinned ? Resource.Drawable.ic_menu_unpin : Resource.Drawable.ic_menu_pin,

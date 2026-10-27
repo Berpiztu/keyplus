@@ -218,8 +218,9 @@
   <string name="pin">Fijar</string>
   <string name="unpin">Desfijar</string>
   <string name="edit">Editar</string>
-  <string name="view">Ver</string>
+  <string name="preview">Vista previa</string>
   <string name="no_image_editor">Ninguna app del móvil edita imágenes</string>
+  <string name="no_image_viewer">Ninguna app del móvil muestra imágenes</string>
   <string name="erase">Eliminar</string>
   <string name="spread_keys">Repartir</string>
   <string name="design_reset_ask">¿Teclado como venía?</string>

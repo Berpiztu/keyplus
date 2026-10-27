@@ -121,11 +121,12 @@ size of words whatever the keys' size: **⚙** at its left, **ABC** (or
 **Keys**) at its right, and between them the chip of what was copied last,
 for five minutes after it was copied, else **Clipboard**; nothing is drawn over
 anything else. A tap on the chip pastes it, a long press opens its menu
-(Paste, Pin, Edit, Delete; an image's has View too). A text's Edit shows its
+(Paste, Pin, Edit, Delete; an image's has Preview too). A text's Edit shows its
 card above the keyboard, over the app: one line that scrolls across, so neither the
 card nor the keys change size with the text, and the keys type into it
-until Cancel or Save. An image's View shows it whole in the keys' place, ✕
-the keys again; its Edit opens it in the phone's own image editor. A long press on the bar's buttons, its free room
+until Cancel or Save. An image's Preview shows it whole in the keys' place,
+a tap on it opening it in the phone's own image viewer, ✕ the keys again;
+its Edit opens it in the phone's own image editor. A long press on the bar's buttons, its free room
 or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
 bar into **✕** and **Clipboard** and opens, in the keys' place as
 rounded tiles, **Smaller text**, **Larger text**, **Normal
@@ -498,8 +499,8 @@ each with a ✕ that hides it (it stays in the clipboard); with the keys in
 sight, the toolbar's 📋 shows every thing copied there, lit, and a second tap
 takes them away (with ⊞ open, 📋 opens the clipboard in the keys' place); else
 the emoji used lately, so the
-toolbar keeps all its buttons; off, no line, the words and the chip in the
-toolbar as before. The emoji panel stands in the keys' place, the toolbar
+toolbar keeps all its buttons; off, no line, the words and the things copied
+in the toolbar instead of its buttons, alike, 📋 lit before them. The emoji panel stands in the keys' place, the toolbar
 and that line over it.
 
 For the keyboard, on a phone or a headset:

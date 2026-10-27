@@ -569,24 +569,28 @@ public sealed class KeyPlusKeyboard : InputMethodService
         CurrentInputConnection?.CommitContent(content, InputContentFlags.GrantReadUriPermission, null);
     }
 
+    private void EditImage(ClipboardHistory.Entry image) => OpenImage(image, Intent.ActionEdit, "edits", Resource.String.no_image_editor);
+
+    private void ViewImage(ClipboardHistory.Entry image) => OpenImage(image, Intent.ActionView, "shows", Resource.String.no_image_viewer);
+
     /// <summary>
-    /// An image copied opened in the phone's own image editor (ACTION_EDIT),
-    /// with the right to read it, as a new task over the app typed in; with
-    /// no editor on the phone, told so.
+    /// An image copied opened in the phone's own app for it (its viewer,
+    /// ACTION_VIEW, or its editor, ACTION_EDIT), with the right to read it, as
+    /// a new task over the app typed in; with none on the phone, told so.
     /// </summary>
-    private void EditImage(ClipboardHistory.Entry image)
+    private void OpenImage(ClipboardHistory.Entry image, string action, string does, int none)
     {
-        var edit = new Intent(Intent.ActionEdit);
-        edit.SetDataAndType(ClipboardImages.UriOf(image.Image!), image.MimeType);
-        edit.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+        var open = new Intent(action);
+        open.SetDataAndType(ClipboardImages.UriOf(image.Image!), image.MimeType);
+        open.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
         try
         {
-            StartActivity(edit);
+            StartActivity(open);
         }
         catch (ActivityNotFoundException)
         {
-            Log.Write("Clipboard: no app on the phone edits images");
-            Android.Widget.Toast.MakeText(this, GetString(Resource.String.no_image_editor), Android.Widget.ToastLength.Short)!.Show();
+            Log.Write($"Clipboard: no app on the phone {does} images");
+            Android.Widget.Toast.MakeText(this, GetString(none), Android.Widget.ToastLength.Short)!.Show();
         }
     }
 
@@ -616,6 +620,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             Dockable = false,
             PasteImage = PasteImage,
             EditImage = EditImage,
+            ViewImage = ViewImage,
             Settings = [new(GetString(Resource.String.switch_keyboard)!, ShowKeyboardPicker)],
         };
         placed.Mode = panel.Mode;
