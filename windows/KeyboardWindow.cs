@@ -165,7 +165,7 @@ public sealed class KeyboardWindow : Window
     /// 100 px of the Fold: the emoji typed lately, or the words offered while typing, so the toolbar keeps its buttons.
     /// </summary>
     private const double EmojiRowDp = 100 / 2.25;
-    private readonly Grid emojiRow = new() { Height = EmojiRowDp };
+    private readonly Grid emojiRow = new() { Height = EmojiRowDp, Background = Brushes.Transparent };
     private readonly EmojiStrip recentEmoji = new();
 
     /// <summary>The toolbar's buttons that make room for the words offered in its middle, without the emoji row: all but the first and the last.</summary>
@@ -488,6 +488,7 @@ public sealed class KeyboardWindow : Window
             Cursor = Cursors.SizeAll,
         };
         Moves(handle);
+        Moves(emojiRow);
 
         handleBand.Children.Add(handle);
 

@@ -457,16 +457,22 @@ public sealed class EmojiStrip : FrameworkElement
         }
     }
 
-    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e) => e.Handled = true;
+    /// <summary>An emoji pressed is the strip's; the room beside them is left to the row, which moves the window as the toolbar does.</summary>
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e) => e.Handled = At(e) >= 0;
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
-        var at = (int)Math.Floor((e.GetPosition(this).X - SideDp) / CellDp);
-        if (at >= 0 && at < items.Count && SideDp + ((at + 1) * CellDp) <= RenderSize.Width)
+        if (At(e) is var at and >= 0)
         {
             Chosen?.Invoke(items[at]);
+            e.Handled = true;
         }
+    }
 
-        e.Handled = true;
+    /// <summary>The emoji under the mouse, by its place in the list; -1, none.</summary>
+    private int At(MouseButtonEventArgs e)
+    {
+        var at = (int)Math.Floor((e.GetPosition(this).X - SideDp) / CellDp);
+        return at >= 0 && at < items.Count && SideDp + ((at + 1) * CellDp) <= RenderSize.Width ? at : -1;
     }
 }
