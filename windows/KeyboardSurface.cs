@@ -339,7 +339,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// it since and nothing else touching the text since, in a text field, with Shift off.
     /// </summary>
     private bool OpensSentence() =>
-        CapitalizesSentences && fieldKind == StandardField.Text && !Combining && shift == Shift.Off
+        CapitalizesSentences && fieldKind == StandardField.Text && !InTerminal && !Combining && shift == Shift.Off
         && lastTyped is ' ' or '\n' && sentenceByKeys && SentenceKnown && sentence!.ToString().Trim().Length == 0;
 
     /// <summary>Whether the sentence began where a press put the caret: what is before it, maybe a word's first letters, is not known.</summary>
@@ -1701,6 +1701,9 @@ public sealed class KeyboardSurface : FrameworkElement
 
     /// <summary>Spelling's Capital at the start of a sentence (<see cref="OpensSentence"/>), while Spelling is on.</summary>
     public bool CapitalizesSentences { get; set; }
+
+    /// <summary>The field typed in is a terminal's (<see cref="FocusWatch.InTerminal"/>): no sentences, so no capital opens one.</summary>
+    public bool InTerminal { get; set; }
 
     /// <summary>Shift on for one key, tapped, let go: a dictation wrote in its place. Locked, it stays.</summary>
     private void ShiftOnceUsed()

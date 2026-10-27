@@ -30,7 +30,7 @@ internal sealed class AutomationFocus : IDisposable
 
     private static readonly Guid AutomationClass = new("ff48dba4-60ef-4201-aa87-54103eef594e");
 
-    /// <summary>What has the focus: its process, whether text is typed in it or it is a menu, its kind for the log, its place in pixels, and its UI Automation id and class, which tell a browser's address bar (<see cref="FocusWatch.KindOf"/>).</summary>
+    /// <summary>What has the focus: its process, whether text is typed in it or it is a menu, its kind for the log, its place in pixels, and its UI Automation id and class, which tell a browser's address bar and a terminal (<see cref="FocusWatch.FieldOf"/>).</summary>
     public readonly record struct Focused(int Process, bool Editable, bool Menu, string Kind, Int32Rect? Place, string? Id, string? Class);
 
     private readonly IUIAutomation automation;

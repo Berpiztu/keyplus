@@ -210,7 +210,7 @@ public sealed class FocusWatch : IDisposable
                 focusSettling.Stop();
                 Log.Detail($"Focus: {focused.Kind} in {name}, by UI Automation: writing");
                 Tell(() => Field = focused.Place);
-                TellTextFocused(name, KindOf(focused.Id, focused.Class));
+                TellTextFocused(name, FieldOf(focused.Id, focused.Class));
             }
             else if (Environment.TickCount64 - focusSeenAt > CaretAfterFocus.TotalMilliseconds)
             {
@@ -366,33 +366,42 @@ public sealed class FocusWatch : IDisposable
         }
     }
 
-    /// <summary>Text focused, told to the keyboard; its kind as given, else as UI Automation tells what has the focus now (<see cref="FocusedFieldKind"/>).</summary>
-    private void TellTextFocused(string? app, StandardField? kind = null)
+    /// <summary>Text focused, told to the keyboard; what field it is as given, else as UI Automation tells what has the focus now (<see cref="FocusedField"/>).</summary>
+    private void TellTextFocused(string? app, TextField? field = null)
     {
-        var told = kind ?? FocusedFieldKind();
+        var told = field ?? FocusedField();
         Tell(() =>
         {
             App = app;
-            FieldKind = told;
+            FieldKind = told.Kind;
+            InTerminal = told.Terminal;
             TextFocused?.Invoke();
         });
     }
 
+    /// <summary>What a text field is: its kind (<see cref="StandardField"/>), and whether it is a terminal's, where nothing is written as sentences.</summary>
+    internal readonly record struct TextField(StandardField Kind, bool Terminal);
+
     /// <summary>
     /// The kind of the text field focused (<see cref="StandardField"/>): the keyboard's own settings tell it of their
     /// boxes to try each kind's keys in, by their UI Automation id (<see cref="FieldIds"/>), and the browsers' address
-    /// bars are known by theirs (<see cref="KindOf"/>); Windows tells it of no other field, which is text.
+    /// bars are known by theirs (<see cref="FieldOf"/>); Windows tells it of no other field, which is text.
     /// </summary>
     public StandardField FieldKind { get; private set; }
 
+    /// <summary>Whether the field focused is a terminal's (<see cref="FieldOf"/>): commands, no sentences to begin with a capital.</summary>
+    public bool InTerminal { get; private set; }
+
     /// <summary>
-    /// A field's kind by its UI Automation id and class: the settings' boxes (<see cref="FieldIds"/>), and a browser's
-    /// address bar a web address's: Chrome's and Edge's (Chromium's OmniboxViewViews), Firefox's (urlbar-input).
+    /// A field by its UI Automation id and class: the settings' boxes by their ids (<see cref="FieldIds"/>); a browser's
+    /// address bar a web address's: Chrome's and Edge's (Chromium's OmniboxViewViews), Firefox's (urlbar-input); and a
+    /// terminal's, xterm.js's input (xterm-helper-textarea: VS Code's terminal, and the browser's terminals made with it).
     /// </summary>
-    internal static StandardField KindOf(string? automationId, string? className) =>
+    internal static TextField FieldOf(string? automationId, string? className) => new(
         automationId is not null && FieldIds.TryGetValue(automationId, out var kind) ? kind
         : className == "OmniboxViewViews" || automationId == "urlbar-input" ? StandardField.Web
-        : StandardField.Text;
+        : StandardField.Text,
+        className == "xterm-helper-textarea");
 
     /// <summary>The settings' boxes' UI Automation ids, each a kind of field.</summary>
     public const string NumberFieldId = "Berpiztu.Field.Number";
@@ -406,16 +415,16 @@ public sealed class FocusWatch : IDisposable
         [WebFieldId] = StandardField.Web,
     };
 
-    private static StandardField FocusedFieldKind()
+    private static TextField FocusedField()
     {
         try
         {
             var focused = System.Windows.Automation.AutomationElement.FocusedElement?.Current;
-            return focused is { } now ? KindOf(now.AutomationId, now.ClassName) : StandardField.Text;
+            return focused is { } now ? FieldOf(now.AutomationId, now.ClassName) : new(StandardField.Text, Terminal: false);
         }
         catch (Exception refused) when (refused is ArgumentException or InvalidOperationException or COMException or System.Windows.Automation.ElementNotAvailableException)
         {
-            return StandardField.Text;
+            return new(StandardField.Text, Terminal: false);
         }
     }
 

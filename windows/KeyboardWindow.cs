@@ -358,6 +358,7 @@ public sealed class KeyboardWindow : Window
             // A field come to: the sentence typed from here is the keys' own, as far as Spelling can tell; the keys its kind's.
             keys.BeginSentence();
             keys.Field = focus.FieldKind;
+            keys.InTerminal = focus.InTerminal;
             if (focus.App is { } typedIn)
             {
                 AppColors.Seen(typedIn);
