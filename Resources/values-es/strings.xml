@@ -92,6 +92,7 @@
   <string name="avoid_menus">Apartarse también de los menús</string>
   <string name="avoid_menus_summary">En ventana, cuando un menú abierto queda debajo del teclado, se aparta una vez y se queda ahí</string>
   <string name="reset_size">Restablecer</string>
+  <string name="dock">Dock</string>
   <string name="look">Colores</string>
   <string name="look_system">Sistema</string>
   <string name="look_light">Claro</string>

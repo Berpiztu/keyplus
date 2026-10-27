@@ -9,7 +9,8 @@ namespace Berpiztu.KeyPlus;
 
 /// <summary>
 /// What Mover and Redimensionar, in Berpiztu AI Keyboard's ⚙, lay over the
-/// keyboard, as Gboard's Resize does: the keys dimmed under it and out of
+/// keyboard, as Gboard's Resize does, and KeyPlus's title bar's resize over
+/// its keys: the keys dimmed under it and out of
 /// reach until Hecho. Moving, the keyboard follows a finger held anywhere on
 /// it, ✥ in the middle to say so. Resizing, a bar at each edge that can be
 /// dragged, the top and bottom ones for the height (the keys' size), the side
@@ -30,21 +31,35 @@ public sealed class KeyboardFrame : FrameLayout
         Right = 16,
     }
 
-    /// <summary>How thick an edge's bar is to take hold of, in dp.</summary>
-    private const int EdgeDp = 36;
+    /// <summary>
+    /// The frame's sizes in dp and sp, an edge's bar to take hold of, its line, the buttons and the room between them:
+    /// the keyboard's, a finger's over a whole keyboard; the popup's small, for its keys and its two rows are shorter
+    /// than the keyboard's frame's buttons, and the frame is no smaller than they.
+    /// </summary>
+    private readonly record struct Sizes(int Edge, int EdgeLine, int EdgeThickness, int ButtonHeight, int ButtonSp, int MoveSp, int PadAcross, int PadDown, int GapAcross, int GapDown);
+
+    private static readonly Sizes Large = new(36, 56, 6, 48, 16, 28, 16, 8, 6, 4);
+    private static readonly Sizes Small = new(20, 40, 4, 30, 13, 18, 10, 2, 3, 2);
+
+    private readonly Sizes sizes;
 
     private static readonly Color Dim = Color.Argb(0xC0, 0x12, 0x12, 0x12);
 
     private readonly Context context;
     private readonly LinearLayout buttons;
     private readonly TextView reset;
+    private readonly TextView move;
+    private readonly TextView dock;
+    private readonly LinearLayout top;
     private readonly View whole;
     private readonly View[] edges;
 
-    public KeyboardFrame(Context context)
+    /// <param name="small">The popup's frame, its buttons and edges smaller (<see cref="Small"/>).</param>
+    public KeyboardFrame(Context context, bool small = false)
         : base(context)
     {
         this.context = context;
+        sizes = small ? Small : Large;
         Visibility = ViewStates.Gone;
 
         // The keys under it out of reach: a touch on it that nothing in it takes stops here.
@@ -67,13 +82,17 @@ public sealed class KeyboardFrame : FrameLayout
             Edge(Part.Right, GravityFlags.Right, horizontal: false),
         ];
 
-        // ✥ over Restablecer, Cancelar and Hecho: they fit a keyboard in a narrow window.
+        // 📌 Dock and ✥ over Restablecer, Cancelar and Hecho: they fit a keyboard in a narrow window.
         buttons = new LinearLayout(context) { Orientation = Orientation.Vertical };
         buttons.SetGravity(GravityFlags.Center);
-        var move = Button("✥", null);
-        move.SetTextSize(ComplexUnitType.Sp, 28);
+        top = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        dock = Button("📌 " + context.GetString(Resource.String.dock)!, () => DockToggled?.Invoke());
+        top.AddView(dock, Spaced());
+        move = Button("✥", null);
+        move.SetTextSize(ComplexUnitType.Sp, sizes.MoveSp);
         Hold(move, Part.Whole);
-        buttons.AddView(move, Spaced());
+        top.AddView(move, Spaced());
+        buttons.AddView(top, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent) { Gravity = GravityFlags.CenterHorizontal });
         var row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         reset = Button("↺ " + context.GetString(Resource.String.reset_size)!, () => ResetRequested?.Invoke());
         row.AddView(reset, Spaced());
@@ -88,6 +107,9 @@ public sealed class KeyboardFrame : FrameLayout
 
     public event Action? ResetRequested;
 
+    /// <summary>📌 Dock tapped: the window stuck to the keyboard, or left where it is.</summary>
+    public event Action? DockToggled;
+
     /// <summary>Cancelar: the keyboard as the frame found it.</summary>
     public event Action? CancelRequested;
 
@@ -96,11 +118,19 @@ public sealed class KeyboardFrame : FrameLayout
     /// <summary>
     /// The frame over the keyboard: to move it (<paramref name="resizing"/>
     /// false), or to size it, with the side bars where the keyboard is in a
-    /// window (<paramref name="sides"/>).
+    /// window (<paramref name="sides"/>). A window stuck to the keyboard
+    /// (<paramref name="docked"/>) is not moved by hand: no ✥; with 📌 Dock
+    /// where the user may stick it or let it go (<paramref name="canDock"/>),
+    /// lit while it is stuck, else neither row's place.
     /// </summary>
-    public void Show(bool resizing, bool sides)
+    public void Show(bool resizing, bool sides, bool canDock = false, bool docked = false)
     {
         whole.Visibility = resizing ? ViewStates.Gone : ViewStates.Visible;
+        dock.Visibility = canDock ? ViewStates.Visible : ViewStates.Gone;
+        dock.Background = Rounded(docked ? KeyPanel.HeldColor : KeyPanel.KeyColor);
+        dock.SetTextColor(docked ? KeyPanel.HeldTextColor : Color.White);
+        move.Visibility = docked ? ViewStates.Invisible : ViewStates.Visible;
+        top.Visibility = canDock || !docked ? ViewStates.Visible : ViewStates.Gone;
         reset.Visibility = resizing ? ViewStates.Visible : ViewStates.Gone;
         edges[0].Visibility = edges[1].Visibility = resizing ? ViewStates.Visible : ViewStates.Gone;
         edges[2].Visibility = edges[3].Visibility = resizing && sides ? ViewStates.Visible : ViewStates.Gone;
@@ -110,6 +140,16 @@ public sealed class KeyboardFrame : FrameLayout
 
     public void Hide() => Visibility = ViewStates.Gone;
 
+    /// <summary>How tall the frame needs to be for its buttons and its top and bottom edges, in pixels.</summary>
+    public int NeededHeight
+    {
+        get
+        {
+            buttons.Measure(MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified), MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified));
+            return buttons.MeasuredHeight + (2 * Dp(sizes.Edge));
+        }
+    }
+
     public bool Showing => Visibility == ViewStates.Visible;
 
     /// <summary>An edge's bar: the whole edge to take hold of, a short line in its middle to show it is there.</summary>
@@ -118,12 +158,12 @@ public sealed class KeyboardFrame : FrameLayout
         var edge = new FrameLayout(context);
         var line = new View(context) { Background = Rounded(KeyPanel.HeldColor) };
         edge.AddView(line, horizontal
-            ? new LayoutParams(Dp(56), Dp(6), GravityFlags.Center)
-            : new LayoutParams(Dp(6), Dp(56), GravityFlags.Center));
+            ? new LayoutParams(Dp(sizes.EdgeLine), Dp(sizes.EdgeThickness), GravityFlags.Center)
+            : new LayoutParams(Dp(sizes.EdgeThickness), Dp(sizes.EdgeLine), GravityFlags.Center));
         Hold(edge, part);
         AddView(edge, horizontal
-            ? new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(EdgeDp), gravity)
-            : new LayoutParams(Dp(EdgeDp), ViewGroup.LayoutParams.MatchParent, gravity));
+            ? new LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(sizes.Edge), gravity)
+            : new LayoutParams(Dp(sizes.Edge), ViewGroup.LayoutParams.MatchParent, gravity));
         return edge;
     }
 
@@ -159,9 +199,9 @@ public sealed class KeyboardFrame : FrameLayout
     {
         var button = new TextView(context) { Text = label, Gravity = GravityFlags.Center, Background = Rounded(KeyPanel.KeyColor) };
         button.SetTextColor(Color.White);
-        button.SetTextSize(ComplexUnitType.Sp, 16);
+        button.SetTextSize(ComplexUnitType.Sp, sizes.ButtonSp);
         button.SetMaxLines(1);
-        button.SetPadding(Dp(16), Dp(8), Dp(16), Dp(8));
+        button.SetPadding(Dp(sizes.PadAcross), Dp(sizes.PadDown), Dp(sizes.PadAcross), Dp(sizes.PadDown));
         if (pressed is not null)
         {
             button.Click += (_, _) => pressed();
@@ -172,8 +212,8 @@ public sealed class KeyboardFrame : FrameLayout
 
     private LinearLayout.LayoutParams Spaced()
     {
-        var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, Dp(48)) { Gravity = GravityFlags.CenterHorizontal };
-        layout.SetMargins(Dp(6), Dp(4), Dp(6), Dp(4));
+        var layout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, Dp(sizes.ButtonHeight)) { Gravity = GravityFlags.CenterHorizontal };
+        layout.SetMargins(Dp(sizes.GapAcross), Dp(sizes.GapDown), Dp(sizes.GapAcross), Dp(sizes.GapDown));
         return layout;
     }
 

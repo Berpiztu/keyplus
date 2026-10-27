@@ -39,6 +39,9 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
     /// <summary>Whether the window floats, one for the screen whatever its mode: docked in three rows, it stays docked in two.</summary>
     private const string WindowFloatingKey = "windowFloating";
+
+    /// <summary>Whether the window is stuck to the keyboard (<see cref="Dock"/>), one for the screen.</summary>
+    private const string DockKey = "dock";
     private const string XKey = "x";
     private const string YKey = "y";
     private const string WidthKey = "width";
@@ -62,16 +65,25 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     public bool Landscape { get; set; }
 
     /// <summary>
+    /// The keyboard the panel stands over floats (Gboard's floating keyboard), not docked along the screen's bottom:
+    /// Keys, its two rows and ABC keep their place, width and keys' size apart for it, as they are not those over a
+    /// docked keyboard; the last one seen while none is open.
+    /// </summary>
+    public bool OverFloatingKeyboard { get; set; }
+
+    /// <summary>
     /// The layout the placement stands for now: the mode's; the standard
     /// keyboard's, as the Windows keyboard's, one for each way it is shown,
     /// as the user may want Estándar PC's more keys larger than Estándar's:
     /// Estándar or Estándar PC, floating or docked, the screen lying or
     /// standing ("standard.pc.docked.portrait"); one not kept yet, as the
-    /// standard keyboard was left before.
+    /// standard keyboard was left before. The popup's modes, one over a docked
+    /// keyboard and one over a floating one ("compact.floatingKeyboard"),
+    /// which starts as the mode was left.
     /// </summary>
     private string Way => Mode == StandardMode
         ? $"{Mode}.{(Pc ? "pc" : "standard")}.{(Floating ? "floating" : "docked")}.{(Landscape ? "landscape" : "portrait")}"
-        : Mode;
+        : OverFloatingKeyboard ? $"{Mode}.floatingKeyboard" : Mode;
 
     /// <summary>
     /// Whether the window floats, in sight all the time, or is docked and
@@ -79,7 +91,18 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// it is the full Keys, two rows or ABC. Where none is kept yet, the
     /// full Keys' own, as it was kept before.
     /// </summary>
-    public bool Floating { get; set; } = preferences.GetBoolean(WindowFloatingKey,
+    public bool Floating { get; set; } = FloatsIn(preferences);
+
+    /// <summary>
+    /// Dock (the resize frame's 📌): the window stuck right above the keyboard, moving with it, whether it shows only
+    /// with the keyboard or all the time (<see cref="Floating"/>); with no keyboard open, where it stood last above it.
+    /// Off, where the user left it. One for the screen; where none is kept yet, on, unless the window floated or was
+    /// moved (a width of its own in Keys, as a moved window had before Dock).
+    /// </summary>
+    public bool Dock { get; set; } = preferences.GetBoolean(DockKey,
+        !FloatsIn(preferences) && preferences.GetInt(Keyed(KeysMode, WidthKey), 0) == 0);
+
+    private static bool FloatsIn(ISharedPreferences preferences) => preferences.GetBoolean(WindowFloatingKey,
         preferences.GetBoolean(Keyed(KeysMode, FloatingKey), preferences.GetBoolean(FloatingKey, false)));
 
     /// <summary>The floating panel's left edge, in pixels from the display's.</summary>
@@ -118,9 +141,11 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     }
 
     /// <summary>
-    /// Berpiztu AI Keyboard's keys while docked, narrower than the screen so
-    /// a finger reaches them: their left edge, in pixels from the screen's,
-    /// and their width; 0, as wide as the screen. Apart from the window's.
+    /// The keys while docked, sized apart from the window's place: Berpiztu AI
+    /// Keyboard's narrower than the screen so a finger reaches them, their
+    /// left edge in pixels from the screen's; the popup's above the keyboard,
+    /// which it keeps following, its left edge from the keyboard's. And their
+    /// width; 0, as wide as the screen or the keyboard.
     /// </summary>
     public int DockedX
     {
@@ -168,7 +193,7 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
     public void Save()
     {
-        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!.PutBoolean(WindowFloatingKey, Floating)!;
+        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!.PutBoolean(WindowFloatingKey, Floating)!.PutBoolean(DockKey, Dock)!;
         foreach (var (way, layout) in layouts)
         {
             editor = editor

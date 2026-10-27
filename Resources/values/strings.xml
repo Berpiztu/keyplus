@@ -98,6 +98,7 @@
   <string name="avoid_menus">Also move out of the way of menus</string>
   <string name="avoid_menus_summary">In a window, when an open menu is under the keyboard, it moves away once and stays there</string>
   <string name="reset_size">Reset</string>
+  <string name="dock">Dock</string>
   <string name="look">Colours</string>
   <string name="look_system">System</string>
   <string name="look_light">Light</string>

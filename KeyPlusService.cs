@@ -38,7 +38,7 @@ namespace Berpiztu.KeyPlus;
 public sealed class KeyPlusService : AccessibilityService, Android.Content.ISharedPreferencesOnSharedPreferenceChangeListener
 {
     /// <summary>The panel in its window on one display, and the screen whose layout it has.</summary>
-    private sealed record Overlay(int DisplayId, KeyPlusPreferences.Screen Screen, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement);
+    private sealed record Overlay(int DisplayId, KeyPlusPreferences.Screen Screen, IWindowManager WindowManager, KeyPanel Panel, WindowManagerLayoutParams Placement, KeyboardFrame Frame);
 
     /// <summary>A keyboard's window and the display it is on.</summary>
     private readonly record struct Keyboard(int DisplayId, Rect Bounds);
@@ -199,7 +199,6 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             text => Refocused(() => TypeText(text)))
         {
             Dockable = false,
-            Resizable = false,
         };
         var width = Math.Max(1, bounds.Width() / 2);
         panel.Root.Measure(
@@ -636,10 +635,23 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return;
         }
 
-        var (_, _, windowManager, panel, placement) = overlay;
+        var (_, _, windowManager, panel, placement, frame) = overlay;
         panel.Floating = placed.Floating;
         panel.IconOnly = keyboard is null && !placed.Floating;
+
+        // The panel its icon (minimized, or docked with the keyboard gone): the frame that sized it goes too.
+        if (panel.ShowsIcon && frame.Showing)
+        {
+            HideFrame(overlay);
+        }
         var display = windowManager.MaximumWindowMetrics.Bounds;
+
+        // Over a floating keyboard or a docked one, the panel's own place and size: taken as the keyboard changes.
+        if (keyboard is { } over && FloatsOver(over.Bounds, display) != placed.OverFloatingKeyboard)
+        {
+            placed.OverFloatingKeyboard = !placed.OverFloatingKeyboard;
+            panel.Scale = placed.Scale;
+        }
         int x, y, width;
         GravityFlags gravity;
         if (panel.ShowsIcon && placed.HasIconPlace)
@@ -655,12 +667,27 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             (x, y, width) = (margin, 6 * margin, ViewGroup.LayoutParams.WrapContent);
             gravity = GravityFlags.Bottom | GravityFlags.Right;
         }
-        else if (placed.Floating || placed.Width > 0)
+        else if (Docked && keyboard is { } open)
         {
-            // Floating, or docked where the user has placed it: there, as they
-            // left it; docked, only while a keyboard is open.
-            // No width yet when the icon was the first thing dragged: the
-            // display's, until a grip gives it one.
+            // Dock: right above the keyboard, moving with it; as wide as it, or sized by the frame (DockedWidth, DockedX).
+            var bounds = open.Bounds;
+            y = display.Bottom - bounds.Top;
+            width = panel.ShowsIcon ? ViewGroup.LayoutParams.WrapContent : placed.DockedWidth > 0 ? Math.Min(placed.DockedWidth, display.Width()) : bounds.Width();
+
+            // Never out of the screen, whatever its place across the keyboard: docked, it cannot be moved back by hand.
+            x = panel.ShowsIcon ? display.Right - bounds.Right : Math.Clamp(bounds.Left - display.Left + placed.DockedX, 0, Math.Max(0, display.Width() - width));
+            gravity = GravityFlags.Bottom | (panel.ShowsIcon ? GravityFlags.Right : GravityFlags.Left);
+        }
+        else if (Docked && panel.Root.Visibility == ViewStates.Visible && !panel.ShowsIcon)
+        {
+            // Dock with no keyboard open, in sight all the time: where it stood last above it, until one opens again.
+            (x, y, gravity) = (placement.X, placement.Y, placement.Gravity);
+            width = placed.DockedWidth > 0 ? placed.DockedWidth : placement.Width;
+        }
+        else
+        {
+            // Where the user left it. No width yet when the icon was the first
+            // thing dragged: the display's, until the frame gives it one.
             width = panel.ShowsIcon ? ViewGroup.LayoutParams.WrapContent
                 : placed.Width > 0 ? Math.Min(placed.Width, display.Width())
                 : display.Width();
@@ -668,14 +695,8 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             y = Math.Clamp(placed.Y, 0, Math.Max(0, display.Height() - panel.Root.Height));
             gravity = GravityFlags.Top | GravityFlags.Left;
         }
-        else
-        {
-            var bounds = keyboard!.Value.Bounds;
-            y = display.Bottom - bounds.Top;
-            x = panel.ShowsIcon ? display.Right - bounds.Right : bounds.Left - display.Left;
-            width = panel.ShowsIcon ? ViewGroup.LayoutParams.WrapContent : bounds.Width();
-            gravity = GravityFlags.Bottom | (panel.ShowsIcon ? GravityFlags.Right : GravityFlags.Left);
-        }
+
+        shownKeyboard = keyboard;
 
         // The panel's own window changing is a windows change too: placing it
         // again where it already is would only call this once more.
@@ -685,11 +706,12 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return;
         }
 
-        // Docked with no keyboard open, the panel is the icon alone: there is no keyboard to name.
-        var where = placed.Floating ? "floating"
-            : keyboard is null ? "as the icon, no keyboard open"
-            : placed.Width > 0 ? "docked where it was left"
-            : $"above the keyboard at {keyboard.Value.Bounds.ToShortString()}";
+        // Shown only with the keyboard and none open, the panel is the icon alone: there is no keyboard to name.
+        var where = panel.IconOnly ? "as the icon, no keyboard open"
+            : Docked && keyboard is not null ? $"docked above the keyboard at {keyboard.Value.Bounds.ToShortString()}"
+            : Docked ? "docked, where it stood last, no keyboard open"
+            : "where it was left";
+        where += placed.Floating ? ", in sight all the time" : ", while a keyboard is open";
         Log.Detail($"Panel on display {displayId} at {x},{y} width {width}, {where}");
         placement.X = x;
         placement.Y = y;
@@ -699,12 +721,17 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         windowManager.UpdateViewLayout(panel.Root, placement);
     }
 
-    /// <summary>The title bar dragged: the panel follows the finger, docked or floating as it was; the icon dragged moves the icon alone.</summary>
+    /// <summary>The title bar dragged: the panel follows the finger, shown as it was; the icon dragged moves the icon alone; docked to the keyboard (Dock), the panel stays with it.</summary>
     private void OnMoving(KeyPanel.Drag drag, float dx, float dy)
     {
         if (overlay?.Panel.ShowsIcon == true)
         {
             MoveIcon(drag, dx, dy);
+            return;
+        }
+
+        if (Docked)
+        {
             return;
         }
 
@@ -744,27 +771,192 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
     /// down its keys bigger or smaller, and the opposite corner stays where it
     /// is; docked or floating as it was.
     /// </summary>
-    private void OnResizing(KeyPanel.Corner corner, KeyPanel.Drag drag, float dx, float dy)
+    private void OnResizing(KeyPanel.Corner corner, KeyPanel.Drag drag, float dx, float dy) =>
+        Resize((corner & KeyPanel.Corner.Left) != 0, (corner & KeyPanel.Corner.Top) != 0, drag, dx, dy);
+
+    /// <summary>
+    /// The panel sized from a side across (<paramref name="fromLeft"/>, its width) and one up or down
+    /// (<paramref name="fromTop"/>, its keys' size), the opposite sides staying where they are; none, that way it keeps
+    /// its size. Docked or floating as it was.
+    /// </summary>
+    private void Resize(bool? fromLeft, bool? fromTop, KeyPanel.Drag drag, float dx, float dy)
     {
+        // Docked to the keyboard (Dock, or the two rows): sized, it stays with the keyboard.
+        if (Docked)
+        {
+            ResizeDocked(fromLeft, fromTop, drag, dx, dy);
+            return;
+        }
+
         if (StartPlacing(drag) is not { } floating || overlay is null)
         {
             return;
         }
 
-        var fromLeft = (corner & KeyPanel.Corner.Left) != 0;
-        var fromTop = (corner & KeyPanel.Corner.Top) != 0;
         var minWidth = (int)(PanelPlacement.MinWidthDp * Resources!.DisplayMetrics!.Density);
         var height = Math.Max(1, dragStart.Height);
-        floating.Width = Math.Max(minWidth, dragStart.Width + (int)(fromLeft ? -dx : dx));
-        floating.Scale = Math.Clamp(
-            dragStart.Scale * (height + (fromTop ? -dy : dy)) / height,
-            PanelPlacement.MinScale,
-            PanelPlacement.MaxScale);
+        floating.Width = fromLeft is { } left ? Math.Max(minWidth, dragStart.Width + (int)(left ? -dx : dx)) : dragStart.Width;
+        floating.Scale = fromTop is { } top
+            ? Math.Clamp(dragStart.Scale * (height + (top ? -dy : dy)) / height, PanelPlacement.MinScale, PanelPlacement.MaxScale)
+            : dragStart.Scale;
         var grownHeight = (int)(height * floating.Scale / dragStart.Scale) - height;
-        floating.X = fromLeft ? dragStart.X - (floating.Width - dragStart.Width) : dragStart.X;
-        floating.Y = fromTop ? dragStart.Y - grownHeight : dragStart.Y;
+        floating.X = fromLeft == true ? dragStart.X - (floating.Width - dragStart.Width) : dragStart.X;
+        floating.Y = fromTop == true ? dragStart.Y - grownHeight : dragStart.Y;
         overlay.Panel.Scale = floating.Scale;
         Dragged(drag, floating);
+    }
+
+    /// <summary>The docked panel's width, height, keys' size and left edge from the keyboard's as a resize began.</summary>
+    private (int Width, int Height, float Scale, int DockedX) dockedStart;
+
+    /// <summary>
+    /// The panel docked above the keyboard sized as <see cref="Resize"/> sizes it, its width and left edge kept apart
+    /// from a moved window's place (<see cref="PanelPlacement.DockedWidth"/>, <see cref="PanelPlacement.DockedX"/>), so
+    /// it stays above the keyboard and follows it; it grows upwards from the keyboard whichever edge sizes it.
+    /// </summary>
+    private void ResizeDocked(bool? fromLeft, bool? fromTop, KeyPanel.Drag drag, float dx, float dy)
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        var root = overlay.Panel.Root;
+        if (drag == KeyPanel.Drag.Start)
+        {
+            dockedStart = (root.Width, Math.Max(1, root.Height), overlay.Panel.Scale, placed.DockedX);
+        }
+
+        if (fromLeft is { } left)
+        {
+            var minWidth = (int)(PanelPlacement.MinWidthDp * Resources!.DisplayMetrics!.Density);
+            placed.DockedWidth = Math.Max(minWidth, dockedStart.Width + (int)(left ? -dx : dx));
+            placed.DockedX = left ? dockedStart.DockedX + (dockedStart.Width - placed.DockedWidth) : dockedStart.DockedX;
+        }
+
+        if (fromTop is { } top)
+        {
+            placed.Scale = Math.Clamp(
+                dockedStart.Scale * (dockedStart.Height + (top ? -dy : dy)) / dockedStart.Height,
+                PanelPlacement.MinScale,
+                PanelPlacement.MaxScale);
+            overlay.Panel.Scale = placed.Scale;
+        }
+
+        Dragged(drag, placed);
+    }
+
+    /// <summary>Where the panel stood, its size and its Dock as the frame opened, for Cancel.</summary>
+    private (int X, int Y, int Width, float Scale, int DockedX, int DockedWidth, bool Dock) frameStart;
+
+    /// <summary>Whether the panel is stuck right above the keyboard: Dock on, or the two rows, which always are.</summary>
+    private bool Docked => placed is not null && (placed.Dock || placed.Mode == PanelPlacement.CompactMode);
+
+    /// <summary>The frame shown over the panel: 📌 Dock offered except on the two rows, always docked; the window as tall as the frame's buttons need while it shows, the two rows being shorter.</summary>
+    private void ShowFrameOver(Overlay shown)
+    {
+        var strip = placed?.Mode == PanelPlacement.CompactMode;
+        shown.Frame.Show(resizing: true, sides: true, canDock: !strip, docked: Docked);
+        shown.Panel.Root.SetMinimumHeight(shown.Frame.NeededHeight);
+    }
+
+    /// <summary>The frame gone, and the window its own height again.</summary>
+    private void HideFrame(Overlay shown)
+    {
+        shown.Frame.Hide();
+        shown.Panel.Root.SetMinimumHeight(0);
+    }
+
+    /// <summary>The keyboard the panel was placed by last; none, none was open.</summary>
+    private Keyboard? shownKeyboard;
+
+    /// <summary>
+    /// The frame's 📌 Dock: stuck to the keyboard, the panel keeps its width and its place across the keyboard, measured
+    /// from the keyboard's left edge, and goes right above it; let go, it stays where it is now.
+    /// </summary>
+    private void OnDockToggled()
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        var root = overlay.Panel.Root;
+        if (placed.Dock)
+        {
+            StartPlacing(KeyPanel.Drag.Start);
+            placed.Dock = false;
+        }
+        else
+        {
+            var location = new int[2];
+            root.GetLocationOnScreen(location);
+            var display = overlay.WindowManager.MaximumWindowMetrics.Bounds;
+            placed.DockedWidth = root.Width;
+            placed.DockedX = shownKeyboard is { } open ? location[0] - display.Left - (open.Bounds.Left - display.Left) : 0;
+            placed.Dock = true;
+        }
+
+        placed.Save();
+        ShowFrameOver(overlay);
+        Place();
+    }
+
+    /// <summary>The title bar's resize: the keyboard's frame over the panel, its edges sizing it, ✥ moving it.</summary>
+    private void ShowFrame()
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        frameStart = (placed.X, placed.Y, placed.Width, placed.Scale, placed.DockedX, placed.DockedWidth, placed.Dock);
+        ShowFrameOver(overlay);
+    }
+
+    /// <summary>The frame's edges dragged size the panel from that side; ✥ moves it, as the title bar does.</summary>
+    private void OnFrameDragged(KeyboardFrame.Part part, KeyPanel.Drag drag, float dx, float dy)
+    {
+        if (part.HasFlag(KeyboardFrame.Part.Whole))
+        {
+            OnMoving(drag, dx, dy);
+            return;
+        }
+
+        bool? fromLeft = part.HasFlag(KeyboardFrame.Part.Left) ? true : part.HasFlag(KeyboardFrame.Part.Right) ? false : null;
+        bool? fromTop = part.HasFlag(KeyboardFrame.Part.Top) ? true : part.HasFlag(KeyboardFrame.Part.Bottom) ? false : null;
+        Resize(fromLeft, fromTop, drag, dx, dy);
+    }
+
+    /// <summary>The frame's Reset: the keys at their usual size and the panel as wide as it starts, the keyboard's or the screen's, docked right above the keyboard again.</summary>
+    private void OnFrameReset()
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        placed.Scale = 1f;
+        placed.Width = 0;
+        (placed.DockedX, placed.DockedWidth) = (0, 0);
+        placed.Save();
+        overlay.Panel.Scale = 1f;
+        Place();
+    }
+
+    /// <summary>The frame's Cancel: the panel where it stood and as large as when the frame opened, Reset undone too.</summary>
+    private void OnFrameCancel()
+    {
+        if (placed is null || overlay is null)
+        {
+            return;
+        }
+
+        HideFrame(overlay);
+        (placed.X, placed.Y, placed.Width, placed.Scale, placed.DockedX, placed.DockedWidth, placed.Dock) = frameStart;
+        placed.Save();
+        overlay.Panel.Scale = placed.Scale;
+        Place();
     }
 
     /// <summary>A↺ pressed: the keys go back to their usual size; the window keeps its place and width.</summary>
@@ -903,9 +1095,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
                 continue;
             }
 
-            var bounds = new Rect();
-            keyboard.GetBoundsInScreen(bounds);
-            var found = new Keyboard(displayId, bounds);
+            var found = new Keyboard(displayId, KeysOf(keyboard));
             if (windows.All(window => window.Type != AccessibilityWindowType.Application))
             {
                 return found;
@@ -919,6 +1109,45 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         }
 
         return focused ?? first;
+    }
+
+    /// <summary>
+    /// Whether keys stand as a floating keyboard's: narrower than the screen and clear of its bottom, where a docked
+    /// keyboard stands as wide as the screen or down to its bottom.
+    /// </summary>
+    private bool FloatsOver(Rect keys, Rect display) =>
+        keys.Width() < display.Width() * 9 / 10 && keys.Bottom < display.Bottom - (int)(FloatingClearDp * Resources!.DisplayMetrics!.Density);
+
+    /// <summary>How far above the screen's bottom a keyboard's keys end at least to be a floating keyboard's, in dp: a docked one's reach it, its navigation bar aside.</summary>
+    private const int FloatingClearDp = 64;
+
+    /// <summary>
+    /// Where a keyboard's keys are: the largest part of the window's touchable region. A floating keyboard tells more
+    /// than its keys there (Gboard's own strip along the screen's bottom), so the window's bounds, which take all of it,
+    /// start at the screen's left edge wherever the keys are, and a panel docked above them followed them only up and
+    /// down. The bounds where the region has nothing.
+    /// </summary>
+    private static Rect KeysOf(AccessibilityWindowInfo keyboard)
+    {
+        var region = new Region();
+        keyboard.GetRegionInScreen(region);
+        var largest = new Rect();
+        var part = new Rect();
+        var parts = new RegionIterator(region);
+        while (parts.Next(part))
+        {
+            if ((long)part.Width() * part.Height() > (long)largest.Width() * largest.Height())
+            {
+                largest.Set(part);
+            }
+        }
+
+        if (largest.IsEmpty)
+        {
+            keyboard.GetBoundsInScreen(largest);
+        }
+
+        return largest;
     }
 
     /// <summary>
@@ -964,10 +1193,22 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
 
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
-        // Large corner grips with arrows, as the keyboard's: a headset's
-        // pointer (INAIR's pod) reaches the window as a finger, and small
-        // triangles were all but out of its reach.
-        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText) { LargeGrips = true };
+        // Sized as the keyboard is, with the title bar's resize and its frame, not by the corners' grips.
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText) { ShowsResizeButton = true };
+        var frame = new KeyboardFrame(context, small: true);
+        panel.AddOverlay(frame);
+        panel.ResizeRequested += ShowFrame;
+        frame.Dragged += OnFrameDragged;
+        frame.ResetRequested += OnFrameReset;
+        frame.DockToggled += OnDockToggled;
+        frame.CancelRequested += OnFrameCancel;
+        frame.DoneRequested += () =>
+        {
+            if (overlay is not null)
+            {
+                HideFrame(overlay);
+            }
+        };
         panel.FoldedChanged += Place;
         panel.Moving += OnMoving;
         panel.Resizing += OnResizing;
@@ -1007,7 +1248,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return null;
         }
 
-        return new Overlay(displayId, screen, windowManager, panel, placement);
+        return new Overlay(displayId, screen, windowManager, panel, placement, frame);
     }
 
     private void Close()

@@ -156,7 +156,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
-    <Compile Remove="KeyPlusKeyboard.cs;KeyboardFrame.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs;LanguageChoices.cs;SpellingEngine.cs;LanguageOptions.cs" />
+    <Compile Remove="KeyPlusKeyboard.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs;LanguageChoices.cs;SpellingEngine.cs;LanguageOptions.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml;Resources\xml\keyboard_menus.xml;Resources\xml\keyboard_menus_color.xml" />
     <AndroidJavaSource Remove="SwipeDecoder.java" />
     <AndroidAsset Remove="Assets\**" />

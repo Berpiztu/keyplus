@@ -696,8 +696,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (OnHeadset)
         {
             panel.Resizing += OnResizing;
-            // The keys sized to the headset's box, whatever its mode: no grips to size them.
-            panel.Resizable = false;
+            // The keys sized to the headset's box, whatever its mode.
             panel.SideKeys = false;
             panel.Root.LayoutChange += (_, _) => FillBox();
         }
@@ -769,7 +768,6 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 field.CommitText(text, 1);
                 field.EndBatchEdit();
             };
-            panel.LargeGrips = true;
             // A long press, on the bar's buttons, its free room or between the
             // keys, moves the keyboard (docked, up and down); a corner's grip
             // dragged, or a long press near a corner, sizes it from there, as

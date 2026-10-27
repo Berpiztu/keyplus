@@ -173,12 +173,12 @@ a window that does.
 | File | What it holds |
 | --- | --- |
 | [PanelKeys.cs](PanelKeys.cs) | The layouts (the editing shortcuts over Termux's two rows; the whole Spanish keyboard), the dead keys' accents, the meta state of held modifiers |
-| [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips and icon; holding Ctrl, Alt and Shift, repeat; the whole keyboard as the screen's design has it, and designing it |
+| [KeyPanel.cs](KeyPanel.cs) | The window's views: title bar, keys, corner grips (the headset's) and icon; holding Ctrl, Alt and Shift, repeat; the whole keyboard as the screen's design has it, and designing it |
 | [KeyboardDesign.cs](KeyboardDesign.cs) | A design of the whole keyboard: its rows, holes, keys aside and widths, kept for each screen |
-| [PanelPlacement.cs](PanelPlacement.cs) | Where the strip stands, docked or floating, and its size, kept across restarts |
+| [PanelPlacement.cs](PanelPlacement.cs) | When the strip shows (with the keyboard or all the time) and where (Dock: stuck above the keyboard, or where it was left), and its size, kept across restarts |
 | [KeyPlusService.cs](KeyPlusService.cs) | The service: placing the strip above the keyboard, sending the keys, turning a letter typed under Ctrl or Alt into the key |
 | [KeyPlusKeyboard.cs](KeyPlusKeyboard.cs) | The keyboard product: the same panel as a keyboard of its own, docked or in a window on a phone |
-| [KeyboardFrame.cs](KeyboardFrame.cs) | The frame ⚙'s Move and Resize lay over the keyboard |
+| [KeyboardFrame.cs](KeyboardFrame.cs) | The frame ⚙'s Move and Resize lay over the keyboard, and the popup's resize over its keys |
 | [KeySender.cs](KeySender.cs) | Sending a key with its scan code and its modifiers pressed around it, for both products |
 | [ClipboardHistory.cs](ClipboardHistory.cs) | What was copied lately, texts and images, kept to paste again |
 | [ClipboardImages.cs](ClipboardImages.cs) | The keyboard's images handed to the app they are pasted into |
@@ -382,24 +382,36 @@ a window that does.
   and no shortcuts' row, the terminal's two rows as Termux has them, the
   arrows a cross, PgUp and PgDn narrow, Alt beside PgDn, and ⌫ wider, which
   is Delete with Shift held. Hold **PgUp** a moment to open the full window
-  again (PgUp does not repeat there). Whether it is two rows is kept for each screen, with its own place
+  again, and **PgDn** a moment to size the two rows (neither repeats there). Whether it is two rows is kept for each screen, with its own place
   and size ([doc/compact-keys.md](doc/compact-keys.md)).
 - **Keys repeat while held**, as a keyboard's do: every key acts on the
   touch, and one that types or sends a key goes on doing it while held. Not
   Ctrl, Alt, Shift, Alt Gr, Fn or ⊞, nor Ctrl+A, Ctrl+C, Ctrl+V and Print Screen,
   which should happen once, nor the accents, which wait for a letter.
-- **A window, docked or floating.** The keys are a small window with a title
-  bar. It starts docked: right above the keyboard, as wide as it, while a
-  keyboard is open, and as the **⌨** icon at the bottom right while none is.
-  Hold the title bar still for a moment, anywhere on it, its buttons too: it
-  buzzes, and the window floats where you leave it, in sight all the time,
-  keyboard or not; a tap on a button does what the button is for. The
-  ground between the keys moves it the same way. Drag a corner (◤ ◥ ◣ ◢) to
-  resize it: across for its width, up or down for the size of its keys; the
-  opposite corner stays put. With a mouse or a controller's pointer (INAIR's
-  pod), the pointer turns into the diagonal arrows near any corner, and a
-  press there resizes the window, whatever key is under it, as a desktop
-  window's corner does. **⤓** in the title bar docks it again.
+- **A window: when it shows, and where.** The keys are a small window with
+  a title bar. Two things are set apart. **⤓** in the title bar says when it
+  shows: lit, only while a keyboard is open, as the **⌨** icon at the bottom
+  right while none is; off, in sight all the time, keyboard or not. **📌 Dock**,
+  in the resize frame, says where it is: on, right above the keyboard, moving
+  with it, Keys and its two rows alike, and with no keyboard open where it
+  stood last above it; off, where you leave it. It starts with both on. With
+  Dock off, hold the title bar still for a moment, anywhere on it, its
+  buttons too: it buzzes, and the window follows the finger and stays where
+  you leave it; a tap on a button does what the button is for. The ground
+  between the keys moves it the same way. With Dock on it is not moved by
+  hand, so it never comes away from the keyboard by mistake. The resize
+  button at the title bar's left lays the keyboard's frame over the keys, as
+  Berpiztu AI Keyboard's Resize does: drag its left or right edge for the
+  window's width, its top or bottom edge for the size of its keys (docked, it
+  grows upwards from the keyboard), or ✥ to move it, with Dock off; **📌
+  Dock** sticks it to the keyboard where it stands across it, or leaves it
+  where it is; **Reset** takes it back to its usual size, **Cancel** to what it
+  was when the frame opened, **Done** closes it. The two rows (▭) always stand
+  stuck above the keyboard; **PgDn** held still a moment lays the frame over
+  them to size them, without 📌 or ✥. Over a floating keyboard (Gboard's) the
+  window and the two rows keep a place and a size of their own, apart from
+  those over a docked keyboard, as each screen (upright, on its side, DeX)
+  keeps its own.
 - **The labels.** Each key is a table of three by three cells: its shifted
   character in the top left, its plain one in the middle and its Alt Gr one
   in the bottom right, so none covers another however narrow the key. The
@@ -413,7 +425,7 @@ a window that does.
   most three quarters of their key; a long word in a narrow key is made
   smaller alone. Nothing is ever cut.
 - **A−** and **A+** in the title bar make every label smaller or larger, a
-  tenth at a press. **A↺** brings the labels, and the keys a corner made
+  tenth at a press. **A↺** brings the labels, and the keys the frame made
   larger or smaller, back to their usual size; the window keeps its place
   and width.
 - **Each screen its own.** The phone held upright, the phone on its side and

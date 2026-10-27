@@ -69,8 +69,6 @@ public sealed class KeyWindowActivity : Activity
         placed = new PanelPlacement(preferences);
         panel = new KeyPanel(this, preferences, service.Clipboard, service.SendKey, service.TypeText)
         {
-            Resizable = false,
-
             // ⤓ is filled while docked, which the panel calls not floating.
             Floating = !Docked(this),
         };

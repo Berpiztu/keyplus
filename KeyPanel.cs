@@ -19,10 +19,10 @@ namespace Berpiztu.KeyPlus;
 /// above the keyboard again (while it floats), – to minimize it into the ⌨
 /// icon, which a tap opens again and a drag moves, and ✕ to close KeyPlus,
 /// once the title bar has asked whether to; the keys, the shortcuts'
-/// row and the terminal's two or the whole keyboard; and a grip at each
-/// corner that resizes it, across for its width and up or down for its keys'
-/// size. Where the window stands is
-/// the popup's service's (KeyPlusService): the title bar, the icon and the grips only
+/// row and the terminal's two or the whole keyboard; the window resized with
+/// the frame its resize lays over the keys (<see cref="KeyboardFrame"/>), or
+/// a long press near a corner. Where the window stands is
+/// the popup's service's (KeyPlusService): the title bar, the icon and the corners only
 /// say how far they were dragged.
 /// Ctrl, Alt and AltGr are held as Termux holds them: pressed once they stay
 /// down, filled, for the next key, here or typed on the phone's keyboard
@@ -74,9 +74,6 @@ public sealed class KeyPanel
     /// <summary>How near a corner of the window a long press starts to resize it rather than move it.</summary>
     private const int CornerReachDp = 48;
 
-    /// <summary>How near a corner a mouse's or a controller's pointer sizes the window from it, in dp: the diagonal arrows show there.</summary>
-    private const int PointerCornerDp = 24;
-
     /// <summary>The icon's label, in sp.</summary>
     private const float LabelSize = 16f;
 
@@ -120,12 +117,6 @@ public sealed class KeyPanel
 
     /// <summary>The title bar's height where what was copied stands in it as chips, in dp: Gboard's, room for a chip to read and tap.</summary>
     private const int ChipBarDp = 44;
-
-    /// <summary>A corner's grip's width, and the bar under the keys that holds the bottom two, in dp; as a finger takes them (<see cref="LargeGrips"/>).</summary>
-    private const int GripDp = 24;
-    private const int BottomBarDp = 14;
-    private const int LargeGripDp = 40;
-    private const int LargeBottomBarDp = 28;
 
     /// <summary>The copied things', their menu's and the editor's words, in sp: a list's, not the keys'.</summary>
     private const float CardTextSp = 15f;
@@ -255,15 +246,9 @@ public sealed class KeyPanel
     private readonly StandardKeyboard? standard;
     private readonly TextView makeSmall;
 
-    /// <summary>The grips at the four corners, and the bar along the bottom that holds two of them.</summary>
-    private readonly List<View> grips = [];
+    /// <summary>The title bar's resize, the keyboard's sign: the frame over the keys to size them (<see cref="ResizeRequested"/>), where the window shows it (<see cref="ShowsResizeButton"/>).</summary>
+    private readonly ImageView resizeButton;
 
-    /// <summary>Whether the window is sized by hand (<see cref="Resizable"/>): its grips, and its corners under a pointer.</summary>
-    private bool resizable = true;
-
-    /// <summary>The corner each grip sizes the window from, for its sign (<see cref="LargeGrips"/>).</summary>
-    private readonly Dictionary<TextView, Corner> gripCorners = [];
-    private readonly LinearLayout bottomBar;
     private readonly TextView tab;
     private readonly LinearLayout titleBar;
     private readonly LinearLayout closeBar;
@@ -277,7 +262,7 @@ public sealed class KeyPanel
 
     /// <summary>The texts copied lately, and 📋, which shows them in the keys' place to paste one.</summary>
     private readonly ClipboardHistory clipboard;
-    private readonly TextView clipboardButton;
+    private readonly View clipboardButton;
     private readonly ScrollView clipboardView;
 
     /// <summary>
@@ -296,7 +281,7 @@ public sealed class KeyPanel
     private readonly LinearLayout clipboardItems;
 
     /// <summary>The keys a view stands in place of (the copied texts, the settings), with the button that shows it; none while the keys show.</summary>
-    private (View Keys, View Cover, TextView Button)? covered;
+    private (View Keys, View Cover, View Button)? covered;
 
     /// <summary>
     /// The editor above the keys for a copied text, Cancelar and Guardar under
@@ -632,16 +617,18 @@ public sealed class KeyPanel
             UsualSizeRequested?.Invoke();
         }));
         switchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
-        clipboardButton = TitleButton("📋", "Texts copied lately: tap one to paste it", () => Toggle(clipboardView!, ShowClipboard));
+        clipboardButton = ClipboardTitleButton("Texts copied lately: tap one to paste it");
         settingsButton = TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings));
         keyboardButton = TitleButton("⌨", "Hide the keyboard, or show it again", () => keyboardToggle?.Invoke());
         keyboardButton.Visibility = ViewStates.Gone;
         settingsButton.Visibility = ViewStates.Gone;
         makeSmall = TitleButton("▭", "Two rows: the keys made small, with no title bar; hold PgUp to open them again", () => SetCompact(true));
+        resizeButton = TitleIcon(Resource.Drawable.ic_tool_resize, "Resize the keys", () => ResizeRequested?.Invoke());
+        resizeButton.Visibility = ViewStates.Gone;
 
         titleBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        AddToTitleBar(Grip("◤", Corner.TopLeft), GripDp);
         titleBar.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        AddToTitleBar(resizeButton, 36);
         AddToTitleBar(smaller, 36);
         AddToTitleBar(larger, 36);
         AddToTitleBar(usual, 36);
@@ -679,7 +666,6 @@ public sealed class KeyPanel
         closeBar.AddView(question, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         closeBar.AddView(yes, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
         closeBar.AddView(no, new LinearLayout.LayoutParams(Dp(36), ViewGroup.LayoutParams.MatchParent));
-        AddToTitleBar(Grip("◥", Corner.TopRight), GripDp);
 
         // As Gboard's: buttons at both ends, what was copied between them. The
         // room the chips leave free is held, as the buttons are, to move the
@@ -690,12 +676,10 @@ public sealed class KeyPanel
         chipScroll.AddView(chipItems, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         chipSwitchKeys = TitleButton("ABC", "Switch between the keys and a whole keyboard", () => SetWholeKeyboard(wholeKeyboard!.Visibility != ViewStates.Visible));
         chipBar = new LinearLayout(context) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
-        chipBar.AddView(Grip("◤", Corner.TopLeft), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
-        chipBar.AddView(TitleButton("📋", "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard)), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
+        chipBar.AddView(ClipboardTitleButton("Everything copied lately"), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
         chipBar.AddView(chipScroll, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         chipBar.AddView(chipSwitchKeys, new LinearLayout.LayoutParams(Dp(52), ViewGroup.LayoutParams.MatchParent));
         chipBar.AddView(TitleButton("⚙", "Settings", () => Toggle(settingsView!, ShowSettings)), new LinearLayout.LayoutParams(Dp(44), ViewGroup.LayoutParams.MatchParent));
-        chipBar.AddView(Grip("◥", Corner.TopRight), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
 
         toolbarClipboard = ToolIcon(Resource.Drawable.ic_clipboard, "Everything copied lately", () => Toggle(clipboardView!, ShowClipboard));
         toolbarMiddle = new FrameLayout(context);
@@ -728,11 +712,6 @@ public sealed class KeyPanel
         {
             menuBar.AddView(button, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
-
-        bottomBar = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        bottomBar.AddView(Grip("◣", Corner.BottomLeft), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
-        bottomBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-        bottomBar.AddView(Grip("◢", Corner.BottomRight), new LinearLayout.LayoutParams(Dp(GripDp), ViewGroup.LayoutParams.MatchParent));
 
         strip = new LinearLayout(context) { Orientation = Orientation.Vertical };
         strip.SetBackgroundColor(PanelColor);
@@ -873,7 +852,6 @@ public sealed class KeyPanel
 
         // Between the keys, a long press moves or resizes the window as on a key.
         HoldToMove(strip);
-        strip.AddView(bottomBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(BottomBarDp)));
 
         tab = KeyView("⌨");
         tab.SetTextSize(ComplexUnitType.Sp, LabelSize);
@@ -1043,29 +1021,6 @@ public sealed class KeyPanel
         {
             infoLine.Text = value;
             infoLine.Visibility = value is null ? ViewStates.Gone : ViewStates.Visible;
-        }
-    }
-
-    /// <summary>
-    /// Whether the corners' grips resize the window: not where the keys fill
-    /// the room they are given (Berpiztu AI Keyboard on a headset), which
-    /// sets their size itself.
-    /// </summary>
-    public bool Resizable
-    {
-        set
-        {
-            resizable = value;
-            foreach (var grip in grips)
-            {
-                grip.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
-            }
-
-            bottomBar.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
-            if (titleBar.Width > 0)
-            {
-                FitTitleBar(titleBar.Width);
-            }
         }
     }
 
@@ -1684,8 +1639,25 @@ public sealed class KeyPanel
         return place;
     }
 
-    /// <summary>The standard keyboard's resize was pressed: the keyboard's frame to size it with, where the keyboard has one.</summary>
+    /// <summary>The standard keyboard's resize, or the title bar's, was pressed: the frame to size the keys with, where the window has one.</summary>
     public event Action? ResizeRequested;
+
+    /// <summary>Whether the title bar has the resize button: the popup's window, sized with the frame.</summary>
+    public bool ShowsResizeButton
+    {
+        set
+        {
+            resizeButton.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
+    /// <summary>A view laid over the whole window, above the keys and the bars (the frame that sizes it, <see cref="KeyboardFrame"/>).</summary>
+    public void AddOverlay(View over) =>
+        root.AddView(over, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
 
     /// <summary>The grid's buttons the keyboard gives (Gboard's), which come before the panel's own.</summary>
     public IReadOnlyList<GridTile> GridTiles
@@ -2246,10 +2218,9 @@ public sealed class KeyPanel
         if (copiedInTitleBar)
         {
             // Gboard's: the toolbar, or its menu while something is in the
-            // keys' place, or the question asked; no grips, sizing is ⚙'s.
+            // keys' place, or the question asked; sizing is ⚙'s.
             titleBar.Visibility = ViewStates.Gone;
             chipBar.Visibility = ViewStates.Gone;
-            bottomBar.Visibility = ViewStates.Gone;
             closeBar.Visibility = asking is not null && !small ? ViewStates.Visible : ViewStates.Gone;
             var standardShown = covered?.Keys == standard || standard is { Visibility: ViewStates.Visible };
             menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
@@ -2323,48 +2294,6 @@ public sealed class KeyPanel
 
     /// <summary>The editor's card showed or went.</summary>
     public event Action? EditingChanged;
-
-    /// <summary>
-    /// The corners' grips as large as a finger, or a headset's pointer, takes
-    /// them at once, the bar under the keys taller, and their signs the
-    /// diagonal arrows of a window's corner, ⤡ and ⤢, which say a drag there
-    /// makes it larger or smaller (Berpiztu AI Keyboard on a phone, the popup;
-    /// INAIR's pod hands its pointer to an app as a finger, with no arrows of
-    /// its own over a corner). Else the small triangles.
-    /// </summary>
-    public bool LargeGrips
-    {
-        set
-        {
-            var width = value ? LargeGripDp : GripDp;
-            foreach (var grip in grips.OfType<TextView>())
-            {
-                var corner = gripCorners[grip];
-                grip.Text = value ? "" : corner switch { Corner.TopLeft => "◤", Corner.TopRight => "◥", Corner.BottomLeft => "◣", _ => "◢" };
-                grip.Background = value ? new ResizeArrow(falling: corner is Corner.TopLeft or Corner.BottomRight, Dp(18), Dp(2)) : null;
-                if (grip.Parent != titleBar)
-                {
-                    grip.LayoutParameters!.Width = Dp(width);
-                }
-            }
-
-            for (var i = 0; i < titleParts.Count; i++)
-            {
-                if (grips.Contains(titleParts[i].View))
-                {
-                    titleParts[i] = (titleParts[i].View, width);
-                }
-            }
-
-            bottomBar.LayoutParameters!.Height = Dp(value ? LargeBottomBarDp : BottomBarDp);
-            if (titleBar.Width > 0)
-            {
-                FitTitleBar(titleBar.Width);
-            }
-
-            strip.RequestLayout();
-        }
-    }
 
     /// <summary>A chip for each thing copied, the pinned first, then the newest; the row scrolls across.</summary>
     private void FillChips()
@@ -3061,7 +2990,7 @@ public sealed class KeyPanel
     /// A view in the keys' place, as tall as the keys were, so the window
     /// keeps its size; its button filled while it shows, as a held key is.
     /// </summary>
-    private void Cover(View cover, TextView button)
+    private void Cover(View cover, View button)
     {
         Uncover();
         var keys = ShownKeys;
@@ -3069,8 +2998,7 @@ public sealed class KeyPanel
         keys.Visibility = ViewStates.Gone;
         cover.Visibility = ViewStates.Visible;
         covered = (keys, cover, button);
-        button.Background = KeyBackground(HeldColor);
-        button.SetTextColor(HeldTextColor);
+        MarkTitleButton(button, held: true);
         ShowBars();
     }
 
@@ -3091,8 +3019,7 @@ public sealed class KeyPanel
             previewed = null;
         }
 
-        now.Button.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
-        now.Button.SetTextColor(Color.White);
+        MarkTitleButton(now.Button, held: false);
         covered = null;
         ShowBars();
     }
@@ -5021,7 +4948,7 @@ public sealed class KeyPanel
                         StandardKeyboard.PlayKeySound(context, key.Code);
                     }
 
-                    if (key.OpensFull)
+                    if (key.OpensOnHold)
                     {
                         opened = false;
                         opening = new Java.Lang.Runnable(() =>
@@ -5032,7 +4959,14 @@ public sealed class KeyPanel
                                 view.PerformHapticFeedback(FeedbackConstants.LongPress);
                             }
 
-                            SetCompact(false);
+                            if (key.OpensFull)
+                            {
+                                SetCompact(false);
+                            }
+                            else
+                            {
+                                ResizeRequested?.Invoke();
+                            }
                         });
                         handler.PostDelayed(opening, LongPressMs);
                     }
@@ -5179,104 +5113,14 @@ public sealed class KeyPanel
         }
     }
 
-    /// <summary>
-    /// The corner a mouse's or a controller's pointer is near, in the panel's
-    /// own place (<see cref="PanelFrame"/>), where the window can be sized;
-    /// none for a finger, which keeps the keys there, nor where the window
-    /// is not sized by hand or is its icon.
-    /// </summary>
-    private Corner? PointerCorner(MotionEvent motion)
-    {
-        if (!resizable || ShowsIcon || motion.GetToolType(0) == MotionEventToolType.Finger)
-        {
-            return null;
-        }
-
-        var reach = Dp(PointerCornerDp);
-        var (x, y) = (motion.GetX(), motion.GetY());
-        var left = x < reach;
-        var right = x > root.Width - reach;
-        var top = y < reach;
-        var bottom = y > root.Height - reach;
-        if (!(left || right) || !(top || bottom))
-        {
-            return null;
-        }
-
-        return (left ? Corner.Left : 0) | (top ? Corner.Top : 0);
-    }
-
-    /// <summary>
-    /// The panel's own frame. With a mouse or a controller's pointer (INAIR's
-    /// pod, a desktop), near a corner the pointer turns into the diagonal
-    /// arrows, and a press there sizes the window from that corner whatever
-    /// key is under it, as a desktop window's corner does. A finger keeps
-    /// the keys there, and the grips.
-    /// </summary>
+    /// <summary>The panel's own frame: a drag of the window going on takes every touch, whatever view it began on.</summary>
     private sealed class PanelFrame(KeyPanel panel, Context context) : FrameLayout(context)
     {
-        private Corner? sizing;
-        private float startX;
-        private float startY;
+        public override bool OnInterceptTouchEvent(MotionEvent? e) =>
+            (e is not null && panel.Dragging(e)) || base.OnInterceptTouchEvent(e);
 
-        public override PointerIcon? OnResolvePointerIcon(MotionEvent? e, int pointerIndex)
-        {
-            if (e is not null && panel.PointerCorner(e) is { } corner)
-            {
-                var arrows = corner is Corner.TopLeft or Corner.BottomRight
-                    ? PointerIconType.TopLeftDiagonalDoubleArrow
-                    : PointerIconType.TopRightDiagonalDoubleArrow;
-                return PointerIcon.GetSystemIcon(Context!, arrows);
-            }
-
-            return base.OnResolvePointerIcon(e, pointerIndex);
-        }
-
-        public override bool OnInterceptTouchEvent(MotionEvent? e)
-        {
-            if (e is not null && panel.Dragging(e))
-            {
-                return true;
-            }
-
-            if (e?.ActionMasked == MotionEventActions.Down && panel.PointerCorner(e) is { } corner)
-            {
-                sizing = corner;
-                (startX, startY) = panel.OnScreen(this, e);
-                panel.ReportResizing(corner, KeyPanel.Drag.Start, 0, 0);
-                return true;
-            }
-
-            return base.OnInterceptTouchEvent(e);
-        }
-
-        public override bool OnTouchEvent(MotionEvent? e)
-        {
-            if (e is not null && panel.Dragging(e))
-            {
-                return true;
-            }
-
-            if (sizing is not { } corner || e is null)
-            {
-                return base.OnTouchEvent(e);
-            }
-
-            var (x, y) = panel.OnScreen(this, e);
-            switch (e.ActionMasked)
-            {
-                case MotionEventActions.Move:
-                    panel.ReportResizing(corner, KeyPanel.Drag.Move, x - startX, y - startY);
-                    break;
-                case MotionEventActions.Up:
-                case MotionEventActions.Cancel:
-                    panel.ReportResizing(corner, KeyPanel.Drag.End, x - startX, y - startY);
-                    sizing = null;
-                    break;
-            }
-
-            return true;
-        }
+        public override bool OnTouchEvent(MotionEvent? e) =>
+            (e is not null && panel.Dragging(e)) || base.OnTouchEvent(e);
     }
 
     /// <summary>The corner of the window a point on the screen is near, if any.</summary>
@@ -5479,6 +5323,43 @@ public sealed class KeyPanel
         return view;
     }
 
+    /// <summary>
+    /// A button of the title bar drawn as an icon, white as its words are, made smaller where the bar narrows; held still
+    /// a moment it moves the window, as <see cref="TitleButton"/> does.
+    /// </summary>
+    private ImageView TitleIcon(int drawable, string description, Action pressed)
+    {
+        var view = new ImageView(context)
+        {
+            ContentDescription = description,
+            Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White)),
+            ImageTintList = ColorStateList.ValueOf(Color.White),
+        };
+        view.SetImageResource(drawable);
+        view.SetScaleType(ImageView.ScaleType.CenterInside);
+        HoldToMove(view, pressed, resizes: false);
+        return view;
+    }
+
+    /// <summary>The title bar's clipboard, which shows the things copied in the keys' place: Material's, the keyboard's toolbar's.</summary>
+    private ImageView ClipboardTitleButton(string description) =>
+        TitleIcon(Resource.Drawable.ic_clipboard, description, () => Toggle(clipboardView!, ShowClipboard));
+
+    /// <summary>A title bar's button lit while what it shows is in the keys' place (the held keys' colour), or as the bar again.</summary>
+    private void MarkTitleButton(View button, bool held)
+    {
+        button.Background = held ? KeyBackground(HeldColor) : new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
+        var color = held ? HeldTextColor : Color.White;
+        if (button is TextView words)
+        {
+            words.SetTextColor(color);
+        }
+        else if (button is ImageView icon)
+        {
+            icon.ImageTintList = ColorStateList.ValueOf(color);
+        }
+    }
+
     /// <summary>A title bar's piece at its width in dp, which narrows when the window is too narrow for every piece (<see cref="FitTitleBar"/>).</summary>
     private void AddToTitleBar(View view, int widthDp)
     {
@@ -5510,63 +5391,6 @@ public sealed class KeyPanel
         view.SetMaxLines(1);
         view.SetAutoSizeTextTypeUniformWithConfiguration(4, largestSp, 1, (int)ComplexUnitType.Sp);
         titleTexts.Add((view, largestSp));
-    }
-
-    /// <summary>A corner's grip: drawn faintly, resizing from that corner when dragged.</summary>
-    /// <summary>
-    /// A window corner's resize arrow, drawn: a diagonal line with a head at
-    /// each end, so large as asked whatever the font (the ⤡ and ⤢ characters
-    /// came out a few pixels small); falling from the top left to the bottom
-    /// right, or rising.
-    /// </summary>
-    private sealed class ResizeArrow(bool falling, int size, int stroke) : Drawable
-    {
-        private readonly Paint paint = new(PaintFlags.AntiAlias)
-        {
-            Color = Color.White,
-            StrokeWidth = stroke,
-            StrokeCap = Paint.Cap.Round,
-        };
-
-        public override void Draw(Canvas canvas)
-        {
-            paint.SetStyle(Paint.Style.Stroke);
-            var middle = Bounds;
-            var half = size / 2f;
-            var (cx, cy) = (middle.ExactCenterX(), middle.ExactCenterY());
-            var (startX, startY) = (cx - half, falling ? cy - half : cy + half);
-            var (endX, endY) = (cx + half, falling ? cy + half : cy - half);
-            canvas.DrawLine(startX, startY, endX, endY, paint);
-            var head = size / 3f;
-            var down = falling ? 1 : -1;
-            canvas.DrawLine(startX, startY, startX + head, startY, paint);
-            canvas.DrawLine(startX, startY, startX, startY + (down * head), paint);
-            canvas.DrawLine(endX, endY, endX - head, endY, paint);
-            canvas.DrawLine(endX, endY, endX, endY - (down * head), paint);
-        }
-
-        public override void SetAlpha(int alpha) => paint.Alpha = alpha;
-
-        public override void SetColorFilter(ColorFilter? colorFilter) => paint.SetColorFilter(colorFilter);
-
-        /// <summary>Drawn with transparent edges.</summary>
-        public override int Opacity => (int)Format.Translucent;
-    }
-
-    /// <summary>A small grip's sign drawn into its corner.</summary>
-    private static GravityFlags GripGravity(Corner corner) =>
-        ((corner & Corner.Top) != 0 ? GravityFlags.Top : GravityFlags.Bottom)
-        | ((corner & Corner.Left) != 0 ? GravityFlags.Left : GravityFlags.Right);
-
-    private TextView Grip(string label, Corner corner)
-    {
-        var view = new TextView(context) { Text = label, ContentDescription = "Resize the keys", Gravity = GripGravity(corner) };
-        view.SetTextColor(DimTextColor);
-        view.SetTextSize(ComplexUnitType.Sp, 10);
-        Draggable(view, (drag, dx, dy) => ReportResizing(corner, drag, dx, dy), tapped: null);
-        grips.Add(view);
-        gripCorners[view] = corner;
-        return view;
     }
 
     /// <summary>
@@ -5737,8 +5561,8 @@ public sealed class KeyPanel
     /// While the window is moved or resized the labels are not fitted again
     /// at every step, which made the drag slow: once, when it ends, if
     /// anything asked for it meanwhile. Told before and after each step of
-    /// the drag, by the panel's own grips and by whoever else sizes it
-    /// (Berpiztu AI Keyboard's Redimensionar).
+    /// the drag, by the panel's own corners and by whoever else sizes it
+    /// (the frame of Berpiztu AI Keyboard's Redimensionar and of the popup's resize).
     /// </summary>
     public void NoteDrag(Drag drag, bool before)
     {

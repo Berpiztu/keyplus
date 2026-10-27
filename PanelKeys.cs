@@ -31,7 +31,8 @@ public enum Held
 /// the 1, Home for the left arrow; or with Shift held (ShiftLabel,
 /// ShiftCode), sent without Shift: Supr for ⌫. A key that OpensFull, held
 /// still a moment, opens the full Keys window from the two rows instead of
-/// repeating: PgUp.
+/// repeating: PgUp; one that OpensResize, the frame that sizes the two rows:
+/// PgDn.
 /// </summary>
 public sealed record PanelKey(
     string Label,
@@ -47,7 +48,8 @@ public sealed record PanelKey(
     Keycode? FnCode = null,
     string? ShiftLabel = null,
     Keycode? ShiftCode = null,
-    bool OpensFull = false)
+    bool OpensFull = false,
+    bool OpensResize = false)
 {
     public bool IsModifier => Modifier != Held.None;
 
@@ -57,7 +59,10 @@ public sealed record PanelKey(
     /// should happen once (Ctrl+A, Ctrl+C, Ctrl+V, the screen capture) unless
     /// it says it repeats (Ctrl+Z, Ctrl+Y).
     /// </summary>
-    public bool RepeatsWhenHeld => !OpensFull && (Repeats || (!IsModifier && With == Held.None));
+    public bool RepeatsWhenHeld => !OpensFull && !OpensResize && (Repeats || (!IsModifier && With == Held.None));
+
+    /// <summary>Whether held still a moment the key does something of the window's (<see cref="OpensFull"/>, <see cref="OpensResize"/>) instead of its own.</summary>
+    public bool OpensOnHold => OpensFull || OpensResize;
 
     public bool IsCharacter => Text is not null;
 
@@ -134,8 +139,8 @@ public static class PanelKeys
     /// rows as Termux has them, the arrows a cross, with no / ; PgUp and PgDn
     /// narrow, Alt narrow beside PgDn, and the room PgUp leaves to ⌫, which
     /// is Supr with Shift held. Held still a moment, PgUp opens the full
-    /// window, its title bar and three rows: away from the corners, whose
-    /// grips resize the window.
+    /// window, its title bar and three rows, and PgDn the frame that sizes
+    /// the two rows, which stay stuck to the keyboard.
     /// </summary>
     public static readonly IReadOnlyList<KeyBlock> Compact =
     [
@@ -155,7 +160,7 @@ public static class PanelKeys
             new("←", Keycode.DpadLeft, Repeats: true, Weight: 1.25f),
             new("↓", Keycode.DpadDown, Repeats: true),
             new("→", Keycode.DpadRight, Repeats: true),
-            new("PgDn", Keycode.PageDown, Repeats: true, Weight: 0.5f),
+            new("PgDn", Keycode.PageDown, Weight: 0.5f, OpensResize: true),
             new("Alt", Keycode.AltLeft, Held.Alt, Weight: 0.5f),
             new("⏎", Keycode.Enter, Weight: 1.25f),
         ],
