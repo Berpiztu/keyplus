@@ -265,11 +265,11 @@ public sealed class KeyboardWindow : Window
         keys.Offered += ShowTyping;
         keys.AddressesStarting = typed => [.. personal.AddressesStarting(typed).Take(WordSuggestions.Offered)];
         keys.SelectionCase = TurnSelectionCase;
-        keys.Suggesting = (language, typed) => personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered);
         keys.PressedAt = () => input.PressedAt;
         keys.KeyedAt = () => input.KeyedAt;
         spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
             () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList)), Log.Write);
+        keys.Suggesting = (language, typed) => personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered);
         spellingEngine.FixesFound += (language, word) =>
         {
             if (keys.TypingWord == word)
