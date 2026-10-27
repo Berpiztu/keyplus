@@ -318,16 +318,29 @@ public sealed class KeyboardSurface : FrameworkElement
     private long sentenceFrom;
 
     /// <summary>A sentence begun here: a field come to, Enter, or one closed; or, blind, where a press put the caret, beside what these keys never saw.</summary>
-    public void BeginSentence() => BeginSentence(blind: false);
+    public void BeginSentence() => BeginSentence(blind: false, byKeys: false);
 
-    private void BeginSentence(bool blind)
+    private void BeginSentence(bool blind, bool byKeys)
     {
         sentence = new StringBuilder();
         sentenceFrom = Environment.TickCount64;
         sentenceBlind = blind;
+        sentenceByKeys = byKeys;
         inAddress = false;
         addressTyped = "";
     }
+
+    /// <summary>Whether these keys began the sentence, with Enter or a . ? or ! they typed: where a field was come to, what is before the caret is not known.</summary>
+    private bool sentenceByKeys;
+
+    /// <summary>
+    /// Spelling's Capital at the start of a sentence: whether a letter typed now begins one, so it goes out a capital,
+    /// Shift left as it is. Only where these keys began the sentence (Enter, or . ? or ! and a space), nothing typed in
+    /// it since and nothing else touching the text since, in a text field, with Shift off.
+    /// </summary>
+    private bool OpensSentence() =>
+        CapitalizesSentences && fieldKind == StandardField.Text && !Combining && shift == Shift.Off
+        && lastTyped is ' ' or '\n' && sentenceByKeys && SentenceKnown && sentence!.ToString().Trim().Length == 0;
 
     /// <summary>Whether the sentence began where a press put the caret: what is before it, maybe a word's first letters, is not known.</summary>
     private bool sentenceBlind;
@@ -354,7 +367,7 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else if ((PressedAt?.Invoke() ?? long.MaxValue) >= sentenceFrom)
         {
-            BeginSentence(blind: true);
+            BeginSentence(blind: true, byKeys: false);
         }
     }
 
@@ -377,7 +390,7 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             if (text.IndexOfAny(['.', '?', '!', '\n']) >= 0)
             {
-                BeginSentence();
+                BeginSentence(blind: false, byKeys: true);
             }
 
             return;
@@ -391,7 +404,7 @@ public sealed class KeyboardSurface : FrameworkElement
         {
             var whole = sentence.ToString();
             var known = SentenceKnown;
-            BeginSentence();
+            BeginSentence(blind: false, byKeys: true);
             if (Spelling.Accents && whole.Trim().Length > 1 && !EndsInAddress(whole))
             {
                 if (!known)
@@ -1598,10 +1611,6 @@ public sealed class KeyboardSurface : FrameworkElement
         // Gboard's: on ?123 or =\<, a space or Enter after a symbol typed there goes back to the letters.
         var backToLetters = symbolTyped && !Combining && key.Action is StandardAction.Space or StandardAction.Enter;
 
-        // A sentence begins after . ? or ! and a space, and after Enter: what these keys typed is all Windows lets them see.
-        // Only in a text field: an address (a browser's address bar, an e-mail's) or a number has no sentences.
-        var sentenceBegins = CapitalizesSentences && fieldKind == StandardField.Text && !Combining
-            && (key.Action == StandardAction.Enter || (key.Action == StandardAction.Space && lastTyped is '.' or '?' or '!'));
         switch (key.Action)
         {
             case StandardAction.Type:
@@ -1676,7 +1685,7 @@ public sealed class KeyboardSurface : FrameworkElement
                 FlushDead();
                 CorrectBeforeEnter();
                 Press(Keycode.Enter);
-                BeginSentence();
+                BeginSentence(blind: false, byKeys: true);
                 lastTyped = '\n';
                 boundaryAt = Environment.TickCount64;
                 break;
@@ -1687,51 +1696,13 @@ public sealed class KeyboardSurface : FrameworkElement
             ShowPage(pc ? StandardPage.Pc : StandardPage.Letters);
         }
 
-        if (sentenceBegins && shift == Shift.Off)
-        {
-            shift = Shift.Once;
-            sentenceShift = true;
-            sentenceShiftAt = Environment.TickCount64;
-        }
-
         InvalidateVisual();
     }
 
-    /// <summary>Spelling's Capital at the start of a sentence: Shift on by itself after . ? or ! and a space, and after Enter; turned off, one it put on goes.</summary>
-    public bool CapitalizesSentences
-    {
-        get => capitalizesSentences;
-        set
-        {
-            capitalizesSentences = value;
-            if (!value && sentenceShift)
-            {
-                ShiftOnceUsed();
-            }
-        }
-    }
+    /// <summary>Spelling's Capital at the start of a sentence (<see cref="OpensSentence"/>), while Spelling is on.</summary>
+    public bool CapitalizesSentences { get; set; }
 
-    private bool capitalizesSentences;
-
-    /// <summary>Shift on for one key because a sentence began, not by a tap, and since when: ⌫ takes it off again.</summary>
-    private bool sentenceShift;
-    private long sentenceShiftAt;
-
-    /// <summary>
-    /// Shift put on by a sentence's start let go where the mouse or the
-    /// computer's keys touched the text since, for the caret may stand in the
-    /// middle of a sentence now (a word put right after a dictation) and
-    /// Windows does not tell a keyboard where.
-    /// </summary>
-    private void DropSentenceShift()
-    {
-        if (sentenceShift && ((PressedAt?.Invoke() ?? long.MaxValue) >= sentenceShiftAt || (KeyedAt?.Invoke() ?? long.MaxValue) >= sentenceShiftAt))
-        {
-            ShiftOnceUsed();
-        }
-    }
-
-    /// <summary>Shift on for one key, by a tap or a sentence's start, let go: a dictation wrote in its place. Locked, it stays.</summary>
+    /// <summary>Shift on for one key, tapped, let go: a dictation wrote in its place. Locked, it stays.</summary>
     private void ShiftOnceUsed()
     {
         if (shift != Shift.Once)
@@ -1740,7 +1711,6 @@ public sealed class KeyboardSurface : FrameworkElement
         }
 
         shift = Shift.Off;
-        sentenceShift = false;
         InvalidateVisual();
     }
 
@@ -1767,9 +1737,8 @@ public sealed class KeyboardSurface : FrameworkElement
             [.. centres.Select(box => X(box.X + (box.Width / 2)))],
             [.. centres.Select(box => Y(box.Y + (box.Height / 2)))],
             language);
-        DropSentenceShift();
         var capitals = shift == Shift.Locked || capsLock;
-        var capital = shift == Shift.Once;
+        var capital = shift == Shift.Once || OpensSentence();
         if (shift == Shift.Once)
         {
             shift = Shift.Off;
@@ -1807,8 +1776,9 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else
         {
-            DropSentenceShift();
-            var typed = ShiftedFor(key) && key.Shifted is not null ? key.Shifted : key.Text!;
+            // A letter that opens a sentence goes out a capital, Shift left as it is.
+            var capital = key.Text is { Length: 1 } letter && char.IsLetter(letter[0]) && OpensSentence();
+            var typed = (ShiftedFor(key) || capital) && key.Shifted is not null ? key.Shifted : key.Text!;
             if (EndSwipe(typed.Length == 1 && char.IsLetter(typed[0])))
             {
                 Type(" ");
@@ -1929,12 +1899,6 @@ public sealed class KeyboardSurface : FrameworkElement
 
         EndSwipe(letter: false);
         lastTyped = null;
-        if (sentenceShift && shift == Shift.Once)
-        {
-            shift = Shift.Off;
-            sentenceShift = false;
-            InvalidateVisual();
-        }
 
         if (Combining)
         {
@@ -1985,7 +1949,6 @@ public sealed class KeyboardSurface : FrameworkElement
     private void ModifiersUsed()
     {
         ctrl = alt = meta = altGr = false;
-        sentenceShift = false;
         if (shift == Shift.Once)
         {
             shift = Shift.Off;
@@ -1997,7 +1960,6 @@ public sealed class KeyboardSurface : FrameworkElement
     private void ToggleShift()
     {
         var now = DateTime.UtcNow;
-        sentenceShift = false;
         shift = shift switch
         {
             Shift.Off => Shift.Once,

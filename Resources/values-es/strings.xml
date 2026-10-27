@@ -281,7 +281,7 @@
   <string name="spelling_dictionary_en">inglés (EE. UU.)</string>
   <string name="spelling_on">Corregir mientras escribo</string>
   <string name="spelling_capitalize">Mayúscula al empezar una frase</string>
-  <string name="spelling_capitalize_summary">Mayúsculas activadas solas tras . ? o ! y un espacio, y en una línea nueva, con la ortografía activada; desactivado hasta que lo actives, y sin necesitar ninguna descarga</string>
+  <string name="spelling_capitalize_summary">La primera letra de cada frase en mayúscula, tras . ? o ! y un espacio y en una línea nueva, con la ortografía activada; desactivado hasta que lo actives, y sin necesitar ninguna descarga</string>
   <string name="spelling_on_summary">La ortografía de todos los idiomas de una vez, también la mayúscula al empezar una frase, también con el botón de ortografía de la barra: desactivado para programar, activado otra vez para un mensaje; lo elegido en cada idioma se conserva</string>
   <string name="spelling_accent_closing">Corregir los acentos con el modelo</string>
   <string name="spelling_accent_closing_summary">Al terminar una frase con . ? o !, un modelo en este equipo propone sus acentos en la barra (cómo estás, está limpia); un toque los aplica. Desactivado hasta que lo actives, y entonces se descarga una vez (diactag, 38 MB)</string>
