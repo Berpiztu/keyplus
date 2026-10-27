@@ -5284,14 +5284,27 @@ public sealed class KeyPanel
             legends.Show(Legends(key, held));
         }
 
+        var relabelled = false;
         foreach (var (key, view) in fnKeys)
         {
-            view.Text = held.HasFlag(Held.Fn) && key.FnLabel is { } fnLabel ? fnLabel
-                : held.HasFlag(Held.Ctrl) && key.CtrlLabel is { } ctrlLabel ? ctrlLabel
-                : held.HasFlag(Held.Shift) && key.ShiftLabel is { } shiftLabel ? shiftLabel
-                : key.Label;
+            var label = LabelNow(key);
+            relabelled |= view.Text != label;
+            view.Text = label;
+        }
+
+        // A word changed (PgUp to Ctrl+C) is laid out and sized again as the keys' words are.
+        if (relabelled)
+        {
+            FitLegendsSoon();
         }
     }
+
+    /// <summary>What a key that is another with Fn, Ctrl or Shift held reads now: that one's word while it is held, else its own.</summary>
+    private string LabelNow(PanelKey key) =>
+        held.HasFlag(Held.Fn) && key.FnLabel is { } fnLabel ? fnLabel
+        : held.HasFlag(Held.Ctrl) && key.CtrlLabel is { } ctrlLabel ? ctrlLabel
+        : held.HasFlag(Held.Shift) && key.ShiftLabel is { } shiftLabel ? shiftLabel
+        : key.Label;
 
     /// <summary>
     /// What a character key reads for the modifiers held, on its table of
@@ -5718,8 +5731,13 @@ public sealed class KeyPanel
         // narrow key (ImpPnt) would take every other down with it; such a word
         // alone is made smaller, never cut. An arrow is drawn larger.
         var legendsSize = legendSize * labelScale;
+
+        // A key that is another while a modifier is held is laid out with the word it reads now, not the one it was made with.
+        var readNow = fnKeys.ToDictionary(key => key.View, key => LabelNow(key.Key));
         var layouts = labelKeys.Where(key => key.View.IsShown && key.View.Width > 0)
-            .ToDictionary(key => key.View, key => key.Factor == 1f ? WordLayout(key.View, key.Label) : (Text: key.View.Text ?? "", Fit: WordFit(key.View, key.View.Text ?? "")));
+            .ToDictionary(key => key.View, key => key.Factor == 1f
+                ? WordLayout(key.View, readNow.TryGetValue(key.View, out var now) ? now : key.Label)
+                : (Text: key.View.Text ?? "", Fit: WordFit(key.View, key.View.Text ?? "")));
         var words = labelKeys.Where(key => key.Factor == 1f && layouts.ContainsKey(key.View)).Select(key => layouts[key.View].Fit).DefaultIfEmpty(legendsSize);
         // Never larger than the letters are drawn: A+ grows the words as far
         // as it grows the letters, which stop where their keys stop them.
