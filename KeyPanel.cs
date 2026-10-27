@@ -279,6 +279,9 @@ public sealed class KeyPanel
     private readonly ClipboardHistory clipboard;
     private readonly TextView clipboardButton;
     private readonly ScrollView clipboardView;
+
+    /// <summary>An image copied seen whole in the keys' place (its menu's View).</summary>
+    private readonly ImageView imageViewer;
     private readonly LinearLayout clipboardRows;
 
     /// <summary>The copied texts side by side in one row above the keys (<see cref="ClipboardAbove"/>).</summary>
@@ -750,6 +753,9 @@ public sealed class KeyPanel
         clipboardView = new ScrollView(context) { Visibility = ViewStates.Gone };
         clipboardView.AddView(clipboardRows);
         strip.AddView(clipboardView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
+        imageViewer = new ImageView(context) { Visibility = ViewStates.Gone, ContentDescription = "The image copied" };
+        imageViewer.SetScaleType(ImageView.ScaleType.FitCenter);
+        strip.AddView(imageViewer, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
         clipboardItems = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         clipboardLine = new HorizontalScrollView(context) { Visibility = ViewStates.Gone };
         clipboardLine.AddView(clipboardItems, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
@@ -1087,6 +1093,9 @@ public sealed class KeyPanel
 
     /// <summary>Pastes an image copied into the field, where the panel can (Berpiztu AI Keyboard); none, the images are listed but not pasted.</summary>
     public Action<ClipboardHistory.Entry>? PasteImage { get; set; }
+
+    /// <summary>Opens an image copied in the phone's own editor, where the panel can (Berpiztu AI Keyboard); none, its menu has no Edit.</summary>
+    public Action<ClipboardHistory.Entry>? EditImage { get; set; }
 
     /// <summary>The keys' size, 1 for the usual one; the strip grows or shrinks with it.</summary>
     public float Scale
@@ -2964,10 +2973,22 @@ public sealed class KeyPanel
         now.Keys.Visibility = ViewStates.Visible;
         now.Cover.Visibility = ViewStates.Gone;
         now.Cover.LayoutParameters!.Height = 0;
+        if (now.Cover == imageViewer)
+        {
+            imageViewer.SetImageDrawable(null);
+        }
+
         now.Button.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), null, new ColorDrawable(Color.White));
         now.Button.SetTextColor(Color.White);
         covered = null;
         ShowBars();
+    }
+
+    /// <summary>An image copied seen whole in the keys' place, as large as their room lets it, nothing outside the keyboard used; ✕ the keys again.</summary>
+    private void ViewImage(ClipboardHistory.Entry entry)
+    {
+        Cover(imageViewer, clipboardButton);
+        imageViewer.SetImageBitmap(Thumbnail(clipboard.PathOf(entry), imageViewer.LayoutParameters!.Height));
     }
 
     /// <summary>The copied things in the keys' place, a list that scrolls.</summary>
@@ -3322,11 +3343,20 @@ public sealed class KeyPanel
         }
 
         Item(Resource.Drawable.ic_menu_paste, context.GetString(Resource.String.paste)!, pasted);
+        if (entry.IsImage)
+        {
+            Item(Resource.Drawable.ic_menu_view, context.GetString(Resource.String.view)!, () => ViewImage(entry));
+        }
+
         Item(entry.Pinned ? Resource.Drawable.ic_menu_unpin : Resource.Drawable.ic_menu_pin,
             entry.Pinned ? context.GetString(Resource.String.unpin)! : context.GetString(Resource.String.pin)!, () => clipboard.SetPinned(entry, !entry.Pinned));
         if (!entry.IsImage)
         {
             Item(Resource.Drawable.ic_grid_edit, context.GetString(Resource.String.edit)!, () => Edit(entry));
+        }
+        else if (EditImage is { } editImage)
+        {
+            Item(Resource.Drawable.ic_grid_edit, context.GetString(Resource.String.edit)!, () => editImage(entry));
         }
 
         Item(Resource.Drawable.ic_menu_delete, context.GetString(Resource.String.erase)!, () => clipboard.Remove(entry));

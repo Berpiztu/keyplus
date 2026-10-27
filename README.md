@@ -121,10 +121,11 @@ size of words whatever the keys' size: **⚙** at its left, **ABC** (or
 **Keys**) at its right, and between them the chip of what was copied last,
 for five minutes after it was copied, else **Clipboard**; nothing is drawn over
 anything else. A tap on the chip pastes it, a long press opens its menu
-(Pegar, Fijar, Editar, Eliminar). Editar shows its card above the keyboard,
-over the app: one line that scrolls across, so neither the
+(Paste, Pin, Edit, Delete; an image's has View too). A text's Edit shows its
+card above the keyboard, over the app: one line that scrolls across, so neither the
 card nor the keys change size with the text, and the keys type into it
-until Cancel or Save. A long press on the bar's buttons, its free room
+until Cancel or Save. An image's View shows it whole in the keys' place, ✕
+the keys again; its Edit opens it in the phone's own image editor. A long press on the bar's buttons, its free room
 or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
 bar into **✕** and **Clipboard** and opens, in the keys' place as
 rounded tiles, **Smaller text**, **Larger text**, **Normal

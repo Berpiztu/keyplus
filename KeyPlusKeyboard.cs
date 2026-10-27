@@ -570,6 +570,27 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>
+    /// An image copied opened in the phone's own image editor (ACTION_EDIT),
+    /// with the right to read it, as a new task over the app typed in; with
+    /// no editor on the phone, told so.
+    /// </summary>
+    private void EditImage(ClipboardHistory.Entry image)
+    {
+        var edit = new Intent(Intent.ActionEdit);
+        edit.SetDataAndType(ClipboardImages.UriOf(image.Image!), image.MimeType);
+        edit.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+        try
+        {
+            StartActivity(edit);
+        }
+        catch (ActivityNotFoundException)
+        {
+            Log.Write("Clipboard: no app on the phone edits images");
+            Android.Widget.Toast.MakeText(this, GetString(Resource.String.no_image_editor), Android.Widget.ToastLength.Short)!.Show();
+        }
+    }
+
+    /// <summary>
     /// The panel, with the layout of the screen the keyboard is on. Made again
     /// at each configuration change (the phone turned, a Fold opened), so
     /// each screen opens as it was left.
@@ -594,6 +615,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             Enter = PerformEnter,
             Dockable = false,
             PasteImage = PasteImage,
+            EditImage = EditImage,
             Settings = [new(GetString(Resource.String.switch_keyboard)!, ShowKeyboardPicker)],
         };
         placed.Mode = panel.Mode;
