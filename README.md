@@ -490,8 +490,14 @@ address's), on Android and in the Windows settings alike.
 
 **Preferences › Extra line for suggestions and recent emoji** (on unless
 turned off), on Android and Windows: a line over the toolbar, of one height
-whatever it holds, with the words offered while typing, else the emoji used
-lately, so the toolbar keeps all its buttons; off, no line, the words in the
+whatever it holds, with the words offered while typing, else (on Android)
+for five minutes after a copy or a cut the things copied as chips, scrolling
+across: the one just copied, then the pinned, then the others from the newest,
+each with a ✕ that hides it (it stays in the clipboard); with the keys in
+sight, the toolbar's 📋 shows every thing copied there, lit, and a second tap
+takes them away (with ⊞ open, 📋 opens the clipboard in the keys' place); else
+the emoji used lately, so the
+toolbar keeps all its buttons; off, no line, the words and the chip in the
 toolbar as before. The emoji panel stands in the keys' place, the toolbar
 and that line over it.
 
