@@ -421,11 +421,14 @@ public sealed class KeyPanel
 
     /// <summary>
     /// Customising, on the Fold: the toolbar's buttons in a blue outline 85 px
-    /// tall, each a pill 117 px wide, 8 px apart (125 px from one to the next).
+    /// tall, Gboard's 8 px inside it above and below, each a circle as tall as
+    /// that leaves (<see cref="ToolDiameter"/>); side by side they all but
+    /// touch, <see cref="ToolGapDp"/> apart, as the glyph inside each circle
+    /// keeps its own margin, so that as many fit as can be.
     /// </summary>
     private const float EditBarDp = 85 / 2.25f;
-    private const float EditToolDp = 117 / 2.25f;
     private const float EditToolGapDp = 8 / 2.25f;
+    private const float ToolGapDp = 1;
 
     /// <summary>While the grid is customised (⊞ › ✏): the toolbar's buttons and the grid's, by their ids, as they are being placed.</summary>
     private bool editingTools;
@@ -1341,10 +1344,10 @@ public sealed class KeyPanel
             var tools = Tools();
             barRoomShown = BarRoom;
             foreach (var tool in Arranged().Bar.Select(id => tools[id]).Select(tool => StandardTool(tool.Icon, tool.Label, tool.Chosen,
-                tool.On ? colors.Primary : null, tool.On ? colors.OnPrimary : null)))
+                tool.On ? colors.Primary : null, tool.On ? colors.OnPrimary : null, diameter: ToolDiameter)))
             {
                 standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
-                standardBar.AddView(tool, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+                standardBar.AddView(tool, new LinearLayout.LayoutParams(ToolDiameter, ViewGroup.LayoutParams.MatchParent));
             }
 
             standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
@@ -1483,16 +1486,17 @@ public sealed class KeyPanel
     /// A sign of the standard keyboard's toolbar, centred in its place, in a
     /// circle where it has one (its outline, where it has one), in the keys'
     /// letters' colour or its own; held still a moment, it moves the keyboard
-    /// as the bar does.
+    /// as the bar does. Its circle Gboard's, or <paramref name="diameter"/> pixels across.
     /// </summary>
-    private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null, Color? glyph = null, Color? ring = null)
+    private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null, Color? glyph = null, Color? ring = null, int? diameter = null)
     {
+        var across = diameter ?? Dp(ToolCircleDp);
         // Its name shown as the mouse rests on it, as the owner asked.
         var sign = new ImageView(context) { ContentDescription = description, TooltipText = description };
         sign.SetImageResource(icon);
         sign.ImageTintList = ColorStateList.ValueOf(glyph ?? standardColors!.Glyph);
         sign.SetScaleType(ImageView.ScaleType.FitCenter);
-        var inset = Dp((ToolCircleDp - ToolIconDp) / 2);
+        var inset = (across - Dp(ToolIconDp)) / 2;
         sign.SetPadding(inset, inset, inset, inset);
         var ground = new GradientDrawable();
         ground.SetShape(ShapeType.Oval);
@@ -1505,7 +1509,7 @@ public sealed class KeyPanel
         sign.Background = new RippleDrawable(ColorStateList.ValueOf(RippleColor), ground, null);
         HoldToMove(sign, pressed, resizes: false);
         var place = new FrameLayout(context);
-        place.AddView(sign, new FrameLayout.LayoutParams(Dp(ToolCircleDp), Dp(ToolCircleDp), GravityFlags.Center));
+        place.AddView(sign, new FrameLayout.LayoutParams(across, across, GravityFlags.Center));
         return place;
     }
 
@@ -1691,12 +1695,27 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// How many buttons the toolbar holds: as many of Gboard's pills, customising, as fit between ⊞ and 🎤 (five on a phone,
-    /// as Gboard's); not laid out yet, at the width it was measured at (<see cref="FitBar"/>).
+    /// How many buttons the toolbar holds: as many circles (<see cref="ToolDiameter"/>), <see cref="ToolGapDp"/> apart, as
+    /// fit between ⊞ and 🎤 inside the customising outline; not laid out yet, at the width it was measured at (<see cref="FitBar"/>).
     /// </summary>
-    private int BarRoom => (standardBar.Width > 0 ? standardBar.Width : standardBar.MeasuredWidth) is var width and > 0
-        ? Math.Max(1, (width - (2 * ToolSlot) - (2 * Dp(StandardGrid.OutlineDp))) / Dp(EditToolDp + EditToolGapDp))
+    private int BarRoom => BarMiddle > 0
+        ? Math.Max(1, (BarMiddle - (2 * EditSideInset) + Dp(ToolGapDp)) / (ToolDiameter + Dp(ToolGapDp)))
         : BarFirst.Length;
+
+    /// <summary>The toolbar between ⊞ and 🎤, in pixels; 0 while its width is not known.</summary>
+    private int BarMiddle => (standardBar.Width > 0 ? standardBar.Width : standardBar.MeasuredWidth) is var width and > 0
+        ? width - (2 * ToolSlot)
+        : 0;
+
+    /// <summary>The customising outline's line and the gap inside it: above and below its circles, and at their sides.</summary>
+    private int EditInset => Dp(StandardGrid.OutlineDp + EditToolGapDp);
+    private int EditSideInset => Dp(StandardGrid.OutlineDp + ToolGapDp);
+
+    /// <summary>
+    /// The circle of each of the toolbar's own buttons, customising or not, in pixels: as tall as the customising outline
+    /// leaves inside it, and as wide, so it is round and as many fit as can be.
+    /// </summary>
+    private int ToolDiameter => Dp(EditBarDp) - (2 * EditInset);
 
     /// <summary>The toolbar's room its buttons were placed for; -1 while it shows no buttons (words, a copy, customising).</summary>
     private int barRoomShown = -1;
@@ -1763,8 +1782,7 @@ public sealed class KeyPanel
         outline.SetCornerRadius(Dp(EditBarDp) / 2f);
         outline.SetStroke(Dp(StandardGrid.OutlineDp), colors.Primary);
         var group = new LinearLayout(context) { Orientation = Orientation.Horizontal, Background = outline };
-        var inset = Dp(StandardGrid.OutlineDp + EditToolGapDp);
-        group.SetPadding(inset, inset, inset, inset);
+        group.SetPadding(EditSideInset, EditInset, EditSideInset, EditInset);
         var tools = Tools();
         var shown = barTools.Take(barGap >= 0 ? BarRoom - 1 : BarRoom).Select(id => (GridTile?)tools[id]).ToList();
         if (barGap >= 0)
@@ -1776,7 +1794,7 @@ public sealed class KeyPanel
         foreach (var tool in shown)
         {
             var slot = tool is null ? new View(context) : EditingTool(tool);
-            group.AddView(slot, new LinearLayout.LayoutParams(Dp(EditToolDp), ViewGroup.LayoutParams.MatchParent) { LeftMargin = barSlots.Count > 0 ? Dp(EditToolGapDp) : 0 });
+            group.AddView(slot, new LinearLayout.LayoutParams(ToolDiameter, ViewGroup.LayoutParams.MatchParent) { LeftMargin = barSlots.Count > 0 ? Dp(ToolGapDp) : 0 });
             barSlots.Add(slot);
         }
 

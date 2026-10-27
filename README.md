@@ -318,8 +318,9 @@ a window that does.
   this screen's in it; designed floating, the design is the keyboard's
   floating one, docked it stays as it was.
 - **⊞ › ✏** customises the toolbar and the grid: a button held
-  is dragged between them, its name in sight; the toolbar's buttons show
-  their names as the mouse rests on them.
+  is dragged between them, its name in sight; the toolbar holds as many
+  round buttons as fit between ⊞ and 🎤, side by side all but touching;
+  its buttons show their names as the mouse rests on them.
 - **Emoji**: the comma held, or ⊞'s Emojis, opens them in the keys' place,
   by group with a tab for each, those typed lately first; once one is
   typed, the latest are in a row over the toolbar.
