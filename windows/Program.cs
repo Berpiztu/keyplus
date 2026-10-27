@@ -18,7 +18,8 @@ public static class Program
     {
         var settings = arguments.Contains(SettingsWindow.Argument);
         var hidden = arguments.Contains(HiddenArgument);
-        using var running = new Mutex(true, settings ? @"Local\Berpiztu.KeyPlus.Windows.Settings" : @"Local\Berpiztu.KeyPlus.Windows", out var first);
+        using var running = new Mutex(false, settings ? @"Local\Berpiztu.KeyPlus.Windows.Settings" : @"Local\Berpiztu.KeyPlus.Windows");
+        var first = Take(running, arguments.Contains(Elevation.ReplacingArgument) ? Elevation.ReplacingWait : TimeSpan.Zero);
         if (!first)
         {
             var open = FindWindow(null, settings ? Texts.Get(Resource.String.settings_title) : KeyboardWindow.WindowTitle);
@@ -32,6 +33,13 @@ public static class Program
                 PostMessage(open, KeyboardWindow.ShowMessage, IntPtr.Zero, IntPtr.Zero);
             }
 
+            return;
+        }
+
+        // Start as administrator: started again through Windows' question, which waits for this one to go; answered
+        // no, it runs as it is.
+        if (!settings && !Elevation.Running && KeyboardPreferences.Read().AsAdministrator && Elevation.StartAgain(arguments))
+        {
             return;
         }
 
@@ -62,6 +70,19 @@ public static class Program
 
     /// <summary>The argument that starts the keyboard out of sight.</summary>
     public const string HiddenArgument = "--hidden";
+
+    /// <summary>Whether this is the one running, waiting as long for one closing; one that ended without letting go has gone all the same.</summary>
+    private static bool Take(Mutex running, TimeSpan wait)
+    {
+        try
+        {
+            return running.WaitOne(wait);
+        }
+        catch (AbandonedMutexException)
+        {
+            return true;
+        }
+    }
 
     private const int Restore = 9;
 

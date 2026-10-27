@@ -201,6 +201,11 @@
   <string name="troubleshooting_vscode_done">Puesto en %1$s accesos directos: cierra VS Code y vuelve a abrirlo desde uno de ellos.</string>
   <string name="troubleshooting_vscode_already">Todos los accesos directos de VS Code ya lo tienen.</string>
   <string name="troubleshooting_vscode_none">No se encontró ningún acceso directo de VS Code en el menú Inicio, la barra de tareas ni el escritorio.</string>
+  <string name="troubleshooting_admin">Ventanas como administrador</string>
+  <string name="troubleshooting_admin_why">Si el teclado no sale o no escribe en algunas ventanas (el Administrador de tareas, un terminal o un instalador abiertos como administrador), es que ellas corren como administrador y el teclado no: Windows solo deja entrar a un programa en una ventana que corre como él.</string>
+  <string name="troubleshooting_admin_start">Arrancar como administrador</string>
+  <string name="troubleshooting_admin_start_summary">Windows pide permiso cada vez que arranca el teclado. Al activarlo, el teclado se vuelve a abrir como administrador en el momento; al quitarlo, arranca normal desde la próxima vez</string>
+  <string name="running_as_administrator">Abierto como administrador</string>
   <string name="windows_delete_ask">¿Borrar %1$s? Si el teclado lo muestra, vuelve a Estándar PC.</string>
   <string name="keyboards_saved_summary">Guardar como copia el teclado elegido con el nombre escrito; Borrar quita uno guardado</string>
   <string name="keyboard">Teclado</string>

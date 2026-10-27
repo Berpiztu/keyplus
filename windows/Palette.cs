@@ -72,7 +72,6 @@ public sealed class Palette
         Primary = Tone(0);
         OnPrimary = Readable(Primary);
         Outline = Mix(background, foreground, 0.45);
-        Handle = Mix(background, foreground, 0.35);
     }
 
     /// <summary>Tema's choice it was made for, and Personalizado's colours.</summary>
@@ -119,8 +118,6 @@ public sealed class Palette
     /// <summary>An empty row's outline while designing, Android's: the outline half seen.</summary>
     public Color FaintOutline => Color.FromArgb(128, Outline.R, Outline.G, Outline.B);
 
-    /// <summary>The floating card's handle.</summary>
-    public Color Handle { get; }
 
     /// <summary>The colours as Tema's choice has them.</summary>
     public static Palette Read(KeyboardPreferences chosen) => new(new UISettings(), chosen);

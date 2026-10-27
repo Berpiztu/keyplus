@@ -1231,6 +1231,14 @@ public sealed class SettingsWindow : Window
         vscode.Children.Add(put);
         vscode.Children.Add(done);
         form.Children.Add(Field(Resource.String.troubleshooting_vscode, vscode, null));
+
+        // Windows run as administrator: why the keyboard is kept out of them, and the keyboard run so too (Elevation).
+        var admin = new StackPanel();
+        admin.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.troubleshooting_admin_why), TextWrapping = TextWrapping.Wrap });
+        var asAdministrator = new CheckBox { Content = Texts.Get(Resource.String.troubleshooting_admin_start), IsChecked = KeyboardPreferences.Read().AsAdministrator, Margin = new Thickness(0, FieldGapDp / 2, 0, 0) };
+        asAdministrator.Click += (_, _) => (KeyboardPreferences.Read() with { AsAdministrator = asAdministrator.IsChecked == true }).Keep();
+        admin.Children.Add(asAdministrator);
+        form.Children.Add(Field(Resource.String.troubleshooting_admin, admin, Resource.String.troubleshooting_admin_start_summary));
         form.Children.Add(Field(Resource.String.troubleshooting_log, new TextBox { Text = Log.File, IsReadOnly = true }, Resource.String.troubleshooting_log_summary));
         var detailed = new CheckBox { Content = Texts.Get(Resource.String.troubleshooting_detailed_log), IsChecked = KeyboardPreferences.Read().DetailedLog };
         detailed.Click += (_, _) =>

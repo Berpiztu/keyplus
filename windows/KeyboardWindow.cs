@@ -37,8 +37,8 @@ public sealed class KeyboardWindow : Window
     public const double BarDp = 40;
     private const double SignDp = 22;
     private const double HandleBandDp = 22;
-    private const double HandleWidthDp = 40;
-    private const double HandleHeightDp = 4;
+    /// <summary>The size of the short words the card shows by themselves: the toolbar's notices, the band's administrator.</summary>
+    private const double NoticeFontSize = 13;
     private const double MinWidthDp = 360;
 
     /// <summary>Windows' message as a window's place is about to change.</summary>
@@ -394,7 +394,7 @@ public sealed class KeyboardWindow : Window
                 ChooseKeyboard(Keyboards.Selected(preferences, keys.KeyLanguage.Code));
             }
         });
-        notice = new TextBlock { Foreground = new SolidColorBrush(colors.Glyph), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, FontSize = 13 };
+        notice = new TextBlock { Foreground = new SolidColorBrush(colors.Glyph), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, FontSize = NoticeFontSize };
         noticeTimer.Tick += (_, _) =>
         {
             noticeTimer.Stop();
@@ -472,16 +472,18 @@ public sealed class KeyboardWindow : Window
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(VisibilityProperty, typeof(Grid)).AddValueChanged(suggestions, (_, _) => ShowTools());
         Moves(bar);
 
+        // The band under the keys: Windows moves the window from anywhere on it, so it needs no handle drawn; it says
+        // whether the keyboard runs as administrator (Troubleshooting's Start as administrator), empty otherwise.
         var handle = new Border
         {
             Height = HandleBandDp,
             Background = Brushes.Transparent,
-            Child = new Border
+            Child = new TextBlock
             {
-                Width = HandleWidthDp,
-                Height = HandleHeightDp,
-                CornerRadius = new CornerRadius(HandleHeightDp / 2),
-                Background = new SolidColorBrush(colors.Handle),
+                Text = Elevation.Running ? Texts.Get(Resource.String.running_as_administrator) : "",
+                FontWeight = FontWeights.Bold,
+                FontSize = NoticeFontSize,
+                Foreground = new SolidColorBrush(colors.Glyph),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             },
@@ -523,6 +525,7 @@ public sealed class KeyboardWindow : Window
         ShowEmojiRow();
         Restore();
         ShowSwitcher();
+        Activated += (_, _) => GiveFrontBack();
         Closing += (_, e) =>
         {
             // Closed from its taskbar button: hidden, as ✕; only Salir ends it.
@@ -577,6 +580,9 @@ public sealed class KeyboardWindow : Window
             SetDocked(true);
         }
 
+        // Run as administrator, the keyboard is still shown by the program started again as usual (from the Start menu),
+        // whose message Windows would otherwise keep from it.
+        ChangeWindowMessageFilterEx(new WindowInteropHelper(this).Handle, ShowMessage, AllowMessage, IntPtr.Zero);
         HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook((IntPtr window, int message, IntPtr w, IntPtr l, ref bool handled) =>
         {
             if ((uint)message == ShowMessage)
@@ -848,6 +854,14 @@ public sealed class KeyboardWindow : Window
         // would each make another keyboard.
         if (remade)
         {
+            return;
+        }
+
+        // Start as administrator turned on: started again so at once, this one closing once Windows' question is answered yes.
+        if (kept.AsAdministrator && !preferences.AsAdministrator && !Elevation.Running && Elevation.StartAgain([]))
+        {
+            remade = true;
+            Quit();
             return;
         }
 
@@ -1441,7 +1455,25 @@ public sealed class KeyboardWindow : Window
             DragMove();
             moving = false;
             Keep();
+            GiveFrontBack();
         };
+    }
+
+    /// <summary>
+    /// The keyboard activated by Windows after all (a drag begun with the shell or a WinUI app in front): the front given
+    /// back to the window typed in, where its keys go; after a drag, once it ends, for taking the front away during one
+    /// would end it.
+    /// </summary>
+    private void GiveFrontBack()
+    {
+        var back = focus.LastFront;
+        if (!IsActive || moving || back == IntPtr.Zero)
+        {
+            return;
+        }
+
+        Log.Detail("Keyboard: activated by Windows, the front given back to the window typed in");
+        SetForegroundWindow(back);
     }
 
     /// <summary>The bar, the handle and the shadow's band around the keys, at the window's height for rows at a share of Gboard's; docked, the bar alone.</summary>
@@ -1923,6 +1955,14 @@ public sealed class KeyboardWindow : Window
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string name);
+
+    private const uint AllowMessage = 1;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr window, uint message, uint action, IntPtr filter);
 
     /// <summary>
     /// Shift tapped twice, as on Android: the text selected in the window

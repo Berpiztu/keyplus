@@ -274,6 +274,11 @@ namespace Berpiztu.KeyPlus
             public const int try_email = 205;
             public const int try_web = 206;
             public const int app_list = 207;
+            public const int troubleshooting_admin = 208;
+            public const int troubleshooting_admin_why = 209;
+            public const int troubleshooting_admin_start = 210;
+            public const int troubleshooting_admin_start_summary = 211;
+            public const int running_as_administrator = 212;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

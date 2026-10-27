@@ -207,6 +207,11 @@
   <string name="troubleshooting_vscode_done">Put in %1$s shortcuts: close VS Code and open it again from one of them.</string>
   <string name="troubleshooting_vscode_already">Every VS Code shortcut has it already.</string>
   <string name="troubleshooting_vscode_none">No VS Code shortcut was found in the Start menu, the taskbar or on the desktop.</string>
+  <string name="troubleshooting_admin">Windows run as administrator</string>
+  <string name="troubleshooting_admin_why">If the keyboard does not show or type in some windows (Task Manager, a terminal or an installer opened as administrator), they run as administrator and the keyboard does not: Windows lets a program into a window only when it runs as that window does.</string>
+  <string name="troubleshooting_admin_start">Start as administrator</string>
+  <string name="troubleshooting_admin_start_summary">Windows asks for permission each time the keyboard starts. Turned on, the keyboard starts again as administrator at once; turned off, it starts as usual from the next time</string>
+  <string name="running_as_administrator">Opened as administrator</string>
   <string name="windows_delete_ask">Delete %1$s? If the keyboard shows it, it goes back to Standard PC.</string>
   <string name="keyboards_saved_summary">Save as copies the keyboard chosen under the name written; Delete takes a saved one away</string>
   <string name="keyboard">Keyboard</string>

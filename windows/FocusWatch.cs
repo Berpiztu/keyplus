@@ -67,6 +67,13 @@ public sealed class FocusWatch : IDisposable
     /// <summary>Set on the keyboard's thread: nothing more is told once the watch is disposed.</summary>
     private bool disposed;
 
+    /// <summary>The focus as UI Automation tells it, for what WinEvents do not (WinUI apps); none where it cannot be had.</summary>
+    private readonly AutomationFocus? automationFocus;
+
+    /// <summary>On the watch's thread: what UI Automation told focused last, and when a WinEvent last told a focus.</summary>
+    private AutomationFocus.Focused? automationFocused;
+    private long focusSeenAt;
+
     public FocusWatch()
     {
         seen = Seen;
@@ -91,6 +98,9 @@ public sealed class FocusWatch : IDisposable
         thread.Start();
         started.Wait();
         watching = made!;
+
+        // Off this thread and the watch's, which are single-threaded apartments: UI Automation's clients are best in a multithreaded one.
+        automationFocus = Task.Run(() => AutomationFocus.Start(focused => watching.BeginInvoke(() => SeenByAutomation(focused)))).Result;
     }
 
     /// <summary>On the watch's thread: its timers, then its hooks, whose calls come to the thread that set them.</summary>
@@ -106,6 +116,14 @@ public sealed class FocusWatch : IDisposable
             if (CaretInForeground())
             {
                 Log.Detail("Focus: no caret came, but the window still shows one: still writing");
+                TellTextFocused(FrontApp());
+                return;
+            }
+
+            // A WinUI app's field (Task Manager's filter): its window tells only its client focused, UI Automation the field.
+            if (automationFocused is { Editable: true } field && field.Process == FrontProcess())
+            {
+                Log.Detail("Focus: UI Automation has a field focused there: writing");
                 TellTextFocused(FrontApp());
                 return;
             }
@@ -161,7 +179,50 @@ public sealed class FocusWatch : IDisposable
     public void Dispose()
     {
         disposed = true;
+        automationFocus?.Dispose();
         watching.BeginInvokeShutdown(DispatcherPriority.Send);
+    }
+
+    /// <summary>
+    /// A focus UI Automation told, on the watch's thread: a field is text typed in at once; anything else, where no
+    /// WinEvent told a focus just now (a WinUI app, whose window tells none inside it), waits for a caret as a
+    /// WinEvent's focus does. Menus are left to the WinEvents, which place them; the keyboard's own windows to
+    /// them too.
+    /// </summary>
+    private void SeenByAutomation(AutomationFocus.Focused focused)
+    {
+        try
+        {
+            var name = NameOf(focused.Process);
+            if (name == Process.GetCurrentProcess().ProcessName)
+            {
+                return;
+            }
+
+            automationFocused = focused;
+            if (focused.Menu)
+            {
+                return;
+            }
+
+            if (focused.Editable)
+            {
+                focusSettling.Stop();
+                Log.Detail($"Focus: {focused.Kind} in {name}, by UI Automation: writing");
+                Tell(() => Field = focused.Place);
+                TellTextFocused(name);
+            }
+            else if (Environment.TickCount64 - focusSeenAt > CaretAfterFocus.TotalMilliseconds)
+            {
+                Log.Detail($"Focus: {focused.Kind} in {name}, by UI Automation");
+                focusSettling.Stop();
+                focusSettling.Start();
+            }
+        }
+        catch (Exception failed)
+        {
+            Log.Write($"Focus: a UI Automation focus could not be followed: {failed}");
+        }
     }
 
     private IntPtr Hook(uint first, uint last) => SetWinEventHook(first, last, IntPtr.Zero, seen, 0, 0, OutOfContext);
@@ -183,7 +244,20 @@ public sealed class FocusWatch : IDisposable
     {
         if (kind == ForegroundChanged)
         {
+            if (!OwnWindow(window))
+            {
+                Interlocked.Exchange(ref lastFront, window);
+            }
+
             Awaken(window);
+            return;
+        }
+
+        // The keyboard's own window focused (Windows activates it at times, a drag begun with the shell in front): not the
+        // text left, for the keyboard gives the front back to the window typed in (LastFront).
+        if (kind == ObjectFocus && OwnWindow(window))
+        {
+            Log.Detail("Focus: the keyboard's own window, the text not left");
             return;
         }
 
@@ -245,6 +319,7 @@ public sealed class FocusWatch : IDisposable
             var menu = kind == MenuPopupStart || role is MenuItemRole or MenuPopupRole or MenuBarRole;
             if (kind == ObjectFocus)
             {
+                focusSeenAt = Environment.TickCount64;
                 focusSettling.Stop();
                 if (!menu)
                 {
@@ -468,9 +543,39 @@ public sealed class FocusWatch : IDisposable
     private static string ProcessOf(IntPtr window)
     {
         GetWindowThreadProcessId(window, out var id);
+        return NameOf((int)id);
+    }
+
+    /// <summary>The window in front last that is not the keyboard's own, where it gives the front back when Windows activates it; none yet.</summary>
+    public IntPtr LastFront => Interlocked.CompareExchange(ref lastFront, IntPtr.Zero, IntPtr.Zero);
+
+    private IntPtr lastFront;
+
+    /// <summary>Whether a window is the keyboard's own process's (the keyboard, its icon), not the settings', which are a program apart.</summary>
+    private static bool OwnWindow(IntPtr window)
+    {
+        GetWindowThreadProcessId(window, out var id);
+        return id == Environment.ProcessId;
+    }
+
+    /// <summary>The process of the window in front, by its id; 0, none.</summary>
+    private static int FrontProcess()
+    {
+        var front = GetForegroundWindow();
+        if (front == IntPtr.Zero)
+        {
+            return 0;
+        }
+
+        GetWindowThreadProcessId(front, out var id);
+        return (int)id;
+    }
+
+    private static string NameOf(int id)
+    {
         try
         {
-            using var process = Process.GetProcessById((int)id);
+            using var process = Process.GetProcessById(id);
             return process.ProcessName;
         }
         catch (Exception gone) when (gone is ArgumentException or InvalidOperationException)
