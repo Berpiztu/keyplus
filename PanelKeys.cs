@@ -29,7 +29,10 @@ public enum Held
 /// the editor's own keyboard layout, and sends its key (Code) only with Ctrl
 /// or Alt held. A key may be another with Fn held (FnLabel, FnCode): F1 for
 /// the 1, Home for the left arrow; or with Shift held (ShiftLabel,
-/// ShiftCode), sent without Shift: Supr for ⌫. A key that OpensFull, held
+/// ShiftCode), sent without Shift: Supr for ⌫; or with Ctrl held (CtrlLabel,
+/// CtrlCode), sent with it: the two rows' PgUp and PgDn are Ctrl+C and Ctrl+X,
+/// which a letter typed on the phone's keyboard cannot be, for it takes the
+/// selection's place before KeyPlus sees it. A key that OpensFull, held
 /// still a moment, opens the full Keys window from the two rows instead of
 /// repeating: PgUp; one that OpensResize, the frame that sizes the two rows:
 /// PgDn.
@@ -49,7 +52,9 @@ public sealed record PanelKey(
     string? ShiftLabel = null,
     Keycode? ShiftCode = null,
     bool OpensFull = false,
-    bool OpensResize = false)
+    bool OpensResize = false,
+    string? CtrlLabel = null,
+    Keycode? CtrlCode = null)
 {
     public bool IsModifier => Modifier != Held.None;
 
@@ -151,7 +156,7 @@ public static class PanelKeys
             new("Home", Keycode.MoveHome, Weight: 1.25f),
             new("↑", Keycode.DpadUp, Repeats: true),
             new("End", Keycode.MoveEnd),
-            new("PgUp", Keycode.PageUp, Weight: 0.5f, OpensFull: true),
+            new("PgUp", Keycode.PageUp, Weight: 0.5f, OpensFull: true, CtrlLabel: "Ctrl+C", CtrlCode: Keycode.C),
             new("⌫", Keycode.Del, Repeats: true, Weight: 1.75f, ShiftLabel: "Supr", ShiftCode: Keycode.ForwardDel),
         ],
         [
@@ -160,7 +165,7 @@ public static class PanelKeys
             new("←", Keycode.DpadLeft, Repeats: true, Weight: 1.25f),
             new("↓", Keycode.DpadDown, Repeats: true),
             new("→", Keycode.DpadRight, Repeats: true),
-            new("PgDn", Keycode.PageDown, Weight: 0.5f, OpensResize: true),
+            new("PgDn", Keycode.PageDown, Weight: 0.5f, OpensResize: true, CtrlLabel: "Ctrl+X", CtrlCode: Keycode.X),
             new("Alt", Keycode.AltLeft, Held.Alt, Weight: 0.5f),
             new("⏎", Keycode.Enter, Weight: 1.25f),
         ],

@@ -199,6 +199,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             text => Refocused(() => TypeText(text)))
         {
             Dockable = false,
+            OffersWholeKeyboard = false,
         };
         var width = Math.Max(1, bounds.Width() / 2);
         panel.Root.Measure(
@@ -1184,7 +1185,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         var context = CreateWindowContext(display, (int)WindowManagerTypes.AccessibilityOverlay, null);
         var windowManager = context.GetSystemService(WindowService).JavaCast<IWindowManager>()!;
         // Sized as the keyboard is, with the title bar's resize and its frame, not by the corners' grips.
-        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText) { ShowsResizeButton = true };
+        var panel = new KeyPanel(context, KeyPlusPreferences.ForScreen(this, screen), Clipboard, SendKey, TypeText) { ShowsResizeButton = true, OffersWholeKeyboard = false };
         var frame = new KeyboardFrame(context, small: true);
         panel.AddOverlay(frame);
         panel.ResizeRequested += ShowFrame;

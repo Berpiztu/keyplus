@@ -1655,6 +1655,28 @@ public sealed class KeyPanel
         }
     }
 
+    /// <summary>
+    /// Whether the title bar offers ABC, the whole keyboard: not in KeyPlus's windows, where the whole keyboard is
+    /// Berpiztu AI Keyboard's; there the keys are kept, a window left on the whole keyboard back on them.
+    /// </summary>
+    public bool OffersWholeKeyboard
+    {
+        set
+        {
+            switchKeys.Visibility = value ? ViewStates.Visible : ViewStates.Gone;
+            chipSwitchKeys.Visibility = switchKeys.Visibility;
+            if (!value && wholeKeyboard.Visibility == ViewStates.Visible)
+            {
+                SetWholeKeyboard(false);
+            }
+
+            if (titleBar.Width > 0)
+            {
+                FitTitleBar(titleBar.Width);
+            }
+        }
+    }
+
     /// <summary>A view laid over the whole window, above the keys and the bars (the frame that sizes it, <see cref="KeyboardFrame"/>).</summary>
     public void AddOverlay(View over) =>
         root.AddView(over, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
@@ -4908,7 +4930,7 @@ public sealed class KeyPanel
             view = KeyView(key.Label);
             view.SetPadding(Dp(KeyPaddingDp), Dp(KeyPaddingDp), Dp(KeyPaddingDp), Dp(KeyPaddingDp));
             labelKeys.Add((view, PanelKeys.GlyphFactor(key.Label), key.Label));
-            if (key.FnLabel is not null || key.ShiftLabel is not null)
+            if (key.FnLabel is not null || key.ShiftLabel is not null || key.CtrlLabel is not null)
             {
                 fnKeys.Add((key, view));
             }
@@ -5165,9 +5187,11 @@ public sealed class KeyPanel
         // A letter right after a swiped word starts the next word, a space between, as Gboard's.
         var spaceFirst = EndSwipe(key.IsLetter);
 
-        // With Shift held, a key that is another then (⌫ Supr) sends that one, without Shift.
+        // With Shift held, a key that is another then (⌫ Supr) sends that one, without Shift; with Ctrl held, one that is
+        // a shortcut then (the two rows' PgUp, Ctrl+C) sends that one, with Ctrl.
         var shifted = held.HasFlag(Held.Shift) && key.ShiftCode is not null;
         var code = held.HasFlag(Held.Fn) && key.FnCode is { } fnCode ? fnCode
+            : held.HasFlag(Held.Ctrl) && key.CtrlCode is { } ctrlCode ? ctrlCode
             : shifted ? key.ShiftCode!.Value
             : key.Code;
         if (code == key.Code && key.IsCharacter && ((held & KeyModifiers) == Held.None || key.Code == Keycode.Unknown))
@@ -5263,6 +5287,7 @@ public sealed class KeyPanel
         foreach (var (key, view) in fnKeys)
         {
             view.Text = held.HasFlag(Held.Fn) && key.FnLabel is { } fnLabel ? fnLabel
+                : held.HasFlag(Held.Ctrl) && key.CtrlLabel is { } ctrlLabel ? ctrlLabel
                 : held.HasFlag(Held.Shift) && key.ShiftLabel is { } shiftLabel ? shiftLabel
                 : key.Label;
         }

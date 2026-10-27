@@ -354,7 +354,9 @@ a window that does.
 - **Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z and Ctrl+Y** have keys of their own, in
   the top row, beside **Del** (delete forward); **⌫** (Backspace) and **⏎**
   (Enter) end the terminal's two rows.
-- **ABC** in the title bar turns the window into a whole keyboard laid out
+- **ABC** in the title bar (Berpiztu AI Keyboard on a headset; KeyPlus's
+  windows have none, the whole keyboard being Berpiztu AI Keyboard's, and
+  one left on it opens on the keys) turns the window into a whole keyboard laid out
   as Windows' touch keyboard lays out Spain's (ISO, es-ES), each key labelled
   as there: ñ, ç, ¡ ¿ º ª, Alt Gr for \ | @ # ~ € ¬ [ ] { }, Caps Lock, ´ ` ^ ¨
   as dead keys (´ then a is á, ¨ then u is ü), Enter as tall as two rows,
@@ -382,7 +384,10 @@ a window that does.
   and no shortcuts' row, the terminal's two rows as Termux has them, the
   arrows a cross, PgUp and PgDn narrow, Alt beside PgDn, and ⌫ wider, which
   is Delete with Shift held. Hold **PgUp** a moment to open the full window
-  again, and **PgDn** a moment to size the two rows (neither repeats there). Whether it is two rows is kept for each screen, with its own place
+  again, and **PgDn** a moment to size the two rows (neither repeats there).
+  With **Ctrl** held, PgUp is **Ctrl+C** and PgDn **Ctrl+X**: a "c" or an "x"
+  typed on your keyboard would take the selection's place before KeyPlus sees
+  it, so copying and cutting have keys of their own. Whether it is two rows is kept for each screen, with its own place
   and size ([doc/compact-keys.md](doc/compact-keys.md)).
 - **Keys repeat while held**, as a keyboard's do: every key acts on the
   touch, and one that types or sends a key goes on doing it while held. Not
