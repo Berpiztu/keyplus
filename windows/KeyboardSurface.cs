@@ -1286,8 +1286,10 @@ public sealed class KeyboardSurface : FrameworkElement
     private bool ShiftedFor(StandardKey key) =>
         key.Text is { Length: 1 } one && char.IsLetter(one[0]) ? (shift != Shift.Off) != capsLock : shift != Shift.Off;
 
+    /// <summary>Whether a key is on, its whole key in Caps Lock's colour: the modifiers, Caps Lock, and on a PC's keys Shift (Gboard's shows it by its sign alone).</summary>
     private bool IsOn(StandardKey key) => key.Action switch
     {
+        StandardAction.Shift => pc && shift != Shift.Off,
         StandardAction.Ctrl => ctrl,
         StandardAction.Alt => alt,
         StandardAction.Meta => meta,
