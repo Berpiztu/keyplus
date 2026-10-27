@@ -404,13 +404,13 @@ a window that does.
   Berpiztu AI Keyboard's Resize does: drag its left or right edge for the
   window's width, its top or bottom edge for the size of its keys (docked, it
   grows upwards from the keyboard), or ✥ to move it, with Dock off; **📌
-  Dock** sticks it to the keyboard where it stands across it, or leaves it
+  Dock** sticks it right above the keyboard, as wide as it, or leaves it
   where it is; **Reset** takes it back to its usual size, **Cancel** to what it
   was when the frame opened, **Done** closes it. The two rows (▭) always stand
   stuck above the keyboard; **PgDn** held still a moment lays the frame over
   them to size them, without 📌 or ✥. Over a floating keyboard (Gboard's) the
-  window and the two rows keep a place and a size of their own, apart from
-  those over a docked keyboard, as each screen (upright, on its side, DeX)
+  window and the two rows keep a place, a size and a Dock of their own, apart
+  from those over a docked keyboard, as each screen (upright, on its side, DeX)
   keeps its own.
 - **The labels.** Each key is a table of three by three cells: its shifted
   character in the top left, its plain one in the middle and its Alt Gr one

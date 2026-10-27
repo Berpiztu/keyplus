@@ -40,8 +40,9 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// <summary>Whether the window floats, one for the screen whatever its mode: docked in three rows, it stays docked in two.</summary>
     private const string WindowFloatingKey = "windowFloating";
 
-    /// <summary>Whether the window is stuck to the keyboard (<see cref="Dock"/>), one for the screen.</summary>
+    /// <summary>Whether the window is stuck to the keyboard (<see cref="Dock"/>): over a docked keyboard, and over a floating one.</summary>
     private const string DockKey = "dock";
+    private const string FloatingKeyboardDockKey = "dock.floatingKeyboard";
     private const string XKey = "x";
     private const string YKey = "y";
     private const string WidthKey = "width";
@@ -96,11 +97,32 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
     /// <summary>
     /// Dock (the resize frame's 📌): the window stuck right above the keyboard, moving with it, whether it shows only
     /// with the keyboard or all the time (<see cref="Floating"/>); with no keyboard open, where it stood last above it.
-    /// Off, where the user left it. One for the screen; where none is kept yet, on, unless the window floated or was
-    /// moved (a width of its own in Keys, as a moved window had before Dock).
+    /// Off, where the user left it. One over a docked keyboard and one over a floating one (<see cref="OverFloatingKeyboard"/>),
+    /// each kept for the screen. Where none is kept yet over a docked keyboard, on, unless the window floated or was
+    /// moved (a width of its own in Keys, as a moved window had before Dock); over a floating one, as over a docked one.
     /// </summary>
-    public bool Dock { get; set; } = preferences.GetBoolean(DockKey,
-        !FloatsIn(preferences) && preferences.GetInt(Keyed(KeysMode, WidthKey), 0) == 0);
+    public bool Dock
+    {
+        get => OverFloatingKeyboard ? dockOverFloating : dockOverDocked;
+        set
+        {
+            if (OverFloatingKeyboard)
+            {
+                dockOverFloating = value;
+            }
+            else
+            {
+                dockOverDocked = value;
+            }
+        }
+    }
+
+    private bool dockOverDocked = DockedIn(preferences);
+    private bool dockOverFloating = preferences.GetBoolean(FloatingKeyboardDockKey, DockedIn(preferences));
+
+    /// <summary>Dock over a docked keyboard as kept, or, where none is, on unless the window floated or was moved.</summary>
+    private static bool DockedIn(ISharedPreferences preferences) =>
+        preferences.GetBoolean(DockKey, !FloatsIn(preferences) && preferences.GetInt(Keyed(KeysMode, WidthKey), 0) == 0);
 
     private static bool FloatsIn(ISharedPreferences preferences) => preferences.GetBoolean(WindowFloatingKey,
         preferences.GetBoolean(Keyed(KeysMode, FloatingKey), preferences.GetBoolean(FloatingKey, false)));
@@ -193,7 +215,7 @@ public sealed class PanelPlacement(ISharedPreferences preferences)
 
     public void Save()
     {
-        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!.PutBoolean(WindowFloatingKey, Floating)!.PutBoolean(DockKey, Dock)!;
+        var editor = preferences.Edit()!.PutInt(IconXKey, IconX)!.PutInt(IconYKey, IconY)!.PutBoolean(WindowFloatingKey, Floating)!.PutBoolean(DockKey, dockOverDocked)!.PutBoolean(FloatingKeyboardDockKey, dockOverFloating)!;
         foreach (var (way, layout) in layouts)
         {
             editor = editor

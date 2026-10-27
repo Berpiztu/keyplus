@@ -696,8 +696,6 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             gravity = GravityFlags.Top | GravityFlags.Left;
         }
 
-        shownKeyboard = keyboard;
-
         // The panel's own window changing is a windows change too: placing it
         // again where it already is would only call this once more.
         if (panel.Root.Visibility == ViewStates.Visible
@@ -867,12 +865,9 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         shown.Panel.Root.SetMinimumHeight(0);
     }
 
-    /// <summary>The keyboard the panel was placed by last; none, none was open.</summary>
-    private Keyboard? shownKeyboard;
-
     /// <summary>
-    /// The frame's 📌 Dock: stuck to the keyboard, the panel keeps its width and its place across the keyboard, measured
-    /// from the keyboard's left edge, and goes right above it; let go, it stays where it is now.
+    /// The frame's 📌 Dock: stuck to the keyboard, the panel goes right above it, as wide as it and its left edge on the
+    /// keyboard's, for the frame to size it from there; let go, it stays where it is now.
     /// </summary>
     private void OnDockToggled()
     {
@@ -881,7 +876,6 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             return;
         }
 
-        var root = overlay.Panel.Root;
         if (placed.Dock)
         {
             StartPlacing(KeyPanel.Drag.Start);
@@ -889,11 +883,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
         }
         else
         {
-            var location = new int[2];
-            root.GetLocationOnScreen(location);
-            var display = overlay.WindowManager.MaximumWindowMetrics.Bounds;
-            placed.DockedWidth = root.Width;
-            placed.DockedX = shownKeyboard is { } open ? location[0] - display.Left - (open.Bounds.Left - display.Left) : 0;
+            (placed.DockedX, placed.DockedWidth) = (0, 0);
             placed.Dock = true;
         }
 
