@@ -143,6 +143,7 @@ public sealed class MainActivity : Activity
         // Android 15 lays the app out from the screen's edges, under its bars
         // and the keyboard: the page keeps clear of them.
         page.SetOnApplyWindowInsetsListener(new Insets(padding));
+        page.AddView(TryBox());
         var rest = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f);
         rest.SetMargins(-padding, 0, -padding, 0);
         page.AddView(scroll, rest);
