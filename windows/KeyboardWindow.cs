@@ -995,7 +995,8 @@ public sealed class KeyboardWindow : Window
     {
         // Off from the toolbar (writing code), nothing is corrected or offered (Applied); the choices stay as they are.
         ShowSpellingButton(kept);
-        keys.CapitalizesSentences = kept.CapitalizeSentences;
+        // Spelling off corrects nothing, a sentence's capital neither.
+        keys.CapitalizesSentences = kept.CapitalizeSentences && kept.SpellingOn;
 
         // What words were found to mean may change with what is now turned on.
         spellingEngine.Forget();

@@ -210,7 +210,7 @@ public sealed class FocusWatch : IDisposable
                 focusSettling.Stop();
                 Log.Detail($"Focus: {focused.Kind} in {name}, by UI Automation: writing");
                 Tell(() => Field = focused.Place);
-                TellTextFocused(name);
+                TellTextFocused(name, KindOf(focused.Id, focused.Class));
             }
             else if (Environment.TickCount64 - focusSeenAt > CaretAfterFocus.TotalMilliseconds)
             {
@@ -332,7 +332,7 @@ public sealed class FocusWatch : IDisposable
                 Log.Detail($"Focus: {RoleName(role)} in {ProcessOf(window)}{(editable ? ": writing" : menu ? ": a menu" : "")}");
                 if (editable)
                 {
-                    TellTextFocused(AppOf(window), FocusedFieldKind());
+                    TellTextFocused(AppOf(window));
                 }
                 else if (!menu)
                 {
@@ -366,19 +366,33 @@ public sealed class FocusWatch : IDisposable
         }
     }
 
-    private void TellTextFocused(string? app, StandardField kind = StandardField.Text) => Tell(() =>
+    /// <summary>Text focused, told to the keyboard; its kind as given, else as UI Automation tells what has the focus now (<see cref="FocusedFieldKind"/>).</summary>
+    private void TellTextFocused(string? app, StandardField? kind = null)
     {
-        App = app;
-        FieldKind = kind;
-        TextFocused?.Invoke();
-    });
+        var told = kind ?? FocusedFieldKind();
+        Tell(() =>
+        {
+            App = app;
+            FieldKind = told;
+            TextFocused?.Invoke();
+        });
+    }
 
     /// <summary>
-    /// The kind of the text field focused (<see cref="StandardField"/>), as the keyboard's own settings tell it of their
-    /// boxes to try each kind's keys in, by their UI Automation id (<see cref="FieldIds"/>); Windows tells it of no
-    /// other field, which is text.
+    /// The kind of the text field focused (<see cref="StandardField"/>): the keyboard's own settings tell it of their
+    /// boxes to try each kind's keys in, by their UI Automation id (<see cref="FieldIds"/>), and the browsers' address
+    /// bars are known by theirs (<see cref="KindOf"/>); Windows tells it of no other field, which is text.
     /// </summary>
     public StandardField FieldKind { get; private set; }
+
+    /// <summary>
+    /// A field's kind by its UI Automation id and class: the settings' boxes (<see cref="FieldIds"/>), and a browser's
+    /// address bar a web address's: Chrome's and Edge's (Chromium's OmniboxViewViews), Firefox's (urlbar-input).
+    /// </summary>
+    internal static StandardField KindOf(string? automationId, string? className) =>
+        automationId is not null && FieldIds.TryGetValue(automationId, out var kind) ? kind
+        : className == "OmniboxViewViews" || automationId == "urlbar-input" ? StandardField.Web
+        : StandardField.Text;
 
     /// <summary>The settings' boxes' UI Automation ids, each a kind of field.</summary>
     public const string NumberFieldId = "Berpiztu.Field.Number";
@@ -396,9 +410,8 @@ public sealed class FocusWatch : IDisposable
     {
         try
         {
-            return System.Windows.Automation.AutomationElement.FocusedElement?.Current.AutomationId is { } id && FieldIds.TryGetValue(id, out var kind)
-                ? kind
-                : StandardField.Text;
+            var focused = System.Windows.Automation.AutomationElement.FocusedElement?.Current;
+            return focused is { } now ? KindOf(now.AutomationId, now.ClassName) : StandardField.Text;
         }
         catch (Exception refused) when (refused is ArgumentException or InvalidOperationException or COMException or System.Windows.Automation.ElementNotAvailableException)
         {

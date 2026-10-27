@@ -287,8 +287,8 @@
   <string name="spelling_dictionary_en">English (US)</string>
   <string name="spelling_on">Correct as I type</string>
   <string name="spelling_capitalize">Capital at the start of a sentence</string>
-  <string name="spelling_capitalize_summary">Shift on by itself after . ? or ! and a space, and on a new line; off until turned on, and on whatever is downloaded</string>
-  <string name="spelling_on_summary">Every language\'s Spelling at once, also with the toolbar\'s spellcheck button: off to write code, on again for a message; each language\'s choices stay as they are</string>
+  <string name="spelling_capitalize_summary">Shift on by itself after . ? or ! and a space, and on a new line, while Spelling is on; off until turned on, and on whatever is downloaded</string>
+  <string name="spelling_on_summary">Every language\'s Spelling at once, the capital at a sentence\'s start too, also with the toolbar\'s spellcheck button: off to write code, on again for a message; each language\'s choices stay as they are</string>
   <string name="spelling_accent_closing">Correct accents with the model</string>
   <string name="spelling_accent_closing_summary">When . ? or ! ends a sentence, a model on this device proposes its accents in the toolbar (cómo estás, está limpia); a tap applies them. Off until turned on, when it is downloaded once (diactag, 38 MB)</string>
   <string name="spelling_open_mark">Put ¿ and ¡ at the start</string>

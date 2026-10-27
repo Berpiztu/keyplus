@@ -289,7 +289,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// where the field says a sentence begins, as Gboard's; Android's own
     /// reading of it (after . ? or ! and a space, a new line, the field's
     /// start), only in a field that asks for capitals there (CAP_SENTENCES:
-    /// never an address, a password or a number).
+    /// never an address, a password or a number), and only while Spelling is
+    /// on: off, nothing is corrected, a sentence's capital neither.
     /// </summary>
     private void SentenceShift()
     {
@@ -298,7 +299,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             return;
         }
 
-        var on = KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.CapitalizeSentencesKey, false);
+        var on = KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.CapitalizeSentencesKey, false) && LanguageChoices.SpellingOn(this);
         panel.SentenceStart(on && CurrentInputConnection?.GetCursorCapsMode((Android.Text.CapitalizationMode)(int)info.InputType) is { } mode && mode != 0);
     }
 
@@ -917,6 +918,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         LanguageChoices.SetSpellingOn(this, !LanguageChoices.SpellingOn(this));
         panel!.GridTiles = GridTiles();
+        SentenceShift();
     }
 
     /// <summary>The Glide typing tool: the language typed in swiped or not; without its word list or the model, said in the toolbar with Download beside it for that language alone.</summary>

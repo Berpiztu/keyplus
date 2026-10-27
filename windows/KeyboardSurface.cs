@@ -1599,7 +1599,8 @@ public sealed class KeyboardSurface : FrameworkElement
         var backToLetters = symbolTyped && !Combining && key.Action is StandardAction.Space or StandardAction.Enter;
 
         // A sentence begins after . ? or ! and a space, and after Enter: what these keys typed is all Windows lets them see.
-        var sentenceBegins = CapitalizesSentences && !Combining
+        // Only in a text field: an address (a browser's address bar, an e-mail's) or a number has no sentences.
+        var sentenceBegins = CapitalizesSentences && fieldKind == StandardField.Text && !Combining
             && (key.Action == StandardAction.Enter || (key.Action == StandardAction.Space && lastTyped is '.' or '?' or '!'));
         switch (key.Action)
         {
@@ -1696,8 +1697,21 @@ public sealed class KeyboardSurface : FrameworkElement
         InvalidateVisual();
     }
 
-    /// <summary>Spelling's Capital at the start of a sentence: Shift on by itself after . ? or ! and a space, and after Enter.</summary>
-    public bool CapitalizesSentences { get; set; }
+    /// <summary>Spelling's Capital at the start of a sentence: Shift on by itself after . ? or ! and a space, and after Enter; turned off, one it put on goes.</summary>
+    public bool CapitalizesSentences
+    {
+        get => capitalizesSentences;
+        set
+        {
+            capitalizesSentences = value;
+            if (!value && sentenceShift)
+            {
+                ShiftOnceUsed();
+            }
+        }
+    }
+
+    private bool capitalizesSentences;
 
     /// <summary>Shift on for one key because a sentence began, not by a tap, and since when: ⌫ takes it off again.</summary>
     private bool sentenceShift;

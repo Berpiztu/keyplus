@@ -16,6 +16,8 @@ internal sealed class AutomationFocus : IDisposable
 {
     // UIAutomationClient.h (Windows SDK 10.0.26100.0).
     private const int ProcessIdProperty = 30002;
+    private const int AutomationIdProperty = 30011;
+    private const int ClassNameProperty = 30012;
     private const int ControlTypeProperty = 30003;
     private const int BoundingRectangleProperty = 30001;
     private const int IsValuePatternAvailableProperty = 30043;
@@ -28,8 +30,8 @@ internal sealed class AutomationFocus : IDisposable
 
     private static readonly Guid AutomationClass = new("ff48dba4-60ef-4201-aa87-54103eef594e");
 
-    /// <summary>What has the focus: its process, whether text is typed in it or it is a menu, its kind for the log and its place in pixels.</summary>
-    public readonly record struct Focused(int Process, bool Editable, bool Menu, string Kind, Int32Rect? Place);
+    /// <summary>What has the focus: its process, whether text is typed in it or it is a menu, its kind for the log, its place in pixels, and its UI Automation id and class, which tell a browser's address bar (<see cref="FocusWatch.KindOf"/>).</summary>
+    public readonly record struct Focused(int Process, bool Editable, bool Menu, string Kind, Int32Rect? Place, string? Id, string? Class);
 
     private readonly IUIAutomation automation;
     private readonly Handler handler;
@@ -125,7 +127,9 @@ internal sealed class AutomationFocus : IDisposable
             editable,
             type is MenuControl or MenuBarControl or MenuItemControl,
             kind,
-            place);
+            place,
+            element.GetCurrentPropertyValue(AutomationIdProperty) as string,
+            element.GetCurrentPropertyValue(ClassNameProperty) as string);
     }
 
     // Windows' UI Automation interfaces, as UIAutomationClient.h orders their methods: those not called keep their

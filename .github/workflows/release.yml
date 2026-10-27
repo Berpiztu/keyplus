@@ -106,6 +106,9 @@ jobs:
           "KEYPLUS_KEYSTORE_PASS=$env:KEYSTORE_PASS" >> $env:GITHUB_ENV
 
       - name: Build the APK
+        # security-watch is asked signed in: GitHub's shared runners soon run out of anonymous questions (403).
+        env:
+          GH_TOKEN: ${{ github.token }}
         if: steps.tag.outputs.local != 'true'
         run: .\build-apk.ps1 -NoBump -Product ${{ matrix.product }}
 
