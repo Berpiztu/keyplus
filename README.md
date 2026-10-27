@@ -128,7 +128,10 @@ until Cancel or Save. Preview shows the thing copied whole in the keys'
 place, an image as large as fits, a tap opening it in the phone's own image
 viewer, a text scrolling, a tap opening it in Edit; while a preview shows, a
 tap on a chip previews that one instead of pasting it; ✕ the keys again. An
-image's Edit opens it in the phone's own image editor. A long press on the bar's buttons, its free room
+image's Edit opens it in the phone's own image editor, allowed to save over
+the image in the clipboard; one that saves a copy instead (Google Photos,
+Samsung's), the copy is written into the clipboard's image as the keyboard
+shows again, within ten minutes, the copy staying in the gallery. A long press on the bar's buttons, its free room
 or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
 bar into **✕** and **Clipboard** and opens, in the keys' place as
 rounded tiles, **Smaller text**, **Larger text**, **Normal

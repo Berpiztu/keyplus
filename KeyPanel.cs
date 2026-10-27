@@ -3121,6 +3121,15 @@ public sealed class KeyPanel
         textPreview.ScrollTo(0, 0);
     }
 
+    /// <summary>The keyboard shown again: the thing previewed read again, as the list has it now, an image edited meanwhile changed.</summary>
+    public void PreviewAgain()
+    {
+        if (previewed is { } shown && clipboard.Entries.FirstOrDefault(entry => CopyKey(entry) == CopyKey(shown)) is { } now)
+        {
+            Preview(now);
+        }
+    }
+
     /// <summary>The copied things in the keys' place, a list that scrolls.</summary>
     private void ShowClipboard()
     {

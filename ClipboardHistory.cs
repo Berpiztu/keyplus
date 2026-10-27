@@ -88,6 +88,20 @@ public sealed class ClipboardHistory(Context context)
         Save([.. Entries.Select(kept => kept == entry ? kept with { Text = text } : kept)]);
     }
 
+    /// <summary>
+    /// An image's file written again with another (an edit an editor saved as a copy), its name kept, so it stays
+    /// where it stands, pinned as it was, the same thing to the keyboard; its type the new one's.
+    /// </summary>
+    public void ReplaceImage(Entry entry, Stream image, string mimeType)
+    {
+        using (var file = File.Create(PathOf(entry)))
+        {
+            image.CopyTo(file);
+        }
+
+        Save([.. Entries.Select(kept => kept.Image == entry.Image ? kept with { MimeType = mimeType } : kept)]);
+    }
+
     /// <summary>Something taken out of the list, an image's file with it.</summary>
     public void Remove(Entry entry) => Save([.. Entries.Where(kept => kept != entry)]);
 

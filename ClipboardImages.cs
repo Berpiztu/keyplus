@@ -8,7 +8,8 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// Hands the images Berpiztu AI Keyboard keeps (<see cref="ClipboardHistory"/>)
 /// to the app they are pasted into: content://ai.berpiztu.keyboard.clipboard/name,
-/// readable only by an app the keyboard grants it to as it pastes.
+/// readable only by an app the keyboard grants it to as it pastes, and
+/// writable by the image editor it is opened in (Edit), which saves over it.
 /// </summary>
 [ContentProvider([Authority], Name = "ai.berpiztu.keyboard.ClipboardImages", Exported = false, GrantUriPermissions = true)]
 public sealed class ClipboardImages : ContentProvider
@@ -29,7 +30,8 @@ public sealed class ClipboardImages : ContentProvider
             throw new Java.IO.FileNotFoundException(uri.ToString());
         }
 
-        return ParcelFileDescriptor.Open(file, ParcelFileMode.ReadOnly);
+        // As the app granted it asks: read to paste, write as an editor saves over it (granted only to the editor).
+        return ParcelFileDescriptor.Open(file, ParcelFileDescriptor.ParseMode(mode));
     }
 
     public override string? GetType(Android.Net.Uri uri) =>

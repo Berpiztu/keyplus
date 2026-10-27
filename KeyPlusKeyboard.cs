@@ -322,7 +322,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.ForgetTyping();
             spelling.Forget();
             PrepareLanguage(KeyPlusPreferences.Language(this));
+            TakeEdited();
             panel.GridTiles = GridTiles();
+            panel.PreviewAgain();
             TakeField(info);
             SentenceShift();
 
@@ -569,20 +571,81 @@ public sealed class KeyPlusKeyboard : InputMethodService
         CurrentInputConnection?.CommitContent(content, InputContentFlags.GrantReadUriPermission, null);
     }
 
-    private void EditImage(ClipboardHistory.Entry image) => OpenImage(image, Intent.ActionEdit, "edits", Resource.String.no_image_editor);
+    /// <summary>
+    /// Edit: the editor may write too, so one that saves over it changes the image in the clipboard itself; one that
+    /// saves a copy (Google Photos, Samsung's), the copy is taken in its place as the keyboard shows again (<see cref="TakeEdited"/>).
+    /// </summary>
+    private void EditImage(ClipboardHistory.Entry image)
+    {
+        editing = (image, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        OpenImage(image, Intent.ActionEdit, ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission, "edits", Resource.String.no_image_editor);
+    }
 
-    private void ViewImage(ClipboardHistory.Entry image) => OpenImage(image, Intent.ActionView, "shows", Resource.String.no_image_viewer);
+    /// <summary>The image sent to the editor and when, in seconds as the photos' DATE_ADDED counts them; none, nothing being edited.</summary>
+    private (ClipboardHistory.Entry Image, long Since)? editing;
+
+    /// <summary>How long after Edit a photo saved is taken as the editor's copy.</summary>
+    private static readonly TimeSpan EditingTime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// The keyboard shown again after Edit: the newest photo saved since, not a screenshot, is the editor's copy, and
+    /// is written into the clipboard's image (<see cref="ClipboardHistory.ReplaceImage"/>); the photo stays where the
+    /// editor saved it. None yet (the keyboard opened inside the editor), it is looked for again, for <see cref="EditingTime"/>.
+    /// Only with the right to read the photos, as the screenshots.
+    /// </summary>
+    private void TakeEdited()
+    {
+        if (editing is not { } now || !ScreenshotWatcher.Allowed(this))
+        {
+            return;
+        }
+
+        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - now.Since > EditingTime.TotalSeconds)
+        {
+            editing = null;
+            return;
+        }
+
+        var photos = Android.Provider.MediaStore.Images.Media.ExternalContentUri!;
+        using var found = ContentResolver!.Query(
+            photos,
+            [Android.Provider.IBaseColumns.Id, Android.Provider.MediaStore.IMediaColumns.MimeType],
+            $"{Android.Provider.MediaStore.IMediaColumns.DateAdded} >= ? AND {Android.Provider.MediaStore.IMediaColumns.RelativePath} NOT LIKE ?",
+            [$"{now.Since}", "%Screenshots%"],
+            $"{Android.Provider.MediaStore.IMediaColumns.DateAdded} DESC");
+        if (found is null || !found.MoveToFirst())
+        {
+            return;
+        }
+
+        var id = found.GetLong(0);
+        try
+        {
+            using var copy = ContentResolver.OpenInputStream(ContentUris.WithAppendedId(photos, id))!;
+            clipboard!.ReplaceImage(now.Image, copy, found.GetString(1) ?? now.Image.MimeType ?? "image/png");
+            editing = null;
+            Log.Write($"Clipboard: the image edited taken from the photo the editor saved ({id})");
+        }
+        catch (Exception unreadable) when (unreadable is Java.Lang.SecurityException or Java.IO.IOException or IOException)
+        {
+            // Still being written: read again the next time the keyboard shows.
+            Log.Write($"Clipboard: the photo the editor saved ({id}) could not be read yet: {unreadable.Message}");
+        }
+    }
+
+    private void ViewImage(ClipboardHistory.Entry image) =>
+        OpenImage(image, Intent.ActionView, ActivityFlags.GrantReadUriPermission, "shows", Resource.String.no_image_viewer);
 
     /// <summary>
     /// An image copied opened in the phone's own app for it (its viewer,
-    /// ACTION_VIEW, or its editor, ACTION_EDIT), with the right to read it, as
+    /// ACTION_VIEW, or its editor, ACTION_EDIT), with the rights granted, as
     /// a new task over the app typed in; with none on the phone, told so.
     /// </summary>
-    private void OpenImage(ClipboardHistory.Entry image, string action, string does, int none)
+    private void OpenImage(ClipboardHistory.Entry image, string action, ActivityFlags granted, string does, int none)
     {
         var open = new Intent(action);
         open.SetDataAndType(ClipboardImages.UriOf(image.Image!), image.MimeType);
-        open.AddFlags(ActivityFlags.NewTask | ActivityFlags.GrantReadUriPermission);
+        open.AddFlags(ActivityFlags.NewTask | granted);
         try
         {
             StartActivity(open);
