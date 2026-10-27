@@ -227,6 +227,7 @@
   <string name="preview">Preview</string>
   <string name="no_image_editor">No app on the phone edits images</string>
   <string name="no_image_viewer">No app on the phone shows images</string>
+  <string name="delete_copy_ask">Delete it from the clipboard?</string>
   <string name="erase">Delete</string>
   <string name="spread_keys">Spread out</string>
   <string name="design_reset_ask">The keyboard as it came?</string>

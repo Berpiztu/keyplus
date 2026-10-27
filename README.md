@@ -121,12 +121,14 @@ size of words whatever the keys' size: **⚙** at its left, **ABC** (or
 **Keys**) at its right, and between them the chip of what was copied last,
 for five minutes after it was copied, else **Clipboard**; nothing is drawn over
 anything else. A tap on the chip pastes it, a long press opens its menu
-(Paste, Pin, Edit, Delete; an image's has Preview too). A text's Edit shows its
+(Paste, Preview, Pin, Edit, Delete). A text's Edit shows its
 card above the keyboard, over the app: one line that scrolls across, so neither the
 card nor the keys change size with the text, and the keys type into it
-until Cancel or Save. An image's Preview shows it whole in the keys' place,
-a tap on it opening it in the phone's own image viewer, ✕ the keys again;
-its Edit opens it in the phone's own image editor. A long press on the bar's buttons, its free room
+until Cancel or Save. Preview shows the thing copied whole in the keys'
+place, an image as large as fits, a tap opening it in the phone's own image
+viewer, a text scrolling, a tap opening it in Edit; while a preview shows, a
+tap on a chip previews that one instead of pasting it; ✕ the keys again. An
+image's Edit opens it in the phone's own image editor. A long press on the bar's buttons, its free room
 or between the keys moves the keyboard; it has no corner grips. ⚙ turns the
 bar into **✕** and **Clipboard** and opens, in the keys' place as
 rounded tiles, **Smaller text**, **Larger text**, **Normal
@@ -495,7 +497,8 @@ turned off), on Android and Windows: a line over the toolbar, of one height
 whatever it holds, with the words offered while typing, else (on Android)
 for five minutes after a copy or a cut the things copied as chips, scrolling
 across: the one just copied, then the pinned, then the others from the newest,
-each with a ✕ that hides it (it stays in the clipboard); with the keys in
+each with a ✕ that deletes it from the clipboard once Yes answers "Delete it
+from the clipboard?" in the toolbar's place; with the keys in
 sight, the toolbar's 📋 shows every thing copied there, lit, and a second tap
 takes them away (with ⊞ open, 📋 opens the clipboard in the keys' place); else
 the emoji used lately, so the
