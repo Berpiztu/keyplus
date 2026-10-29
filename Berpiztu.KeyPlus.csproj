@@ -147,16 +147,18 @@
   </ItemGroup>
 
   <!-- Spelling, Berpiztu AI Keyboard's, as Windows': Hunspell ported to .NET
-       (no native parts) for the words, and ONNX Runtime for the accent
-       model; their dictionaries and model are downloaded when turned on,
-       never carried. -->
+       (no native parts) for the words, ONNX Runtime for the accent and
+       punctuation models, and Microsoft.ML.Tokenizers for the latter's
+       SentencePiece; their dictionaries and models are downloaded when turned
+       on, never carried. -->
   <ItemGroup Condition="'$(KeyPlusProduct)' == 'Keyboard'">
     <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.1" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(KeyPlusProduct)' != 'Keyboard'">
-    <Compile Remove="KeyPlusKeyboard.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs;LanguageChoices.cs;SpellingEngine.cs;LanguageOptions.cs" />
+    <Compile Remove="KeyPlusKeyboard.cs;ClipboardImages.cs;ScreenshotWatcher.cs;SwipeTyping.cs;SettingsScreen.cs;ThemeView.cs;ColorsRow.cs;MenuWatchService.cs;AccentModel.cs;PunctuationModel.cs;SpellingDictionary.cs;CommonErrors.cs;Downloads.cs;Loaded.cs;SwipeData.cs;LanguageChoices.cs;SpellingEngine.cs;LanguageOptions.cs" />
     <AndroidResource Remove="Resources\xml\keyplus_keyboard.xml;Resources\xml\keyboard_menus.xml;Resources\xml\keyboard_menus_color.xml" />
     <AndroidJavaSource Remove="SwipeDecoder.java" />
     <AndroidAsset Remove="Assets\**" />

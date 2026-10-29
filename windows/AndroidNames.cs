@@ -279,6 +279,8 @@ namespace Berpiztu.KeyPlus
             public const int troubleshooting_admin_start = 210;
             public const int troubleshooting_admin_start_summary = 211;
             public const int running_as_administrator = 212;
+            public const int spelling_punctuation = 213;
+            public const int spelling_punctuation_summary = 214;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

@@ -267,6 +267,8 @@ public sealed class KeyboardWindow : Window
         keys.SelectionCase = TurnSelectionCase;
         keys.PressedAt = () => input.PressedAt;
         keys.KeyedAt = () => input.KeyedAt;
+        keys.InDocument = () => focus.Document;
+        keys.KeyPressed += LogFieldSoon;
         spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
             () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList)), Log.Write);
         keys.Suggesting = (language, typed) => personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered);
@@ -280,23 +282,93 @@ public sealed class KeyboardWindow : Window
         keys.SpellingIn = language => preferences.Applied(language.Code);
         keys.Fixing = (language, word) => spellingEngine.Fix(language, word);
         keys.WordFixed += ShowWordFix;
-        keys.CorrectNow = sentence => spellingEngine.Accents.InUse()?.Restore(sentence);
-        keys.SentenceClosed += async sentence =>
+        keys.CorrectFieldNow = last =>
         {
-            if (await spellingEngine.Accents.Async() is not { } model)
+            var spelling = preferences.Applied(keys.KeyLanguage.Code);
+            var punctuation = spelling.Punctuation ? spellingEngine.Punctuation.InUse() : null;
+            var accents = spelling.Accents ? spellingEngine.Accents.InUse() : null;
+            var readAt = Environment.TickCount64;
+            var reading = focus.ReadField(SentenceReach);
+            if ((punctuation is null && accents is null) || !reading.Wait(FieldWait) || reading.Result is not { Before: { } text }
+                || (last is { } typed && (text.Length == 0 || text[^1] != typed)) || SentenceIn(text, closedNow: false) is not { } sentence)
+            {
+                return false;
+            }
+
+            var corrected = Corrected(sentence, punctuation, accents, opens: true);
+            return corrected == sentence || keys.ReplaceRead(sentence, corrected, readAt);
+        };
+        keys.FieldSentenceClosed += async closing =>
+        {
+            var spelling = preferences.Applied(keys.KeyLanguage.Code);
+            var punctuation = spelling.Punctuation ? await spellingEngine.Punctuation.Async() : null;
+            var accents = spelling.Accents ? await spellingEngine.Accents.Async() : null;
+            if (punctuation is null && accents is null)
             {
                 return;
             }
 
+            await Task.Delay(FieldSettles);
+            var readAt = Environment.TickCount64;
+            var read = await focus.ReadField(SentenceReach);
+            if (read is not { Before: { } text } || text.TrimEnd() is not { Length: > 0 } ended || ended[^1] != closing
+                || SentenceIn(text, closedNow: true) is not { } sentence)
+            {
+                Log.Detail("Spelling: the sentence closed was not found in the field, so it is not corrected");
+                return;
+            }
+
+            var corrected = await Task.Run(() => Corrected(sentence, punctuation, accents, opens: true));
+            if (corrected == sentence)
+            {
+                Log.Detail("Spelling: the model changed nothing in a sentence");
+            }
+            else if (keys.ReplaceRead(sentence, corrected, readAt))
+            {
+                ShowSentence(sentence, corrected, applied: true);
+            }
+        };
+        keys.CorrectNow = (sentence, byKeys) =>
+        {
+            var spelling = preferences.Applied(keys.KeyLanguage.Code);
+            var punctuation = spelling.Punctuation ? spellingEngine.Punctuation.InUse() : null;
+            var accents = spelling.Accents ? spellingEngine.Accents.InUse() : null;
+            if (punctuation is null && accents is null)
+            {
+                return null;
+            }
+
+            // Enter cannot wait long: the field read for a moment, else whether these keys began the sentence.
+            var reading = OpensSentence(sentence, byKeys);
+            var opens = punctuation is not null && (reading.Wait(FieldWait) ? reading.Result : byKeys);
+            return Corrected(sentence, punctuation, accents, opens);
+        };
+        keys.SentenceClosed += async (sentence, byKeys) =>
+        {
+            var spelling = preferences.Applied(keys.KeyLanguage.Code);
+            var punctuation = spelling.Punctuation ? await spellingEngine.Punctuation.Async() : null;
+            var accents = spelling.Accents ? await spellingEngine.Accents.Async() : null;
+            if (punctuation is null && accents is null)
+            {
+                return;
+            }
+
+            var opens = false;
+            if (punctuation is not null)
+            {
+                await Task.Delay(FieldSettles);
+                opens = await OpensSentence(sentence, byKeys);
+            }
+
             // Autocorrect: applied at once, what it was offered in the toolbar to take back; else the correction offered there.
-            var corrected = await Task.Run(() => model.Restore(sentence));
+            var corrected = await Task.Run(() => Corrected(sentence, punctuation, accents, opens));
             if (corrected == sentence)
             {
                 Log.Detail("Spelling: the model changed nothing in a sentence");
                 return;
             }
 
-            if (!preferences.Applied(keys.KeyLanguage.Code).Autocorrect)
+            if (!preferences.Applied(keys.KeyLanguage.Code).Autocorrect || !focus.Document)
             {
                 ShowSentence(sentence, corrected, applied: false);
             }
@@ -1306,6 +1378,121 @@ public sealed class KeyboardWindow : Window
         {
             Topmost = true;
         }
+    }
+
+    /// <summary>How much of the field before the caret is read, and how long the window typed in is given to take a key first.</summary>
+    private const int FieldReach = 200;
+    private static readonly TimeSpan FieldSettles = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>How much before the caret is read for a sentence these keys lost: a sentence longer than this is left as it is.</summary>
+    private const int SentenceReach = 1000;
+
+    /// <summary>
+    /// The sentence the field holds before the caret: from the last new line,
+    /// or the last . ? or ! and a space before the one just closed
+    /// (<paramref name="closedNow"/>), to the caret; from the field's start
+    /// where it was all read. None where it begins beyond what was read, or is
+    /// too short to correct.
+    /// </summary>
+    private static string? SentenceIn(string text, bool closedNow)
+    {
+        var search = closedNow ? text.TrimEnd().TrimEnd('.', '?', '!').Length : text.Length;
+        var start = -1;
+        for (var at = search - 1; at >= 0; at--)
+        {
+            if (text[at] is '\n' or '\r' || (text[at] is '.' or '?' or '!' && at + 1 < text.Length && char.IsWhiteSpace(text[at + 1])))
+            {
+                start = at + 1;
+                break;
+            }
+        }
+
+        if (start < 0)
+        {
+            if (text.Length >= SentenceReach)
+            {
+                return null;
+            }
+
+            start = 0;
+        }
+
+        var sentence = text[start..];
+        return sentence.Trim().Length > 1 ? sentence : null;
+    }
+
+    /// <summary>How long Enter waits for the field to be read, before it goes by what the keys know.</summary>
+    private static readonly TimeSpan FieldWait = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>The field being read: one reading at a time.</summary>
+    private bool readingField;
+
+    /// <summary>The sentence as the models write it: its punctuation first, for the accent model reads a ¿ (¿como estás? → ¿cómo estás?), then its accents.</summary>
+    private static string Corrected(string sentence, PunctuationModel? punctuation, AccentModel? accents, bool opens)
+    {
+        var punctuated = punctuation?.Punctuate(sentence, opens) ?? sentence;
+        return accents?.Restore(punctuated) ?? punctuated;
+    }
+
+    /// <summary>
+    /// Whether a sentence begins where one does, by what the field holds
+    /// before it (UI Automation): nothing, a new line, or . ? ! … and spaces.
+    /// Where the field cannot be read or its text is not found there, whether
+    /// these keys began it. Found by its first characters, which the field
+    /// has surely taken; never waiting on the keyboard's thread, so Enter may
+    /// wait for it.
+    /// </summary>
+    private async Task<bool> OpensSentence(string sentence, bool byKeys)
+    {
+        var start = sentence.Trim();
+        var reach = FieldReach + sentence.Length;
+        var read = await focus.ReadField(reach).ConfigureAwait(false);
+        if (start.Length == 0 || read is not { Before: { } text })
+        {
+            return byKeys;
+        }
+
+        var at = text.LastIndexOf(start[..Math.Min(start.Length, 20)], StringComparison.Ordinal);
+        if (at < 0)
+        {
+            Log.Detail("Spelling: the sentence was not found in the field, so the keys say whether it begins one");
+            return byKeys;
+        }
+
+        var before = text[..at].TrimEnd(' ', '\t', ' ');
+        return before.Length == 0 ? text.Length < reach || byKeys : before[^1] is '\n' or '\r' or '.' or '?' or '!' or '…';
+    }
+
+    /// <summary>
+    /// A key pressed, with the detailed log on: once the window typed in has
+    /// taken it, what UI Automation reads before the caret, in the log, to
+    /// learn which applications let their text be read, for a sentence's start
+    /// and its punctuation; only its length and its last two characters, never
+    /// the text.
+    /// </summary>
+    private async void LogFieldSoon()
+    {
+        if (readingField || !Log.Detailed)
+        {
+            return;
+        }
+
+        readingField = true;
+        try
+        {
+            await Task.Delay(FieldSettles);
+            var read = await focus.ReadField(FieldReach);
+            var app = focus.App ?? "an application";
+            Log.Detail(read is { Before: { } text }
+                ? $"Field: {app}: {text.Length} characters before the caret, read by its {read.Value.How}, ending \"{Visible(text[^Math.Min(2, text.Length)..])}\""
+                : $"Field: {app}: not read: {read?.How ?? "UI Automation could not be had"}");
+        }
+        finally
+        {
+            readingField = false;
+        }
+
+        static string Visible(string end) => end.Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
     }
 
     /// <summary>The dictation let go of the text (a key, a click elsewhere): 🎤 stops, and what it heard is neither read again nor typed.</summary>

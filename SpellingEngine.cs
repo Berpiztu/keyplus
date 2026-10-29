@@ -47,6 +47,9 @@ public sealed class SpellingEngine
     /// <summary>Spelling's accent model, loaded the first time a sentence asks for it; the one loaded before let go once the new one is, a sentence may still be reading it.</summary>
     public Loaded<AccentModel> Accents { get; } = new(() => AccentModel.Downloaded ? AccentModel.Stamp : null, AccentModel.Load, old => old.Dispose());
 
+    /// <summary>Spelling's punctuation model, loaded as the accent model is.</summary>
+    public Loaded<PunctuationModel> Punctuation { get; } = new(() => PunctuationModel.Downloaded ? PunctuationModel.Stamp : null, PunctuationModel.Load, old => old.Dispose());
+
     /// <summary>What words were found to mean forgotten: Spelling's choices changed.</summary>
     public void Forget() => fixes.Clear();
 
@@ -57,6 +60,11 @@ public sealed class SpellingEngine
         if (spelling.Accents)
         {
             _ = Accents.Async();
+        }
+
+        if (spelling.Punctuation)
+        {
+            _ = Punctuation.Async();
         }
 
         if (spelling.Words)

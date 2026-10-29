@@ -6,13 +6,16 @@ the arrows, Home, End, Page up and Page down), and for XR devices such as XREAL 
 Galaxy XR and Meta Quest. Real keyboards for remote programming, from any
 device based on Android.
 
-**Three AI models, all local**:
+**Four AI models, all local**:
 
 1. **Glide typing** reads your finger's trail with a neural model (FUTO
    Swipe's), on the device itself.
 2. **Accents** put back by a model that reads the whole sentence ("como
    estas hoy?" becomes "cómo estás hoy?"), on the device itself.
-3. **Voice typing** writes what you say with NVIDIA's speech model
+3. **Punctuation** put in by a model that reads the sentence too ("hola
+   iosu que tal estas" becomes "Hola, Iosu. ¿Qué tal estás?"), on the
+   device itself.
+4. **Voice typing** writes what you say with NVIDIA's speech model
    (Nemotron), on a computer of your own.
 
 Your words never go to anyone else's cloud.
@@ -268,13 +271,24 @@ a window that does.
   commonly written for another, "as", has those offered, "has", "haz",
   never written alone); **Correct accents with the model** (diactag, 38 MB,
   downloaded once: when . ? or ! ends a sentence, a model on the computer
-  puts back its accents, "cómo estás"); and **Put ¿ and ¡ at the start**.
+  puts back its accents, "cómo estás"); **Punctuate with the model**
+  (punctuation_fullstop_truecase_romance, 144 MB, downloaded once: when . ?
+  or ! or Enter ends what was typed, it adds the full stops, commas, ¿? and
+  capitals it lacks, never taking away a mark typed nor changing a word,
+  "Hola, Iosu. ¿Qué tal estás?"); and **Put ¿ and ¡ at the start**.
+  Autocorrect writes by itself only where the field is surely a document
+  (Word, a message, a mail: a document or a field of many lines, as Windows'
+  UI Automation tells it); in an address bar, a search box, a form's field,
+  or in doubt, what it would write is only offered.
   **Settings › Spelling** keeps what goes for every language: **Correct as
   I type**, all of it on and off at once, as the toolbar's spellcheck button
   does (off to write code), and **Download again**, which fetches what the
   choices turned on downloaded again whole, for a file damaged. Windows
-  tells the keyboard nothing of the field, so Spelling mends only what the
-  keyboard typed whole, with no mouse or computer key since it began.
+  tells a keyboard little of the field, so Spelling mends what the keyboard
+  typed whole, with no mouse or computer key since it began; where it lost
+  it (dictation, a click, the computer's keys), it reads the sentence from
+  the field through UI Automation, where the application lets it, and mends
+  that.
 - **Settings › Glide typing** on Windows is off until turned on, when it
   downloads once what it reads with: FUTO Swipe's model (Hugging Face) and
   the Spanish and English word lists (AOSP LatinIME), 4.7 MB, each file

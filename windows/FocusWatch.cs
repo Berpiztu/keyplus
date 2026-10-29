@@ -160,6 +160,15 @@ public sealed class FocusWatch : IDisposable
     /// <summary>The application the text focused is in, by its program's name; none before one, or in the keyboard's own windows.</summary>
     public string? App { get; private set; }
 
+    /// <summary>Whether the text focused is a document's, as UI Automation told it last (<see cref="AutomationFocus.Focused.Document"/>): only there does Autocorrect correct by itself; in doubt, it is not.</summary>
+    public bool Document => document;
+
+    private volatile bool document;
+
+    /// <summary>The text before the caret in what has the focus (<see cref="AutomationFocus.ReadField"/>), read on a thread of the pool's, a multithreaded apartment's; none where UI Automation cannot be had.</summary>
+    internal Task<AutomationFocus.FieldText?> ReadField(int most) =>
+        automationFocus is { } reader ? Task.Run(() => (AutomationFocus.FieldText?)reader.ReadField(most)) : Task.FromResult<AutomationFocus.FieldText?>(null);
+
     /// <summary>The focus went somewhere no text is typed.</summary>
     public event Action? TextLeft;
 
@@ -200,6 +209,7 @@ public sealed class FocusWatch : IDisposable
             }
 
             automationFocused = focused;
+            document = focused.Editable && focused.Document;
             if (focused.Menu)
             {
                 return;
@@ -208,7 +218,7 @@ public sealed class FocusWatch : IDisposable
             if (focused.Editable)
             {
                 focusSettling.Stop();
-                Log.Detail($"Focus: {focused.Kind} in {name}, by UI Automation: writing");
+                Log.Detail($"Focus: {focused.Kind} in {name}, by UI Automation: writing, {(focused.Document ? "a document" : "not a document")} ({focused.Traits})");
                 Tell(() => Field = focused.Place);
                 TellTextFocused(name, FieldOf(focused.Id, focused.Class));
             }
