@@ -4492,7 +4492,7 @@ public sealed class KeyPanel
     /// </summary>
     private void MendSentence(char closing)
     {
-        if (SpellingIn?.Invoke(TypingLanguage).OpenMark == true
+        if (SpellingIn?.Invoke(TypingLanguage).OpenMark == true && Corrects
             && ReplaceBeforeCaret is { } replace && RecentText?.Invoke() is { } before
             && SpanishMarks.Opened(before, closing) is { } mended)
         {
@@ -4632,6 +4632,12 @@ public sealed class KeyPanel
     /// <summary>Spelling, the keyboard's as Windows': the words a word typed may have meant and whether it is misspelled (the keyboard's SpellingEngine); none, it is left as it is.</summary>
     public Func<StandardLanguage, string, WordFixes?>? Fixing { get; set; }
 
+    /// <summary>Whether the field typed in is surely a document's (a message, a mail, a note): only there does Autocorrect write by itself; elsewhere, or in doubt, what it would write is offered.</summary>
+    public bool InDocument { get; set; }
+
+    /// <summary>Whether Autocorrect writes by itself (a word, a sentence's accents, ¿ and ¡): on, and in a document.</summary>
+    private bool Corrects => SpellingIn?.Invoke(TypingLanguage).Autocorrect == true && InDocument;
+
     /// <summary>A language's Spelling as it applies now: its Autocorrect, its opening marks, its accents.</summary>
     public Func<StandardLanguage, LanguageSpelling>? SpellingIn { get; set; }
 
@@ -4715,7 +4721,7 @@ public sealed class KeyPanel
             return null;
         }
 
-        var applied = SpellingIn?.Invoke(TypingLanguage).Autocorrect == true && fixes.Misspelled;
+        var applied = Corrects && fixes.Misspelled;
         if (applied)
         {
             Replace(word.Length, fixes.Words[0]);
@@ -4835,7 +4841,7 @@ public sealed class KeyPanel
         }
 
         string Changed(string shown, string other) => string.Join(' ', shown.Split(' ').Zip(other.Split(' ')).Where(pair => pair.First != pair.Second).Select(pair => pair.First));
-        if (spelling.Autocorrect)
+        if (spelling.Autocorrect && InDocument)
         {
             Replace(sentence.Length + after.Length, corrected + after);
             correction = new(corrected, sentence, after);
@@ -4851,7 +4857,7 @@ public sealed class KeyPanel
     /// <summary>Enter closing what is typed, with Autocorrect on: its last word corrected, then its sentence's accents, before the line ends, for after Enter the field may add what it likes; nothing offered after.</summary>
     private void CorrectBeforeEnter()
     {
-        if (SpellingIn?.Invoke(TypingLanguage) is not { Autocorrect: true } spelling)
+        if (SpellingIn?.Invoke(TypingLanguage) is not { Autocorrect: true } spelling || !InDocument)
         {
             return;
         }

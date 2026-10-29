@@ -306,7 +306,6 @@
   <string name="spelling_wikipedia_downloaded">La lista de la Wikipedia está en este equipo</string>
   <string name="spelling_wikipedia_download_failed">No se pudo descargar la lista de la Wikipedia: %1$s</string>
   <string name="spelling_download_again">Volver a descargar</string>
-  <string name="spelling_download_again_summary">Lo que descargaron las opciones activadas (diccionarios, el modelo de acentos, la lista de la Wikipedia, el modelo y las listas de la escritura deslizando) se descarga otra vez entero, por si un fichero se ha dañado; lo que hay se conserva hasta comprobar lo nuevo</string>
   <string name="spelling_undo_enter">Deshacer tras Intro</string>
   <string name="spelling_undo_enter_summary">Una frase corregida al pulsar Intro también ofrece ↶ en la barra, que pide al programa deshacer (Ctrl+Z): cuánto deshace lo decide el programa</string>
   <string name="troubleshooting_detailed_log">Registro detallado</string>

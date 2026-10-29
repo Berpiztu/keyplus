@@ -28,7 +28,8 @@ public static class LanguageChoices
             kept.GetBoolean(Key("spellingAutocorrect", language), true),
             spanish && kept.GetBoolean(Key("spellingAccents", language), false),
             spanish && kept.GetBoolean(Key("spellingWikipedia", language), false),
-            spanish && kept.GetBoolean(Key("spellingOpenMark", language), kept.GetBoolean(KeyPlusPreferences.SpellingOpenMarkKey, false)));
+            spanish && kept.GetBoolean(Key("spellingOpenMark", language), kept.GetBoolean(KeyPlusPreferences.SpellingOpenMarkKey, false)),
+            PunctuationModel.For(language) is not null && kept.GetBoolean(Key("spellingPunctuation", language), false));
     }
 
     /// <summary>A language's Spelling kept as changed.</summary>
@@ -39,6 +40,7 @@ public static class LanguageChoices
             .PutBoolean(Key("spellingAccents", language), spelling.Accents)!
             .PutBoolean(Key("spellingWikipedia", language), spelling.Wikipedia)!
             .PutBoolean(Key("spellingOpenMark", language), spelling.OpenMark)!
+            .PutBoolean(Key("spellingPunctuation", language), spelling.Punctuation)!
             .Apply();
 
     /// <summary>Whether Spelling is on at all.</summary>
@@ -49,11 +51,12 @@ public static class LanguageChoices
     /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off.</summary>
     public static LanguageSpelling Applied(Context context, string language) => SpellingOn(context) ? SpellingIn(context, language) : LanguageSpelling.Off;
 
-    /// <summary>Whether a language has something Spelling corrects with: its dictionary downloaded with Correct words on, the accent model with its accents on, or ¿ and ¡ on, which need nothing.</summary>
+    /// <summary>Whether a language has something Spelling corrects with: its dictionary downloaded with Correct words on, the accent model with its accents on, its punctuation model with punctuation on, or ¿ and ¡ on, which need nothing.</summary>
     public static bool CanCorrect(Context context, string language)
     {
         var spelling = SpellingIn(context, language);
-        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded) || spelling.OpenMark;
+        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded)
+            || (spelling.Punctuation && PunctuationModel.For(language)?.Downloaded == true) || spelling.OpenMark;
     }
 
     /// <summary>Whether a language is swiped in, as its page or the toolbar's tool has it; one not chosen yet, as the old switch had every language.</summary>

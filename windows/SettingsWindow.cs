@@ -332,8 +332,8 @@ public sealed class SettingsWindow : Window
     /// A language's own page, opened from Languages, Spelling or Dictionary
     /// (← back to it, <paramref name="from"/>): its
     /// Spelling, only what Spelling has for it (<see cref="LanguageOptions.SpellingChoices"/>),
-    /// a choice that fetches files fetching them as it is turned on, its line
-    /// under it saying how much while it does; and its words, your
+    /// a choice that fetches files with its line under it and its own button
+    /// that fetches them (<see cref="Choosing"/>); and its words, your
     /// dictionary's (<see cref="WordsPart"/>).
     /// </summary>
     private FrameworkElement LanguagePage(StandardLanguage language, Func<FrameworkElement> from)
@@ -846,114 +846,120 @@ public sealed class SettingsWindow : Window
         form.Children.Add(Field(null, capitals, Resource.String.spelling_capitalize_summary));
         form.Children.Add(Field(null, LanguageLines(choosing: false, SpellingPage), Resource.String.spelling_by_language));
 
-        // What the languages' choices turned on fetched, each once, one after another in one line; with nothing turned on, hidden in its place.
-        var turnedOn = StandardKeys.Languages
-            .SelectMany(language => LanguageOptions.SpellingChoices(language.Code, Texts.Get)
-                .Where(choice => choice.Fetches is not null && choice.Get(preferences.SpellingIn(language.Code)))
-                .Select(choice => choice.Fetches!))
-            .Concat(StandardKeys.Languages.Where(language => preferences.GlidesIn(language.Code)).Select(LanguageOptions.GlideOf))
-            .DistinctBy(fetched => fetched.Named)
-            .ToList();
-        var again = new Button
-        {
-            Content = Texts.Get(Resource.String.spelling_download_again),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Visibility = turnedOn.Count > 0 ? Visibility.Visible : Visibility.Hidden,
-        };
-        var state = new TextBlock { Height = 20 };
-        again.Click += async (_, _) =>
-        {
-            again.IsEnabled = false;
-            foreach (var fetched in turnedOn)
-            {
-                await FetchAsync(fetched, state);
-            }
-
-            again.IsEnabled = true;
-        };
-        form.Children.Add(Field(null, again, Resource.String.spelling_download_again_summary));
-        form.Children.Add(state);
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.spelling_windows_note), TextWrapping = TextWrapping.Wrap }, null));
         return form;
     }
 
     /// <summary>
-    /// A choice's check box made to keep what it is set to (<paramref name="keep"/>);
-    /// where it fetches files, off until turned on and then fetched once (the
-    /// keyboard never carries them), its line under it, returned to be put
-    /// there, of one height: the files here, how much of them while they
-    /// come, or, turned on without them, that they are missing with Download
-    /// beside it, hidden in its place otherwise. Nothing is ever fetched but
-    /// by turning it on or by Download.
+    /// A choice's check box made to keep what it is set to (<paramref name="keep"/>),
+    /// and where it fetches files (the keyboard never carries them) its line
+    /// under it, returned to be put there, of one size whatever it says: where
+    /// the files are (not here yet, how much while they come with a bar under
+    /// it, here) and one button that fetches them, stops them coming, or
+    /// fetches them again, as wide as the widest of its words, so nothing
+    /// moves. The box only turns the choice on or off; nothing is fetched but
+    /// by that button.
     /// </summary>
     private static FrameworkElement? Choosing(CheckBox box, Fetched? fetches, Action<bool> keep)
     {
+        box.Click += (_, _) => keep(box.IsChecked == true);
         if (fetches is null)
         {
-            box.Click += (_, _) => keep(box.IsChecked == true);
             return null;
         }
 
-        var state = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-        var download = new Button { Content = Texts.Get(Resource.String.download), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var state = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
+        var bar = new ProgressBar { Height = ProgressDp, Minimum = 0, Maximum = 1, Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Hidden };
+        int[] words = [Resource.String.download, Resource.String.cancel, Resource.String.spelling_download_again];
+        var labels = words.Select(word => new TextBlock { Text = Texts.Get(word), HorizontalAlignment = HorizontalAlignment.Center }).ToArray();
+        var sized = new Grid();
+        foreach (var label in labels)
+        {
+            sized.Children.Add(label);
+        }
+
+        var button = new Button { Content = sized, Margin = new Thickness(FieldGapDp / 2, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        CancellationTokenSource? coming = null;
+
+        // Every word kept in the button, only one seen: the button as wide as the widest whichever it says.
+        void Say(int word)
+        {
+            for (var i = 0; i < words.Length; i++)
+            {
+                labels[i].Visibility = words[i] == word ? Visibility.Visible : Visibility.Hidden;
+            }
+        }
+
         void Show()
         {
-            var missing = box.IsChecked == true && !fetches.Downloaded();
-            state.Text = fetches.Downloaded() ? Texts.Get(fetches.Done) : missing ? Texts.Get(Resource.String.spelling_not_downloaded) : "";
-            download.Visibility = missing ? Visibility.Visible : Visibility.Hidden;
+            var here = fetches.Downloaded();
+            bar.Visibility = Visibility.Hidden;
+            state.Text = Texts.Get(here ? fetches.Done : Resource.String.spelling_not_downloaded);
+            Say(here ? Resource.String.spelling_download_again : Resource.String.download);
         }
 
-        async Task Fetch()
+        button.Click += async (_, _) =>
         {
-            box.IsEnabled = false;
-            download.Visibility = Visibility.Hidden;
-            await FetchAsync(fetches, state);
-            box.IsEnabled = true;
-        }
-
-        box.Click += async (_, _) =>
-        {
-            if (box.IsChecked == true && !fetches.Downloaded())
+            if (coming is { } running)
             {
-                await Fetch();
-                box.IsChecked = fetches.Downloaded();
+                running.Cancel();
+                return;
             }
 
-            keep(box.IsChecked == true);
-            Show();
-        };
-        download.Click += async (_, _) =>
-        {
-            await Fetch();
+            coming = new CancellationTokenSource();
+            Say(Resource.String.cancel);
+            bar.Value = 0;
+            bar.IsIndeterminate = true;
+            bar.Visibility = Visibility.Visible;
+            await FetchAsync(fetches, state, bar, coming.Token);
+            coming.Dispose();
+            coming = null;
             Show();
         };
         Show();
-        var line = new StackPanel { Orientation = Orientation.Horizontal, Height = 26 };
-        line.Children.Add(state);
-        line.Children.Add(download);
+        var said = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        said.Children.Add(state);
+        said.Children.Add(bar);
+        var line = new Grid();
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(button, 1);
+        line.Children.Add(said);
+        line.Children.Add(button);
         return line;
     }
 
+    /// <summary>How tall a download's bar is, under the words of its line.</summary>
+    private const double ProgressDp = 4;
+
     /// <summary>
-    /// What a choice fetches fetched, how much shown in its line as it goes;
-    /// a failure in a window and the log, the files there before kept until
-    /// new ones are checked. Whether they are on this computer now.
+    /// What a choice fetches fetched, how much shown in its line and its bar
+    /// as it goes; stopped by its button, said in the log; a failure in a
+    /// window and the log; the files there before kept until new ones are
+    /// checked.
     /// </summary>
-    private static async Task<bool> FetchAsync(Fetched what, TextBlock state)
+    private static async Task FetchAsync(Fetched what, TextBlock state, ProgressBar bar, CancellationToken cancel)
     {
         try
         {
             await what.Download(new Progress<(long Done, long Total)>(at =>
-                state.Text = Texts.Get(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)))), CancellationToken.None);
-            state.Text = Texts.Get(what.Done);
-            return true;
+            {
+                state.Text = Texts.Get(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)));
+                if (at.Total > 0)
+                {
+                    bar.IsIndeterminate = false;
+                    bar.Value = Math.Min(1, (double)at.Done / at.Total);
+                }
+            }), cancel);
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            Log.Write($"Spelling: the download of {what.Named} was stopped");
         }
         catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or System.IO.InvalidDataException or TaskCanceledException)
         {
             Log.Write($"Spelling: {what.Named} could not be downloaded: {failure.Message}");
-            state.Text = what.Downloaded() ? Texts.Get(what.Done) : "";
             MessageBox.Show(Texts.Get(what.Failed, failure.Message), Texts.Get(Resource.String.spelling), MessageBoxButton.OK, MessageBoxImage.Warning);
-            return what.Downloaded();
         }
     }
 

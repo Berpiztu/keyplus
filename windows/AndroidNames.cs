@@ -215,7 +215,6 @@ namespace Berpiztu.KeyPlus
             public const int spelling_dictionary_downloaded = 161;
             public const int spelling_dictionary_download_failed = 162;
             public const int spelling_download_again = 163;
-            public const int spelling_download_again_summary = 164;
             public const int try_keys = 165;
             public const int spelling_wikipedia = 166;
             public const int spelling_wikipedia_summary = 167;

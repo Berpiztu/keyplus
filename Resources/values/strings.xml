@@ -312,7 +312,6 @@
   <string name="spelling_wikipedia_downloaded">The Wikipedia\'s list is on this computer</string>
   <string name="spelling_wikipedia_download_failed">The Wikipedia\'s list could not be downloaded: %1$s</string>
   <string name="spelling_download_again">Download again</string>
-  <string name="spelling_download_again_summary">What the choices turned on downloaded (dictionaries, the accent model, the Wikipedia\'s list, glide typing\'s model and word lists) is downloaded again whole, for when a file is damaged; what is there is kept until the new files are checked</string>
   <string name="spelling_undo_enter">Undo after Enter</string>
   <string name="spelling_undo_enter_summary">A sentence corrected as Enter ends it offers ↶ in the toolbar too, which asks the program to undo (Ctrl+Z): how much it takes back is the program\'s</string>
   <string name="troubleshooting_detailed_log">Detailed log</string>

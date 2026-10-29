@@ -696,20 +696,12 @@ public sealed class MainActivity : Activity
     /// Spelling, what goes for every language, as Windows': all of it on and
     /// off at once (the keyboard's spellcheck tool too), off while no
     /// language has anything downloaded to correct with and saying so then;
-    /// Download again, for what every language's choices turned on fetched;
-    /// and the languages, each opening its page, where its Spelling is.
+    /// and the languages, each opening its page, where its Spelling is; what
+    /// a choice downloads is fetched by the button on its own line there.
     /// </summary>
     private SettingsPage SpellingPage()
     {
         bool AnyCorrects() => StandardKeys.Languages.Any(language => LanguageChoices.CanCorrect(this, language.Code));
-        var turnedOn = StandardKeys.Languages
-            .SelectMany(language => LanguageOptions.SpellingChoices(language.Code, Text)
-                .Where(choice => choice.Fetches is not null && choice.Get(LanguageChoices.SpellingIn(this, language.Code)))
-                .Select(choice => choice.Fetches!))
-            .Concat(StandardKeys.Languages.Where(language => LanguageChoices.GlidesIn(this, language.Code)).Select(LanguageOptions.GlideOf))
-            .DistinctBy(fetched => fetched.Named)
-            .ToList();
-        var again = turnedOn.Select(fetched => downloading.GetValueOrDefault(fetched.Named)).FirstOrDefault(state => state is not null);
         List<SettingsRow> general =
         [
             new(GetString(Resource.String.spelling_on), GetString(Resource.String.spelling_on_summary), On: LanguageChoices.SpellingOn(this) && AnyCorrects(),
@@ -727,17 +719,6 @@ public sealed class MainActivity : Activity
                 }),
             Switch(Resource.String.spelling_capitalize, Resource.String.spelling_capitalize_summary, KeyPlusPreferences.CapitalizeSentencesKey, byDefault: false),
         ];
-        if (turnedOn.Count > 0)
-        {
-            general.Add(new(GetString(Resource.String.spelling_download_again), again ?? GetString(Resource.String.spelling_download_again_summary), Tapped: async () =>
-            {
-                foreach (var fetched in turnedOn)
-                {
-                    await FetchAsync(fetched, SpellingPage);
-                }
-            }));
-        }
-
         return new(GetString(Resource.String.spelling), [general, LanguageRows(Resource.String.spelling_by_language)]);
     }
 
@@ -891,25 +872,21 @@ public sealed class MainActivity : Activity
         return new(language.Name, groups);
     }
 
-    /// <summary>What is being downloaded now, by its name, and how much: its row says so while it comes.</summary>
-    private readonly Dictionary<string, string> downloading = [];
+    /// <summary>What is being downloaded now, by its name: what its row says and how much is done, told to the row as it changes, and what stops it.</summary>
+    private readonly Dictionary<string, (SettingsLive Live, CancellationTokenSource Stop)> downloading = [];
 
     /// <summary>
-    /// A choice's rows: its switch, kept as it is turned (<paramref name="keep"/>);
-    /// where it fetches files, fetched as it is turned on, and under it a row
-    /// saying how much while they come, that they are here, or, turned on
-    /// without them, that they are missing, tapped to download them.
+    /// A choice's rows: its switch, which only turns it on or off and is kept
+    /// as it is turned (<paramref name="keep"/>); where it fetches files, under
+    /// it a row of one size whatever it says: where they are (not here yet, how
+    /// much while they come with a bar under it, here) and its own button,
+    /// which fetches them, stops them coming, or fetches them again. Nothing is
+    /// fetched but by that button.
     /// </summary>
     private IEnumerable<SettingsRow> ChoiceRows(int label, string summary, bool on, Fetched? fetches, Action<bool> keep, Func<SettingsPage> page)
     {
-        yield return new(GetString(label), summary, On: on, Switched: async turned =>
+        yield return new(GetString(label), summary, On: on, Switched: turned =>
         {
-            if (turned && fetches is not null && !fetches.Downloaded())
-            {
-                await FetchAsync(fetches, page);
-                turned = fetches.Downloaded();
-            }
-
             keep(turned);
             settings?.Refresh(page());
         });
@@ -918,41 +895,55 @@ public sealed class MainActivity : Activity
             yield break;
         }
 
+        string[] sayings = [GetString(Resource.String.download), GetString(Resource.String.cancel), GetString(Resource.String.spelling_download_again)];
         if (downloading.TryGetValue(fetches.Named, out var coming))
         {
-            yield return new(coming);
+            yield return new(coming.Live.Said, Button: new(sayings[1], sayings, () => coming.Stop.Cancel(), coming.Live.Done, coming.Live));
         }
         else if (fetches.Downloaded())
         {
-            yield return new(GetString(fetches.Done));
+            yield return new(GetString(fetches.Done), Button: new(sayings[2], sayings, async () => await FetchAsync(fetches, page)));
         }
-        else if (on)
+        else
         {
-            yield return new(GetString(Resource.String.download), GetString(Resource.String.spelling_not_downloaded), Tapped: async () => await FetchAsync(fetches, page));
+            yield return new(GetString(Resource.String.spelling_not_downloaded), Button: new(sayings[0], sayings, async () => await FetchAsync(fetches, page)));
         }
     }
 
     /// <summary>
-    /// What a choice fetches fetched, how much said in its row as it comes (the
-    /// page made again a few times a second at most); a failure said in a
-    /// window and the log, the files there before kept until new ones are checked.
+    /// What a choice fetches fetched, how much said in its row and its bar as
+    /// it comes (the row told in place, the page made again only as it starts
+    /// and ends); stopped by its button, said in the log; a failure said
+    /// in a window and the log, the files there before kept until new ones
+    /// are checked.
     /// </summary>
     private async Task FetchAsync(Fetched what, Func<SettingsPage> page)
     {
+        if (downloading.ContainsKey(what.Named))
+        {
+            return;
+        }
+
+        using var stop = new CancellationTokenSource();
+        var live = new SettingsLive(Said(what.Downloading, Megabytes(0), "…"), -1);
         var shown = 0L;
-        downloading[what.Named] = Said(what.Downloading, Megabytes(0), "…");
+        downloading[what.Named] = (live, stop);
         settings?.Refresh(page());
         try
         {
             await what.Download(new Progress<(long Done, long Total)>(at =>
             {
-                downloading[what.Named] = Said(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)));
-                if (System.Environment.TickCount64 - shown > 300)
+                if (System.Environment.TickCount64 - shown > 200)
                 {
                     shown = System.Environment.TickCount64;
-                    settings?.Refresh(page());
+                    live.Set(Said(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done))),
+                        at.Total > 0 ? Math.Min(1, (double)at.Done / at.Total) : -1);
                 }
-            }), CancellationToken.None);
+            }), stop.Token);
+        }
+        catch (System.OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            Log.Write($"Downloads: the download of {what.Named} was stopped");
         }
         catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
         {

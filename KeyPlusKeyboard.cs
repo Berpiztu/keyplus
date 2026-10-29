@@ -222,7 +222,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
         accountField = !secretField && (fieldKind == StandardField.Email
             || (fieldKind == StandardField.Text && System.Text.RegularExpressions.Regex.IsMatch(named, AccountWords, System.Text.RegularExpressions.RegexOptions.IgnoreCase)));
         accountText = "";
+        // A document's, where Autocorrect may write by itself: text of many lines (a message, a mail, a note), as
+        // ordinary text, a long or a short message (a chat's), that asks for suggestions; in doubt, not one.
+        documentField = WordsField && kind == Android.Text.InputTypes.ClassText
+            && (type & (Android.Text.InputTypes.TextFlagMultiLine | Android.Text.InputTypes.TextFlagImeMultiLine)) != 0
+            && (type & Android.Text.InputTypes.TextFlagNoSuggestions) == 0
+            && variation is Android.Text.InputTypes.TextVariationNormal or Android.Text.InputTypes.TextVariationLongMessage
+                or Android.Text.InputTypes.TextVariationShortMessage;
         panel?.FieldIs(fieldKind);
+        if (panel is not null)
+        {
+            panel.InDocument = documentField;
+        }
     }
 
     /// <summary>What names a user's or an account's field, in its hint or its name, in English or Spanish.</summary>
@@ -233,6 +244,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     private StandardField fieldKind;
     private bool secretField;
+
+    /// <summary>Whether the field is surely a document's (<see cref="TakeField"/>): only there does Autocorrect write by itself.</summary>
+    private bool documentField;
     private bool accountField;
     private string accountText = "";
 
@@ -289,8 +303,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// where the field says a sentence begins, as Gboard's; Android's own
     /// reading of it (after . ? or ! and a space, a new line, the field's
     /// start), only in a field that asks for capitals there (CAP_SENTENCES:
-    /// never an address, a password or a number), and only while Spelling is
-    /// on: off, nothing is corrected, a sentence's capital neither.
+    /// never an address, a password or a number) and is a document's
+    /// (Autocorrect's own rule), and only while Spelling is on: off, nothing
+    /// is corrected, a sentence's capital neither.
     /// </summary>
     private void SentenceShift()
     {
@@ -300,7 +315,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
 
         var on = KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.CapitalizeSentencesKey, false) && LanguageChoices.SpellingOn(this);
-        panel.SentenceStart(on && CurrentInputConnection?.GetCursorCapsMode((Android.Text.CapitalizationMode)(int)info.InputType) is { } mode && mode != 0);
+        panel.SentenceStart(on && documentField && CurrentInputConnection?.GetCursorCapsMode((Android.Text.CapitalizationMode)(int)info.InputType) is { } mode && mode != 0);
     }
 
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
@@ -692,6 +707,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         // Made again in the same field (Standard and Standard PC swapped, its colours changed): suited to it still.
         panel.FieldIs(fieldKind);
+        panel.InDocument = documentField;
         placed.Landscape = Resources!.Configuration!.Orientation == Android.Content.Res.Orientation.Landscape;
         panel.Scale = placed.Scale;
         if (OnHeadset)

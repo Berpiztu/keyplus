@@ -27,7 +27,36 @@ public sealed record SettingsRow(
     bool Opens = false,
     Action? Removed = null,
     Action? Edited = null,
-    View? Below = null);
+    View? Below = null,
+    SettingsButton? Button = null);
+
+/// <summary>
+/// A row's own button at its right, as a download's line has: the word it says now among all it may say (the button
+/// as wide as the widest, so nothing moves as it changes), what a press does, and, under the row's words, a thin bar
+/// of how much is done (0 to 1; below 0, still unknown), its room kept with none.
+/// </summary>
+public sealed record SettingsButton(string Says, IReadOnlyList<string> Sayings, Action Pressed, double? Progress = null, SettingsLive? Live = null);
+
+/// <summary>
+/// What a row says while something comes (a download): its words and how much is done, told as they change, so the
+/// row shows them in place and the page is not made again for each (made again a few times a second, it shook).
+/// </summary>
+public sealed class SettingsLive(string said, double done)
+{
+    public string Said { get; private set; } = said;
+
+    /// <summary>0 to 1; below 0, not known yet.</summary>
+    public double Done { get; private set; } = done;
+
+    public event Action? Changed;
+
+    public void Set(string said, double done)
+    {
+        Said = said;
+        Done = done;
+        Changed?.Invoke();
+    }
+}
 
 /// <summary>A page of settings: its title and its rows in groups, each group a card; or, in their place, a view of its own that takes the page's room (Tema).</summary>
 public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<SettingsRow>> Groups, View? Body = null);
@@ -47,6 +76,9 @@ public sealed record SettingsPage(string Title, IReadOnlyList<IReadOnlyList<Sett
 public sealed class SettingsScreen
 {
     private const float PixelsPerDp = 2.25f;
+
+    /// <summary>How tall a download's bar is, under the words of its row.</summary>
+    private const int ProgressDp = 4;
     private const float RowDp = 162 / PixelsPerDp;
     private const float RowGapDp = 5 / PixelsPerDp;
 
@@ -92,6 +124,13 @@ public sealed class SettingsScreen
 
     /// <summary>Whether the page opened has the whole screen to its view, its title and the list out of sight (Tema's designer).</summary>
     private bool alone;
+
+    /// <summary>The list of the page in sight (the one opened, else the main one) and of the main one, as last made: a page made again in its place keeps where it was scrolled.</summary>
+    private ScrollView? shownScroll;
+    private ScrollView? mainScroll;
+
+    /// <summary>The list a pane was made with last, for <see cref="shownScroll"/> and <see cref="mainScroll"/>.</summary>
+    private ScrollView? madeScroll;
 
     public SettingsScreen(Context context)
     {
@@ -163,6 +202,9 @@ public sealed class SettingsScreen
     /// <summary>The page shown made again, its rows as they are now (a switch turned, a value chosen).</summary>
     public void Refresh(SettingsPage page)
     {
+        // The same page made again (a download's progress, a few times a second): its list stays where it was
+        // scrolled, which a list made anew would not, sent back to its top while the user scrolls it.
+        var scrolled = shownScroll?.ScrollY ?? 0;
         if (opened.TryPop(out var shown))
         {
             opened.Push((page, shown.Made));
@@ -173,6 +215,18 @@ public sealed class SettingsScreen
         }
 
         Lay();
+        if (shownScroll is { } list && scrolled > 0)
+        {
+            // Put back before it is first drawn: put back after, it showed at its top for a moment.
+            void Restore(object? sender, ViewTreeObserver.PreDrawEventArgs drawing)
+            {
+                list.ViewTreeObserver!.PreDraw -= Restore;
+                list.ScrollTo(0, scrolled);
+                drawing.Handled = true;
+            }
+
+            list.ViewTreeObserver!.PreDraw += Restore;
+        }
     }
 
     /// <summary>Back: the page in sight closed, the one it was opened from shown again; false where there is none to go back to (a wide screen's section beside the list, a narrow one's main page), the activity's to end.</summary>
@@ -224,6 +278,7 @@ public sealed class SettingsScreen
             var panes = new LinearLayout(context) { Orientation = Orientation.Horizontal };
             panes.AddView(MainPane(main), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, ListShare));
             var right = opened.TryPeek(out var shown) ? Pane(shown.Page, null, paneGround, back: opened.Count > 1) : new View(context);
+            shownScroll = opened.Count > 0 ? madeScroll : mainScroll;
             right.SetBackgroundColor(paneGround);
             panes.AddView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1 - ListShare));
             root.AddView(panes);
@@ -231,6 +286,7 @@ public sealed class SettingsScreen
         }
 
         root.AddView(opened.TryPeek(out var page) ? Pane(page.Page, null, paneGround, back: true) : MainPane(main));
+        shownScroll = opened.Count > 0 ? madeScroll : mainScroll;
     }
 
     /// <summary>
@@ -251,6 +307,7 @@ public sealed class SettingsScreen
                     : row)])],
             };
             mainPane = Pane(sections, top, ground, back: false);
+            mainScroll = madeScroll;
             mainMade = (page, top);
         }
 
@@ -261,6 +318,8 @@ public sealed class SettingsScreen
     /// <summary>A page: its title (with ← where it closes), a view over its rows, and its groups as cards, scrolling.</summary>
     private View Pane(SettingsPage page, View? above, Color pageGround, bool back)
     {
+        // A page of a view of its own (the designer) has no list to keep scrolled.
+        madeScroll = null;
         var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
         column.SetBackgroundColor(pageGround);
         var header = new LinearLayout(context) { Orientation = Orientation.Horizontal };
@@ -313,6 +372,7 @@ public sealed class SettingsScreen
 
         var scroll = new WheelScroll(context, Dp(RowDp) / 2) { FillViewport = true };
         scroll.AddView(list);
+        madeScroll = scroll;
         column.AddView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1f));
         return column;
     }
@@ -394,8 +454,52 @@ public sealed class SettingsScreen
             texts.AddView(below);
         }
 
+        Button? pressing = null;
+        if (row.Button is { } own)
+        {
+            // The bar's room is always there, so the row keeps its height whether something is coming or not.
+            var bar = new ProgressBar(context, null, Android.Resource.Attribute.ProgressBarStyleHorizontal)
+            {
+                Max = 1000,
+                Indeterminate = own.Progress is < 0,
+                Progress = (int)(Math.Clamp(own.Progress ?? 0, 0, 1) * 1000),
+                Visibility = own.Progress is null ? ViewStates.Invisible : ViewStates.Visible,
+            };
+            texts.AddView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(ProgressDp)) { TopMargin = Dp(4) });
+            pressing = new Button(context) { Text = own.Says };
+            pressing.SetAllCaps(false);
+            pressing.Measure(0, 0);
+            var widest = own.Sayings.Max(saying => pressing.Paint!.MeasureText(saying));
+            pressing.SetWidth((int)Math.Ceiling(widest) + pressing.PaddingLeft + pressing.PaddingRight);
+            pressing.Click += (_, _) => own.Pressed();
+            if (own.Live is { } live)
+            {
+                // Its words and bar follow what comes in place; a row of a page made again no longer listens.
+                void Follow()
+                {
+                    if (!title.IsAttachedToWindow)
+                    {
+                        live.Changed -= Follow;
+                        return;
+                    }
+
+                    title.Text = live.Said;
+                    bar.Indeterminate = live.Done < 0;
+                    bar.Progress = (int)(Math.Clamp(live.Done, 0, 1) * 1000);
+                }
+
+                live.Changed += Follow;
+            }
+        }
+
         var ends = (row.Removed is not null ? 1 : 0) + (row.Edited is not null ? 1 : 0);
         var right = row.On is not null ? Dp(72) : ends > 0 ? Dp(RemoveDp * ends) : Dp(SignLeftDp);
+        if (pressing is not null)
+        {
+            frame.AddView(pressing, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Right | GravityFlags.CenterVertical) { RightMargin = Dp(SignLeftDp) });
+            pressing.Measure(0, 0);
+            right = pressing.MeasuredWidth + Dp(SignLeftDp) * 2;
+        }
         frame.AddView(texts, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.CenterVertical)
         {
             LeftMargin = row.Icon != 0 || row.Chosen is not null ? Dp(TextLeftDp) : Dp(SignLeftDp),

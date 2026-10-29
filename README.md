@@ -281,10 +281,13 @@ a window that does.
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,
   or in doubt, what it would write is only offered.
+  A choice's switch only turns it on or off; under it, its line says where
+  its files are and has its own button: **Download**, **Cancel** while they
+  come, with a thin bar under the words, or **Download again**, for a file
+  damaged; nothing moves as it changes. On Windows and Android alike.
   **Settings › Spelling** keeps what goes for every language: **Correct as
   I type**, all of it on and off at once, as the toolbar's spellcheck button
-  does (off to write code), and **Download again**, which fetches what the
-  choices turned on downloaded again whole, for a file damaged. Windows
+  does (off to write code). Windows
   tells a keyboard little of the field, so Spelling mends what the keyboard
   typed whole, with no mouse or computer key since it began; where it lost
   it (dictation, a click, the computer's keys), it reads the sentence from
