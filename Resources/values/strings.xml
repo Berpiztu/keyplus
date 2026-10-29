@@ -295,7 +295,7 @@
   <string name="spelling_open_mark_summary">Typing ? or ! puts its pair at the sentence\'s start: qué quieres? becomes ¿qué quieres?</string>
   <string name="spelling_windows_note">On Windows a sentence or a word is corrected only when the keyboard typed all of it, with no mouse or computer key since it began</string>
   <string name="spelling_punctuation">Punctuate with the model</string>
-  <string name="spelling_punctuation_summary">When . ? or ! or Enter ends what was typed, a model on this device adds the full stops, commas, ¿? and capitals it lacks, never taking away what was typed (Hola, Iosu. ¿Qué tal estás?). Off until turned on, when it is downloaded once (punctuation_fullstop_truecase_romance, 144 MB)</string>
+  <string name="spelling_punctuation_summary">When . ? or ! or Enter ends what was typed, a model on this device adds the full stops, commas, question marks and capitals it lacks, never taking away what was typed. Off until turned on, when it is downloaded once (%1$s MB)</string>
   <string name="spelling_downloading">Downloading the model: %1$s of %2$s MB</string>
   <string name="spelling_downloaded">The model is on this computer</string>
   <string name="spelling_download_failed">The model could not be downloaded: %1$s</string>

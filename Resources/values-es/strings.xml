@@ -289,7 +289,7 @@
   <string name="spelling_open_mark_summary">Al escribir ? o !, pone su pareja al principio de la frase: qué quieres? queda ¿qué quieres?</string>
   <string name="spelling_windows_note">En Windows una frase o una palabra solo se corrige si la escribió entera el teclado, sin ratón ni teclas del ordenador desde que empezó</string>
   <string name="spelling_punctuation">Puntuar con el modelo</string>
-  <string name="spelling_punctuation_summary">Al terminar lo escrito con . ? o ! o con Intro, un modelo en este equipo añade los puntos, comas, ¿? y mayúsculas que falten, sin quitar nada de lo escrito (Hola, Iosu. ¿Qué tal estás?). Desactivado hasta que lo actives, y entonces se descarga una vez (punctuation_fullstop_truecase_romance, 144 MB)</string>
+  <string name="spelling_punctuation_summary">Al terminar lo escrito con . ? o ! o con Intro, un modelo en este equipo añade los puntos, comas, interrogaciones y mayúsculas que falten, sin quitar nada de lo escrito. Desactivado hasta que lo actives, y entonces se descarga una vez (%1$s MB)</string>
   <string name="spelling_downloading">Descargando el modelo: %1$s de %2$s MB</string>
   <string name="spelling_downloaded">El modelo está en este equipo</string>
   <string name="spelling_download_failed">No se pudo descargar el modelo: %1$s</string>

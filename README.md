@@ -271,8 +271,9 @@ a window that does.
   commonly written for another, "as", has those offered, "has", "haz",
   never written alone); **Correct accents with the model** (diactag, 38 MB,
   downloaded once: when . ? or ! ends a sentence, a model on the computer
-  puts back its accents, "cómo estás"); **Punctuate with the model**
-  (punctuation_fullstop_truecase_romance, 144 MB, downloaded once: when . ?
+  puts back its accents, "cómo estás"); **Punctuate with the model**, in
+  Spanish and English (punctuation_fullstop_truecase_romance, 144 MB, and
+  punctuation_fullstop_truecase_english, 209 MB, each downloaded once: when . ?
   or ! or Enter ends what was typed, it adds the full stops, commas, ¿? and
   capitals it lacks, never taking away a mark typed nor changing a word,
   "Hola, Iosu. ¿Qué tal estás?"); and **Put ¿ and ¡ at the start**.

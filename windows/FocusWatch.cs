@@ -379,6 +379,19 @@ public sealed class FocusWatch : IDisposable
     /// <summary>Text focused, told to the keyboard; what field it is as given, else as UI Automation tells what has the focus now (<see cref="FocusedField"/>).</summary>
     private void TellTextFocused(string? app, TextField? field = null)
     {
+        // Text come to another way than UI Automation told it (a caret, a WinEvent): whether it is a document asked of
+        // UI Automation again, for the focus it told last may have been one passing through (VS Code's own document).
+        if (field is null && automationFocus is { } reader)
+        {
+            _ = Task.Run(() =>
+            {
+                if (reader.FocusedNow() is { Editable: true } now)
+                {
+                    document = now.Document;
+                }
+            });
+        }
+
         var told = field ?? FocusedField();
         Tell(() =>
         {

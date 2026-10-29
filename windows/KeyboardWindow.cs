@@ -282,15 +282,13 @@ public sealed class KeyboardWindow : Window
         keys.SpellingIn = language => preferences.Applied(language.Code);
         keys.Fixing = (language, word) => spellingEngine.Fix(language, word);
         keys.WordFixed += ShowWordFix;
-        keys.CorrectFieldNow = last =>
+        keys.CorrectFieldNow = ended =>
         {
             var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation ? spellingEngine.Punctuation.InUse() : null;
+            var punctuation = spelling.Punctuation ? spellingEngine.PunctuationOf(keys.KeyLanguage.Code)?.InUse() : null;
             var accents = spelling.Accents ? spellingEngine.Accents.InUse() : null;
-            var readAt = Environment.TickCount64;
-            var reading = focus.ReadField(SentenceReach);
-            if ((punctuation is null && accents is null) || !reading.Wait(FieldWait) || reading.Result is not { Before: { } text }
-                || (last is { } typed && (text.Length == 0 || text[^1] != typed)) || SentenceIn(text, closedNow: false) is not { } sentence)
+            if ((punctuation is null && accents is null) || FieldEndingWith(ended) is not ({ } text, var readAt)
+                || SentenceIn(text, closedNow: false) is not { } sentence)
             {
                 return false;
             }
@@ -301,7 +299,7 @@ public sealed class KeyboardWindow : Window
         keys.FieldSentenceClosed += async closing =>
         {
             var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation ? await spellingEngine.Punctuation.Async() : null;
+            var punctuation = spelling.Punctuation && spellingEngine.PunctuationOf(keys.KeyLanguage.Code) is { } punctuationModel ? await punctuationModel.Async() : null;
             var accents = spelling.Accents ? await spellingEngine.Accents.Async() : null;
             if (punctuation is null && accents is null)
             {
@@ -331,7 +329,7 @@ public sealed class KeyboardWindow : Window
         keys.CorrectNow = (sentence, byKeys) =>
         {
             var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation ? spellingEngine.Punctuation.InUse() : null;
+            var punctuation = spelling.Punctuation ? spellingEngine.PunctuationOf(keys.KeyLanguage.Code)?.InUse() : null;
             var accents = spelling.Accents ? spellingEngine.Accents.InUse() : null;
             if (punctuation is null && accents is null)
             {
@@ -346,7 +344,7 @@ public sealed class KeyboardWindow : Window
         keys.SentenceClosed += async (sentence, byKeys) =>
         {
             var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation ? await spellingEngine.Punctuation.Async() : null;
+            var punctuation = spelling.Punctuation && spellingEngine.PunctuationOf(keys.KeyLanguage.Code) is { } punctuationModel ? await punctuationModel.Async() : null;
             var accents = spelling.Accents ? await spellingEngine.Accents.Async() : null;
             if (punctuation is null && accents is null)
             {
@@ -1420,6 +1418,43 @@ public sealed class KeyboardWindow : Window
         var sentence = text[start..];
         return sentence.Trim().Length > 1 ? sentence : null;
     }
+
+    /// <summary>
+    /// What the field holds before the caret once it ends with what the keys
+    /// typed last (<paramref name="ended"/>: a word just corrected may not be
+    /// in it yet), read again a moment later until it does, for
+    /// <see cref="FieldWait"/> at most; with when it was read. None where it
+    /// never did: its sentence is left as it is.
+    /// </summary>
+    private (string Text, long ReadAt)? FieldEndingWith(string ended)
+    {
+        var until = Environment.TickCount64 + (long)FieldWait.TotalMilliseconds;
+        while (true)
+        {
+            var readAt = Environment.TickCount64;
+            var reading = focus.ReadField(SentenceReach);
+            if (!reading.Wait(FieldWait) || reading.Result is not { Before: { } text })
+            {
+                return null;
+            }
+
+            if (text.EndsWith(ended, StringComparison.Ordinal))
+            {
+                return (text, readAt);
+            }
+
+            if (Environment.TickCount64 >= until)
+            {
+                Log.Detail("Spelling: the field did not end with what was typed last, so its sentence is not corrected");
+                return null;
+            }
+
+            Thread.Sleep(FieldRetry);
+        }
+    }
+
+    /// <summary>How long the field is given to take what was typed before it is read again.</summary>
+    private static readonly TimeSpan FieldRetry = TimeSpan.FromMilliseconds(50);
 
     /// <summary>How long Enter waits for the field to be read, before it goes by what the keys know.</summary>
     private static readonly TimeSpan FieldWait = TimeSpan.FromMilliseconds(300);

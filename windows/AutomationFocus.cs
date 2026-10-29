@@ -73,6 +73,19 @@ internal sealed class AutomationFocus : IDisposable
         }
     }
 
+    /// <summary>What has the focus now, asked of UI Automation; none where it cannot tell. On a multithreaded apartment's thread, never the keyboard's.</summary>
+    public Focused? FocusedNow()
+    {
+        try
+        {
+            return Read(automation.GetFocusedElement());
+        }
+        catch (Exception gone) when (gone is COMException or InvalidCastException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>The text before the caret in what has the focus, and how it was read; none where it could not be, with why.</summary>
     public readonly record struct FieldText(string? Before, string How);
 

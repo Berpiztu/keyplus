@@ -88,7 +88,7 @@ public sealed record KeyboardPreferences(
     public bool CanCorrect(string language)
     {
         var spelling = SpellingIn(language);
-        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded) || (spelling.Punctuation && PunctuationModel.Downloaded) || spelling.OpenMark;
+        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded) || (spelling.Punctuation && PunctuationModel.For(language)?.Downloaded == true) || spelling.OpenMark;
     }
 
     /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off from the toolbar.</summary>

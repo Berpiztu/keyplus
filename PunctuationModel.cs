@@ -8,57 +8,74 @@ using Microsoft.ML.Tokenizers;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// Spanish punctuation and capitals put in by 1-800-BAD-CODE's
-/// punctuation_fullstop_truecase_romance (Apache-2.0), on the device with
-/// ONNX Runtime: it reads a sentence in small letters and without marks, and
-/// for each SentencePiece token tells whether ¿ goes before it, whether . ,
-/// or ? goes after it and which of its letters are capitals, as
-/// punctuators' collector applies them (<c>pcs_collector.py</c>). It only
-/// adds: a mark the user typed is kept, none is taken away, a word is never
-/// changed but for its first letter made a capital; a ¿ is added only with
-/// its ?, and a ? the model puts with no ¿ becomes a full stop, for Spanish
-/// opens what it closes. Loaded once, away from the window's thread, from the
-/// folder it was put in; none, nothing is offered.
+/// Punctuation and capitals put in by 1-800-BAD-CODE's models (Apache-2.0),
+/// one for each language (<see cref="Files"/>: Spanish's
+/// punctuation_fullstop_truecase_romance, English's
+/// punctuation_fullstop_truecase_english), on the device with ONNX Runtime:
+/// it reads a sentence in small letters and without marks, and for each
+/// SentencePiece token tells whether ¿ goes before it, whether . , or ? goes
+/// after it and which of its letters are capitals, as punctuators' collector
+/// applies them (<c>pcs_collector.py</c>). It only adds: a mark the user typed
+/// is kept, none is taken away, a word is never changed but for its first
+/// letter made a capital; in Spanish a ¿ is added only with its ?, and a ?
+/// the model puts with no ¿ becomes a full stop, for Spanish opens what it
+/// closes. Loaded once, away from the window's thread, from the folder it was
+/// put in; none, nothing is offered.
 /// </summary>
 public sealed class PunctuationModel : IDisposable
 {
-    /// <summary>The model's files: %LOCALAPPDATA%\Berpiztu\Keyboard\punctuation-romance (model.onnx, sp.model).</summary>
-    public static readonly string Folder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Berpiztu", "Keyboard", "punctuation-romance");
-
-    /// <summary>The model's files as Hugging Face holds them at one revision, each checked by its SHA-256 once downloaded: Spelling turns it on, and only then is it fetched (144 MB).</summary>
-    private const string Revision = "1e8d395731a9e19471cee4b636f034e0cff7b405";
-
-    private static readonly Downloads.Item[] Files =
-    [
-        Hosted("model.onnx", "66963a466ac42871e8e021db4cdf75cca91e022dec5d8e264fdd62e79aa4c968"),
-        Hosted("sp.model", "e280feacd179d1eac4968298b126b342eeb949443a5dbeb3a0dec9c6bad14db3"),
-    ];
-
-    private static Downloads.Item Hosted(string name, string sha256) =>
-        new($"https://huggingface.co/1-800-BAD-CODE/punctuation_fullstop_truecase_romance/resolve/{Revision}/{name}", name, sha256);
-
-    /// <summary>Whether the model's files are on this device.</summary>
-    public static bool Downloaded => Downloads.Present(Folder, Files);
-
-    /// <summary>When the model's files were last written: downloaded again, the keyboard loads them again.</summary>
-    public static DateTime Stamp => Downloads.Stamp(Folder, Files);
-
-    /// <summary>The model's files fetched from Hugging Face at their revision (<see cref="Downloads"/>); how much of all is done, told as it goes.</summary>
-    public static async Task DownloadAsync(IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
+    /// <summary>
+    /// A language's model: its folder under %LOCALAPPDATA%\Berpiztu\Keyboard,
+    /// its files as Hugging Face holds them at one revision, each checked by
+    /// its SHA-256 once downloaded (Spelling turns it on, and only then is it
+    /// fetched), and whether its language opens a question with ¿.
+    /// </summary>
+    public sealed record Files(string Language, string Named, string Folder, string Repository, string Revision, string Onnx, string OnnxSha256, string Pieces, string PiecesSha256, bool OpensQuestions)
     {
-        await Downloads.FilesAsync(Folder, Files, progress, cancel);
-        Log.Write("Spelling: punctuation model downloaded");
+        public string Path(string name) => System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Berpiztu", "Keyboard", Folder, name);
+
+        private Downloads.Item[] Items =>
+        [
+            new($"https://huggingface.co/{Repository}/resolve/{Revision}/{Onnx}", Onnx, OnnxSha256),
+            new($"https://huggingface.co/{Repository}/resolve/{Revision}/{Pieces}", Pieces, PiecesSha256),
+        ];
+
+        /// <summary>Whether the model's files are on this device.</summary>
+        public bool Downloaded => Downloads.Present(Path(""), Items);
+
+        /// <summary>When the model's files were last written: downloaded again, the keyboard loads them again.</summary>
+        public DateTime Stamp => Downloads.Stamp(Path(""), Items);
+
+        /// <summary>The model's files fetched from Hugging Face at their revision (<see cref="Downloads"/>); how much of all is done, told as it goes.</summary>
+        public async Task DownloadAsync(IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
+        {
+            await Downloads.FilesAsync(Path(""), Items, progress, cancel);
+            Log.Write($"Spelling: the {Language} punctuation model downloaded");
+        }
     }
 
-    /// <summary>As its config.yaml: the longest it reads (256 tokens, its start and end among them), what may go before a token and what after it.</summary>
+    /// <summary>Spanish's: punctuation_fullstop_truecase_romance, 144 MB.</summary>
+    public static readonly Files Spanish = new(
+        StandardKeys.Spanish.Code, "punctuation_fullstop_truecase_romance, 144", "punctuation-romance",
+        "1-800-BAD-CODE/punctuation_fullstop_truecase_romance", "1e8d395731a9e19471cee4b636f034e0cff7b405",
+        "model.onnx", "66963a466ac42871e8e021db4cdf75cca91e022dec5d8e264fdd62e79aa4c968",
+        "sp.model", "e280feacd179d1eac4968298b126b342eeb949443a5dbeb3a0dec9c6bad14db3", OpensQuestions: true);
+
+    /// <summary>English's: punctuation_fullstop_truecase_english, 209 MB.</summary>
+    public static readonly Files English = new(
+        "en", "punctuation_fullstop_truecase_english, 209", "punctuation-english",
+        "1-800-BAD-CODE/punctuation_fullstop_truecase_english", "b26fd1c40e88678859048898218ea4edcc24c84a",
+        "punct_cap_seg_en.onnx", "dd922d459da618cd324280889740608b76fb3e9e61d3f402291be1251f91421b",
+        "spe_32k_lc_en.model", "9e86d0263de80b3b68327a21f5350c8cdf846e4c4400253c9baf05e3d44871c3", OpensQuestions: false);
+
+    /// <summary>A language's model; none where it has none.</summary>
+    public static Files? For(string language) => language == Spanish.Language ? Spanish : language == English.Language ? English : null;
+
+    /// <summary>As both models' config.yaml: the longest they read (256 tokens, their start and end among them), what may go before a token and what after it.</summary>
     private const int MostTokens = 256;
     private static readonly string?[] Before = [null, "¿"];
     private static readonly string?[] After = [null, null, ".", ",", "?"];
-
-    /// <summary>The tokenizer's start and end of a sentence (sp.model's bos_id and eos_id).</summary>
-    private const long StartId = 1;
-    private const long EndId = 2;
 
     /// <summary>What SentencePiece writes for the space before a word.</summary>
     private const char WordStart = '▁';
@@ -71,23 +88,25 @@ public sealed class PunctuationModel : IDisposable
 
     private readonly InferenceSession session;
     private readonly SentencePieceTokenizer tokenizer;
+    private readonly bool opensQuestions;
     private readonly Lock running = new();
     private bool disposed;
 
-    private PunctuationModel(InferenceSession session, SentencePieceTokenizer tokenizer)
+    private PunctuationModel(InferenceSession session, SentencePieceTokenizer tokenizer, bool opensQuestions)
     {
         this.session = session;
         this.tokenizer = tokenizer;
+        this.opensQuestions = opensQuestions;
     }
 
-    /// <summary>The model loaded from its folder; none where its files are not there or could not be read, written to the log.</summary>
-    public static PunctuationModel? Load()
+    /// <summary>A language's model loaded from its folder; none where its files are not there or could not be read, written to the log.</summary>
+    public static PunctuationModel? Load(Files files)
     {
-        var onnx = Path.Combine(Folder, "model.onnx");
-        var pieces = Path.Combine(Folder, "sp.model");
+        var onnx = files.Path(files.Onnx);
+        var pieces = files.Path(files.Pieces);
         if (!File.Exists(onnx) || !File.Exists(pieces))
         {
-            Log.Write($"Spelling: no punctuation model in {Folder}");
+            Log.Write($"Spelling: no {files.Language} punctuation model in {files.Path("")}");
             return null;
         }
 
@@ -100,13 +119,13 @@ public sealed class PunctuationModel : IDisposable
             }
 
             var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL, IntraOpNumThreads = 2 };
-            var model = new PunctuationModel(new InferenceSession(onnx, options), tokenizer);
-            Log.Write("Spelling: punctuation model loaded");
+            var model = new PunctuationModel(new InferenceSession(onnx, options), tokenizer, files.OpensQuestions);
+            Log.Write($"Spelling: the {files.Language} punctuation model loaded");
             return model;
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or OnnxRuntimeException or ArgumentException)
         {
-            Log.Write($"Spelling: the punctuation model could not be loaded: {failure.Message}");
+            Log.Write($"Spelling: the {files.Language} punctuation model could not be loaded: {failure.Message}");
             return null;
         }
     }
@@ -147,13 +166,17 @@ public sealed class PunctuationModel : IDisposable
             var lead = word.Lead.Length > 0 ? word.Lead : model.Lead;
             var trail = word.Trail.Length > 0 ? word.Trail : model.Trail;
 
-            // ¿ kept only with its ?; a ? the model closes with no ¿ open, a full stop.
-            if (word.Lead.Length == 0 && model.Lead == "¿")
+            // Spanish's ¿ kept only with its ?; a ? the model closes with no ¿ open, a full stop. Another language's opens nothing.
+            if (!opensQuestions)
+            {
+                lead = word.Lead;
+            }
+            else if (word.Lead.Length == 0 && model.Lead == "¿")
             {
                 opened = at;
             }
 
-            if (word.Trail.Length == 0 && model.Trail == "?" && opened is null && !word.Lead.Contains('¿'))
+            if (opensQuestions && word.Trail.Length == 0 && model.Trail == "?" && opened is null && !word.Lead.Contains('¿'))
             {
                 trail = ".";
             }
@@ -229,13 +252,13 @@ public sealed class PunctuationModel : IDisposable
         }
 
         var ids = new DenseTensor<long>([1, tokens.Count + 2]);
-        ids[0, 0] = StartId;
+        ids[0, 0] = tokenizer.BeginningOfSentenceId;
         for (var at = 0; at < tokens.Count; at++)
         {
             ids[0, at + 1] = tokens[at].Id;
         }
 
-        ids[0, tokens.Count + 1] = EndId;
+        ids[0, tokens.Count + 1] = tokenizer.EndOfSentenceId;
         Tensor<long> before, after;
         Tensor<bool> capitals;
         lock (running)

@@ -33,9 +33,9 @@ public static class LanguageOptions
         "the accent model", () => AccentModel.Downloaded, AccentModel.DownloadAsync,
         Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
 
-    /// <summary>The punctuation model's files.</summary>
-    public static readonly Fetched Punctuation = new(
-        "the punctuation model", () => PunctuationModel.Downloaded, PunctuationModel.DownloadAsync,
+    /// <summary>A language's punctuation model's files.</summary>
+    public static Fetched PunctuationOf(PunctuationModel.Files model) => new(
+        $"the {model.Language} punctuation model", () => model.Downloaded, model.DownloadAsync,
         Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
 
     /// <summary>The Wikipedia's common misspellings.</summary>
@@ -55,7 +55,7 @@ public static class LanguageOptions
     /// <summary>
     /// What Spelling has for a language, in its page's order: its words where
     /// it has a dictionary, named with its size; Spanish's common
-    /// misspellings, its accents and its punctuation; Autocorrect; Spanish's ¿ and ¡.
+    /// misspellings and its accents; its punctuation where it has a model; Autocorrect; Spanish's ¿ and ¡.
     /// </summary>
     public static IEnumerable<SpellingChoice> SpellingChoices(string language, Func<int, object[], string> text)
     {
@@ -75,7 +75,11 @@ public static class LanguageOptions
                 spelling => spelling.Wikipedia, (spelling, on) => spelling with { Wikipedia = on });
             yield return new(Resource.String.spelling_accent_closing, text(Resource.String.spelling_accent_closing_summary, []), Model,
                 spelling => spelling.Accents, (spelling, on) => spelling with { Accents = on });
-            yield return new(Resource.String.spelling_punctuation, text(Resource.String.spelling_punctuation_summary, []), Punctuation,
+        }
+
+        if (PunctuationModel.For(language) is { } punctuation)
+        {
+            yield return new(Resource.String.spelling_punctuation, text(Resource.String.spelling_punctuation_summary, [punctuation.Named]), PunctuationOf(punctuation),
                 spelling => spelling.Punctuation, (spelling, on) => spelling with { Punctuation = on });
         }
 

@@ -533,8 +533,8 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A sentence these keys did not type whole closed with this mark: for the window to read it from the field and correct it there (<see cref="ReplaceRead"/>).</summary>
     public event Action<char>? FieldSentenceClosed;
 
-    /// <summary>The sentence before the caret read from the field and corrected there at once, where these keys lost it: Enter's, which cannot wait; with the last character these keys typed, which the field must end with. Whether it was.</summary>
-    public Func<char?, bool>? CorrectFieldNow { get; set; }
+    /// <summary>The sentence before the caret read from the field and corrected there at once, where these keys lost it: Enter's, which cannot wait; with what these keys typed last (the word just ended, as corrected), which the field must end with, for it may not have taken it yet. Whether it was.</summary>
+    public Func<string, bool>? CorrectFieldNow { get; set; }
 
     /// <summary>When a key of the keyboard's was last pressed: a sentence read from the field is not written again after one.</summary>
     private long keyActedAt;
@@ -610,7 +610,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// for after Enter the field may add what it likes (an editor's indent),
     /// and where the sentence is would not be known; no ↶ for it.
     /// </summary>
-    private void CorrectBeforeEnter()
+    private void CorrectBeforeEnter(string ended)
     {
         if (!Corrects || !(Spelling.Accents || Spelling.Punctuation))
         {
@@ -620,7 +620,7 @@ public sealed class KeyboardSurface : FrameworkElement
         if (!SentenceKnown)
         {
             // Lost (dictation, a click, the computer's keys): the sentence as the field holds it.
-            if (CorrectFieldNow?.Invoke(lastTyped) != true)
+            if (CorrectFieldNow?.Invoke(ended) != true)
             {
                 NotCorrected(SentenceUnknownWhy);
             }
@@ -1850,9 +1850,11 @@ public sealed class KeyboardSurface : FrameworkElement
                     FixWord();
                 }
 
+                // What the field must end with before its sentence is read: the word just ended, as corrected.
+                var ended = typingWord.Length > 0 ? typingWord : lastTyped?.ToString() ?? "";
                 ForgetTyping();
                 FlushDead();
-                CorrectBeforeEnter();
+                CorrectBeforeEnter(ended);
                 Press(Keycode.Enter);
                 BeginSentence(blind: false, byKeys: true);
                 lastTyped = '\n';
