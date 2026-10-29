@@ -344,6 +344,7 @@ public sealed class KeyboardWindow : Window
         voice.Level += Heard;
         voice.Partial += keys.TypeSpokenSoFar;
         voice.Silence += EndListening;
+        keys.SpokenLetGo += StopListening;
         var settings = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_settings, ToolTip = Texts.Get(Resource.String.keyboard_settings) };
         settings.Clicked += SettingsWindow.Start;
         focus.CaretMoved += at =>
@@ -1060,8 +1061,34 @@ public sealed class KeyboardWindow : Window
         var place = new Border { Background = Brushes.Transparent, Child = label, Cursor = taken is null ? null : Cursors.Hand };
         if (taken is not null)
         {
+            // A word fills its room, so a drag from it moves the keyboard as the row's room does; a click takes it.
+            var pressed = new Point();
+            place.MouseLeftButtonDown += (_, e) =>
+            {
+                pressed = e.GetPosition(this);
+                place.CaptureMouse();
+                e.Handled = true;
+            };
+            place.MouseMove += (_, e) =>
+            {
+                var moved = e.GetPosition(this) - pressed;
+                if (docked || !place.IsMouseCaptured || e.LeftButton != MouseButtonState.Pressed
+                    || (Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance))
+                {
+                    return;
+                }
+
+                place.ReleaseMouseCapture();
+                Move();
+            };
             place.MouseLeftButtonUp += (_, e) =>
             {
+                if (!place.IsMouseCaptured)
+                {
+                    return;
+                }
+
+                place.ReleaseMouseCapture();
                 taken();
                 if (ends)
                 {
@@ -1070,7 +1097,6 @@ public sealed class KeyboardWindow : Window
 
                 e.Handled = true;
             };
-            place.MouseLeftButtonDown += (_, e) => e.Handled = true;
         }
 
         return place;
@@ -1253,6 +1279,7 @@ public sealed class KeyboardWindow : Window
         try
         {
             microphone.Name = settings.Microphone;
+            keys.BeginSpoken();
             voice.Start(options);
         }
         catch (Exception none)
@@ -1279,6 +1306,22 @@ public sealed class KeyboardWindow : Window
         {
             Topmost = true;
         }
+    }
+
+    /// <summary>The dictation let go of the text (a key, a click elsewhere): 🎤 stops, and what it heard is neither read again nor typed.</summary>
+    private async void StopListening()
+    {
+        if (!voice.Recording || transcribing)
+        {
+            return;
+        }
+
+        mic.Lit = false;
+        mic.Hearing = false;
+        mic.Level = 0;
+        Topmost = true;
+        Notice("");
+        await voice.Cancel();
     }
 
     private async void EndListening()
@@ -1453,12 +1496,18 @@ public sealed class KeyboardWindow : Window
                 return;
             }
 
-            moving = true;
-            DragMove();
-            moving = false;
-            Keep();
-            GiveFrontBack();
+            Move();
         };
+    }
+
+    /// <summary>The window moved as Windows moves one, while the button is held, and kept where it is let go.</summary>
+    private void Move()
+    {
+        moving = true;
+        DragMove();
+        moving = false;
+        Keep();
+        GiveFrontBack();
     }
 
     /// <summary>

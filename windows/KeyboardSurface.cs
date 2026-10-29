@@ -137,6 +137,15 @@ public sealed class KeyboardSurface : FrameworkElement
     private string? spokenText;
     private string spokenLead = "";
 
+    /// <summary>When the dictation last typed, for a key or a click outside the keyboard since.</summary>
+    private long spokenAt;
+
+    /// <summary>The dictation let go of the text (<see cref="LetSpokenGo"/>): nothing more of it is typed until the next begins.</summary>
+    private bool spokenLetGo;
+
+    /// <summary>A dictation's last words typed that are typed again when heard otherwise; those before stay as typed.</summary>
+    private const int SpokenOpenWords = 3;
+
     public KeyboardSurface(Palette colors)
     {
         this.colors = colors;
@@ -188,6 +197,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Text typed from elsewhere (an emoji), as a key's: a swipe's words gone, and known as typed last.</summary>
     public void TypeText(string text)
     {
+        LetSpokenGo("an emoji was typed");
         EndSwipe(letter: false);
         ForgetTyping();
         KeySender.Type(text);
@@ -196,6 +206,16 @@ public sealed class KeyboardSurface : FrameworkElement
         boundaryAt = Environment.TickCount64;
         lastTyped = text.Length > 0 ? text[^1] : lastTyped;
     }
+
+    /// <summary>A dictation begun (🎤): its words typed as they come, until it ends or lets go of the text.</summary>
+    public void BeginSpoken()
+    {
+        spokenText = null;
+        spokenLetGo = false;
+    }
+
+    /// <summary>The text let go of by the dictation listening, told so it stops: what it typed stays and nothing more of it is typed.</summary>
+    public event Action? SpokenLetGo;
 
     /// <summary>Words spoken (🎤), typed as a swiped word is: a space before them unless after a space or nothing.</summary>
     public void TypeSpoken(string text)
@@ -208,10 +228,18 @@ public sealed class KeyboardSurface : FrameworkElement
     /// A dictation's words so far, typed as they are heard, as Gboard and
     /// Windows' own voice typing write them: in place of those typed before,
     /// only what changed deleted and typed again, with a space before them
-    /// unless after a space or nothing.
+    /// unless after a space or nothing. Its typing assumes the field ends with
+    /// what it typed, so a key of the computer's or a click outside the
+    /// keyboard since (Enter sending a chat's message) lets go of the text
+    /// instead, as the keyboard's own keys do (<see cref="LetSpokenGo"/>).
     /// </summary>
     public void TypeSpokenSoFar(string text)
     {
+        if (spokenLetGo)
+        {
+            return;
+        }
+
         if (spokenText is null)
         {
             if (text.Length == 0)
@@ -224,8 +252,14 @@ public sealed class KeyboardSurface : FrameworkElement
             spokenLead = lastTyped is null || char.IsWhiteSpace(lastTyped.Value) ? "" : " ";
             spokenText = "";
         }
+        else if (spokenText.Length > 0 && ((KeyedAt?.Invoke() ?? 0) >= spokenAt || (PressedAt?.Invoke() ?? 0) >= spokenAt))
+        {
+            LetSpokenGo("a key or a click outside the keyboard came");
+            return;
+        }
 
-        var wanted = text.Length == 0 ? "" : spokenLead + text;
+        var settled = Settled(text);
+        var wanted = settled.Length == 0 ? "" : spokenLead + settled;
         var same = 0;
         while (same < spokenText.Length && same < wanted.Length && spokenText[same] == wanted[same])
         {
@@ -238,7 +272,13 @@ public sealed class KeyboardSurface : FrameworkElement
             same--;
         }
 
-        for (var gone = new StringInfo(spokenText[same..]).LengthInTextElements; gone > 0; gone--)
+        var deleted = new StringInfo(spokenText[same..]).LengthInTextElements;
+        if (deleted > 0)
+        {
+            Log.Detail($"Voice typing: {deleted} of the {spokenText.Length} characters typed so far typed again");
+        }
+
+        for (var gone = deleted; gone > 0; gone--)
         {
             KeySender.Press(Keycode.Del, KeySender.Held.None);
         }
@@ -248,14 +288,48 @@ public sealed class KeyboardSurface : FrameworkElement
         wordFix = null;
         boundaryAt = 0;
         spokenText = wanted;
+        spokenAt = Environment.TickCount64;
         if (wanted.Length > 0)
         {
             lastTyped = wanted[^1];
         }
     }
 
+    /// <summary>
+    /// The words heard, those the dictation typed kept but its last
+    /// <see cref="SpokenOpenWords"/>: all it heard is read again each time, and
+    /// the model may change a comma or a capital far back (ahora → Ahora,),
+    /// which would delete the whole sentence and type it again.
+    /// </summary>
+    private string Settled(string heard)
+    {
+        var typed = Words(spokenText is { Length: > 0 } text ? text[spokenLead.Length..] : "");
+        var kept = Math.Max(0, typed.Length - SpokenOpenWords);
+        return string.Join(' ', typed.Take(kept).Concat(Words(heard).Skip(kept)));
+
+        static string[] Words(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    /// <summary>The dictation listening lets go of the text, before anything else touches it: what it typed stays and it is told to stop.</summary>
+    private void LetSpokenGo(string why)
+    {
+        if (spokenText is null || spokenLetGo)
+        {
+            return;
+        }
+
+        Log.Write($"Voice typing: stopped typing, {why}; what it typed stays");
+        spokenText = null;
+        spokenLetGo = true;
+        SpokenLetGo?.Invoke();
+    }
+
     /// <summary>⌫ from elsewhere (the emoji's), as the key's.</summary>
-    public void DeleteBack() => DeleteOnce();
+    public void DeleteBack()
+    {
+        LetSpokenGo("a key of the keyboard's was pressed");
+        DeleteOnce();
+    }
 
     /// <summary>A swipe over the letters, to be read as a word, and whether Shift or the capitals were on.</summary>
     public event Action<SwipeEngine.Swipe, bool, bool>? Swiped;
@@ -699,6 +773,8 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A word offered taken in place of the one being typed, with a space after it, as Gboard's.</summary>
     public void TakeSuggestion(string word)
     {
+        LetSpokenGo("a word of the toolbar was taken");
+
         // An address in place of the one being typed, whole, with nothing after it.
         if (PersonalWords.IsAddress(word))
         {
@@ -731,6 +807,7 @@ public sealed class KeyboardSurface : FrameworkElement
             return;
         }
 
+        LetSpokenGo("a word was swiped");
         swipeRead = read;
         ForgetTyping();
         var word = Cased(words[0], capital, capitals);
@@ -1608,6 +1685,8 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void Act(StandardKey key)
     {
+        LetSpokenGo("a key of the keyboard's was pressed");
+
         // Gboard's: on ?123 or =\<, a space or Enter after a symbol typed there goes back to the letters.
         var backToLetters = symbolTyped && !Combining && key.Action is StandardAction.Space or StandardAction.Enter;
 

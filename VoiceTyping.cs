@@ -188,6 +188,19 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
         return Recorded() is { } wav ? await Transcribe(wav) : "";
     }
 
+    /// <summary>The microphone stopped and what it heard left unread: the words typed so far are all the dictation types.</summary>
+    public async Task Cancel()
+    {
+        if (!recording)
+        {
+            return;
+        }
+
+        session++;
+        recording = false;
+        await microphone.Stop();
+    }
+
     public void Dispose()
     {
         session++;

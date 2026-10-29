@@ -572,7 +572,9 @@ emoji, in colour as Windows draws them (Direct2D), those typed lately
 first; Windows draws no flags, so they are left out. The microphone types what
 ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
-are spoken, and it stops when tapped again or, if asked, after a silence. ⚙ opens
+are spoken, only the last three typed again when heard otherwise, and it
+stops when tapped again or, if asked, after a silence; a key, a click
+elsewhere or Enter stops it too, what it typed staying as it is. ⚙ opens
 the settings, an app of their own as on Android: Languages, Preferences,
 Theme (Colours: System, Light, Dark, or Custom with the keyboard's and the accent's colour picked; by language, a PC's keys differing between them: the keyboard each
 language shows, copied under a new name with Save as or deleted, drawn
