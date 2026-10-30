@@ -91,6 +91,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
             () => LanguageChoices.SpellingIn(this, StandardKeys.Spanish.Code).Wikipedia,
             () => Assets!.Open(CommonErrors.OwnList), message => Log.Write(message));
         spelling.FixesFound += (_, _) => panel?.OfferWords();
+        context = new(() => ContextModelOf(contextLanguage),
+            () => ContextModelOf(contextLanguage) is { } name
+                ? ContextCorrector.Load(System.IO.Path.Combine(KeyPlusPreferences.CorrectorsFolder(this), name))
+                : null,
+            old => old.Dispose());
 
         MenuWatchService.MenuOpened += AvoidMenu;
         MenuWatchService.MenuClosed += MenuGone;
@@ -110,6 +115,15 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>What the keyboard knows of words as they are typed (<see cref="SpellingEngine"/>), shared with Windows: the words offered, whether a word is one, what it may have meant.</summary>
     private SpellingEngine spelling = null!;
+
+    /// <summary>The context model of the language typed in (its Spelling's), loaded as the keyboard opens and again once the language or its model changes; only one in memory.</summary>
+    private Loaded<ContextCorrector> context = null!;
+
+    /// <summary>The language whose context model is loaded: the one typed in, as it was last prepared.</summary>
+    private string? contextLanguage;
+
+    /// <summary>A language's context model as the keyboard applies it: none with Spelling off.</summary>
+    private string? ContextModelOf(string? language) => language is null ? null : LanguageChoices.Applied(this, language).Context;
 
     /// <summary>Swipes read as words; whether a language is swiped in is its own (its Glide typing, <see cref="LanguageChoices.Glides"/>).</summary>
     private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() => swipeTyping is { } swiping ? swiping.Words : null;
@@ -178,7 +192,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     private void PrepareLanguage(StandardLanguage language)
     {
         spelling.Prepare(language);
-        if (LanguageChoices.GlidesIn(this, language.Code))
+        contextLanguage = language.Code;
+        _ = context.Async();
+        if (LanguageChoices.GlideOn(this))
         {
             swipeTyping?.Prepare(language);
         }
@@ -730,8 +746,16 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.GlidesFor = language => LanguageChoices.Glides(this, language);
             panel.Fixing = (language, word) => WordsField ? spelling.Fix(language, word) : null;
             panel.SpellingIn = language => LanguageChoices.Applied(this, language.Code);
-            panel.CorrectSentence = async sentence => await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
-            panel.CorrectSentenceNow = sentence => spelling.Accents.InUse()?.Restore(sentence);
+            // A language's context model reads its sentences where it is on, the accent model where its accents are:
+            // never both, its settings let only one. A corrector loaded for another language is not used for this one.
+            panel.CorrectSentence = async (language, sentence) =>
+                ContextModelOf(language.Code) is { } name
+                    ? await context.Async() is { } corrector && corrector.Name == name ? await Task.Run(() => corrector.Correct(sentence)) : null
+                    : await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
+            panel.CorrectSentenceNow = (language, sentence) =>
+                ContextModelOf(language.Code) is { } name
+                    ? context.InUse() is { } corrector && corrector.Name == name ? corrector.Correct(sentence) : null
+                    : spelling.Accents.InUse()?.Restore(sentence);
             panel.TextAfterCaret = () => CurrentInputConnection?.GetTextAfterCursor(1, 0)?.ToString();
             panel.SelectionCase = TurnSelectionCase;
 
@@ -937,7 +961,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         SentenceShift();
     }
 
-    /// <summary>The Glide typing tool: the language typed in swiped or not; without its word list or the model, said in the toolbar with Download beside it for that language alone.</summary>
+    /// <summary>The Glide typing tool: Glide typing on or off for every language; without the model or the language typed in's word list, said in the toolbar with Download beside it, for what is missing.</summary>
     private void GlideTapped()
     {
         var language = KeyPlusPreferences.Language(this);
@@ -945,11 +969,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
         {
             Log.Write($"Glide typing: {language.Code}'s word list or the model is not downloaded, so the tool stays off");
             OfferDownload(GetString(Resource.String.glide_not_downloaded, new Java.Lang.String(language.Name)), LanguageOptions.GlideOf(language),
-                () => LanguageChoices.SetGlide(this, language.Code, true));
+                () => LanguageChoices.SetGlideOn(this, true));
             return;
         }
 
-        LanguageChoices.SetGlide(this, language.Code, !LanguageChoices.GlidesIn(this, language.Code));
+        LanguageChoices.SetGlideOn(this, !LanguageChoices.GlideOn(this));
         panel!.GridTiles = GridTiles();
         PrepareLanguage(language);
     }

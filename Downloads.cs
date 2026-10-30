@@ -66,7 +66,30 @@ public static class Downloads
                 }
             }
 
-            File.Move(part, place, overwrite: true);
+            // Fetched again, the very file already here is left as it is: a keyboard holding it open (Glide typing's
+            // model, loaded) cannot have it replaced, and Windows refused the move, which closed the settings.
+            if (File.Exists(place) && Sha256Of(place).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(part);
+                continue;
+            }
+
+            try
+            {
+                File.Move(part, place, overwrite: true);
+            }
+            catch (UnauthorizedAccessException inUse)
+            {
+                File.Delete(part);
+                throw new IOException($"{file.Name} is in use by the keyboard and could not be replaced; it can be once the keyboard is closed", inUse);
+            }
         }
+    }
+
+    private static string Sha256Of(string path)
+    {
+        // Read alongside whoever holds it open, the keyboard included.
+        using var read = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        return Convert.ToHexString(SHA256.HashData(read));
     }
 }

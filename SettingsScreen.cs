@@ -14,7 +14,9 @@ namespace Berpiztu.KeyPlus;
 /// does; with a switch, whether it is on and what turning it does; one of a
 /// choice's, shown with all the others, whether it is the one chosen (a tap
 /// chooses it); whether a tap opens a page of its own; a view of its own
-/// under its line (the log's box), laid with its own size.
+/// under its line (the log's box), laid with its own size. One that does not
+/// apply now (<see cref="Enabled"/> false) is faded, its switch as it is and
+/// not turned by a tap, which does what <see cref="Tapped"/> says: why.
 /// </summary>
 public sealed record SettingsRow(
     string Title,
@@ -28,7 +30,12 @@ public sealed record SettingsRow(
     Action? Removed = null,
     Action? Edited = null,
     View? Below = null,
-    SettingsButton? Button = null);
+    SettingsButton? Button = null,
+    bool Enabled = true,
+    IReadOnlyList<SettingsToggle>? Toggles = null);
+
+/// <summary>One of a row's switches side by side, in its title's place (<see cref="SettingsRow.Toggles"/>): its name, whether it is on, what turning it does.</summary>
+public sealed record SettingsToggle(string Title, bool On, Action<bool> Switched);
 
 /// <summary>
 /// A row's own button at its right, as a download's line has: the word it says now among all it may say (the button
@@ -412,6 +419,39 @@ public sealed class SettingsScreen
     /// <summary>The room inside a card around what it groups.</summary>
     private const float CardPaddingDp = 10;
 
+    /// <summary>
+    /// Switches side by side in a row's title's place, each its name in the title's type and its switch, sharing the
+    /// row's width alike; a tap on either half turns its own.
+    /// </summary>
+    private LinearLayout Toggles(IReadOnlyList<SettingsToggle> toggles)
+    {
+        var line = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        line.SetGravity(GravityFlags.CenterVertical);
+        foreach (var toggle in toggles)
+        {
+            var half = new LinearLayout(context) { Orientation = Orientation.Horizontal, Clickable = true };
+            half.SetGravity(GravityFlags.CenterVertical);
+            var name = new TextView(context) { Text = toggle.Title };
+            name.SetTextColor(words);
+            name.SetTextSize(ComplexUnitType.Sp, RowTitleSp);
+            name.SetTypeface(null, TypefaceStyle.Bold);
+            half.AddView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
+            var turn = new Switch(context) { Checked = toggle.On, Clickable = false };
+            half.AddView(turn);
+            half.Click += (_, _) =>
+            {
+                turn.Checked = !turn.Checked;
+                toggle.Switched(turn.Checked);
+            };
+            line.AddView(half, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f)
+            {
+                RightMargin = line.ChildCount < toggles.Count - 1 ? Dp(SignLeftDp) : 0,
+            });
+        }
+
+        return line;
+    }
+
     /// <summary>A row as a card: rounded large at its group's ends, a little elsewhere; its sign, title, line and switch.</summary>
     private View Row(SettingsRow row, bool first, bool last, bool compact)
     {
@@ -433,13 +473,15 @@ public sealed class SettingsScreen
 
         var texts = new LinearLayout(context) { Orientation = Orientation.Vertical };
         texts.SetGravity(GravityFlags.CenterVertical);
+        // A row that does not apply now (another choice takes its place) is faded, never hidden; a tap says why.
+        texts.Alpha = row.Enabled ? 1 : ColorsRow.OffAlpha;
         texts.SetPadding(0, Dp(compact ? 0 : 12), 0, Dp(compact ? 0 : 12));
         // The title in bold, the user's: in regular type it hardly stood apart from its line under it.
         var title = new TextView(context) { Text = row.Title };
         title.SetTextColor(words);
         title.SetTextSize(ComplexUnitType.Sp, RowTitleSp);
         title.SetTypeface(null, TypefaceStyle.Bold);
-        texts.AddView(title);
+        texts.AddView(row.Toggles is { } toggles ? Toggles(toggles) : title);
         if (row.Summary is { } summary)
         {
             var line = new TextView(context) { Text = summary };
@@ -538,10 +580,16 @@ public sealed class SettingsScreen
 
         if (row.On is { } on)
         {
-            var toggle = new Switch(context) { Checked = on, Clickable = false };
+            var toggle = new Switch(context) { Checked = on, Clickable = false, Enabled = row.Enabled };
             frame.AddView(toggle, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, GravityFlags.Right | GravityFlags.CenterVertical) { RightMargin = Dp(SignLeftDp) });
             frame.Click += (_, _) =>
             {
+                if (!row.Enabled)
+                {
+                    row.Tapped?.Invoke();
+                    return;
+                }
+
                 toggle.Checked = !toggle.Checked;
                 row.Switched?.Invoke(toggle.Checked);
             };

@@ -33,7 +33,7 @@ public sealed record KeyboardPreferences(
     bool AvoidMenus = true,
     bool? Pc = null,
     string? Language = null,
-    // Glide typing as an older file had it, one for every language: read for a language not chosen yet (GlidesIn).
+    // Glide typing as an older file had it, one for every language: read until it is turned (GlideTyping).
     bool Glide = false,
     bool GlideTrail = true,
     bool GlideDeleteWord = true,
@@ -60,14 +60,26 @@ public sealed record KeyboardPreferences(
     // Preferences' Show the emoji row: over the toolbar the emoji typed lately, or the words offered while typing.
     bool EmojiRow = true,
     // Troubleshooting's Start as administrator: for windows run as administrator (Elevation).
-    bool AsAdministrator = false)
+    bool AsAdministrator = false,
+    // Glide typing on and off for every language at once, as Android's: none until it is turned (GlideTyping).
+    bool? GlideAll = null,
+    // Each language's context model chosen in its list, kept while it is off, so it is the one turned on again.
+    Dictionary<string, string>? ContextModels = null)
 {
-    /// <summary>Whether a language is swiped in (its Glide typing, on its page under Languages, or the toolbar's button while typing in it).</summary>
-    public bool GlidesIn(string language) => GlideBy is { } chosen && chosen.TryGetValue(language, out var on) ? on : Glide;
+    /// <summary>A language's context model chosen in its list, on or off; none until one is chosen.</summary>
+    public string? ContextModelIn(string language) => ContextModels?.GetValueOrDefault(language);
 
-    /// <summary>The preferences with a language's Glide typing changed.</summary>
-    public KeyboardPreferences WithGlide(string language, bool on) =>
-        this with { GlideBy = new Dictionary<string, bool>(GlideBy ?? []) { [language] = on } };
+    /// <summary>The preferences with a language's context model chosen in its list.</summary>
+    public KeyboardPreferences WithContextModel(string language, string name) =>
+        this with { ContextModels = new Dictionary<string, string>(ContextModels ?? []) { [language] = name } };
+
+    /// <summary>
+    /// Whether Glide typing is on, for every language (its page, or the
+    /// toolbar's button): the model is one for all. Until it is turned, on
+    /// where any language had it on by itself (GlideBy), or an older file's
+    /// one switch had.
+    /// </summary>
+    public bool GlideTyping => GlideAll ?? (Glide || GlideBy?.ContainsValue(true) == true);
 
     /// <summary>
     /// A language's Spelling (<see cref="LanguageSpelling"/>); one not chosen
@@ -80,19 +92,21 @@ public sealed record KeyboardPreferences(
             ? new(SpellingWords, SpellingAutocorrect, SpellingAccentClosing, SpellingWikipedia, SpellingOpenMark)
             : new(SpellingWords, SpellingAutocorrect));
 
-    /// <summary>The preferences with a language's Spelling changed.</summary>
+    /// <summary>The preferences with a language's Spelling changed; its context model's name kept too, where it is on.</summary>
     public KeyboardPreferences WithSpelling(string language, LanguageSpelling changed) =>
-        this with { Spelling = new Dictionary<string, LanguageSpelling>(Spelling ?? []) { [language] = changed } };
+        (changed.Context is { } model ? WithContextModel(language, model) : this)
+        with { Spelling = new Dictionary<string, LanguageSpelling>(Spelling ?? []) { [language] = changed } };
 
-    /// <summary>Whether a language has something Spelling corrects with: its dictionary downloaded with Correct words on, the accent model with its accents on, or ¿ and ¡ on, which need nothing.</summary>
+    /// <summary>Whether a language has something Spelling corrects with: its dictionary downloaded with Correct words on, the accent model with its accents on, its punctuation model with punctuation on, a context model on, or ¿ and ¡ on, which need nothing.</summary>
     public bool CanCorrect(string language)
     {
         var spelling = SpellingIn(language);
-        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded) || (spelling.Punctuation && PunctuationModel.For(language)?.Downloaded == true) || spelling.OpenMark;
+        return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded) || (spelling.Punctuation && PunctuationModel.For(language)?.Downloaded == true)
+            || spelling.Context is not null || spelling.OpenMark;
     }
 
-    /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off from the toolbar.</summary>
-    public LanguageSpelling Applied(string language) => SpellingOn ? SpellingIn(language) : LanguageSpelling.Off;
+    /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off from the toolbar; with its context model on, that alone (<see cref="LanguageSpelling.ContextAlone"/>).</summary>
+    public LanguageSpelling Applied(string language) => SpellingOn ? SpellingIn(language).ContextAlone() : LanguageSpelling.Off;
 
     /// <summary>
     /// The colours the keyboard takes typing in an application: Tema's, or,

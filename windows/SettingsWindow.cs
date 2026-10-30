@@ -288,9 +288,10 @@ public sealed class SettingsWindow : Window
     /// The keyboard's languages, a line each with More options, which opens
     /// the language's page, its ← back to the page it was opened from
     /// (<paramref name="from"/>): on Languages, the one typed in marked and
-    /// chosen there; on Spelling and Dictionary, only named.
+    /// chosen there; on Spelling and Dictionary, only named; on Glide typing,
+    /// named with what is said of it (<paramref name="saying"/>).
     /// </summary>
-    private FrameworkElement LanguageLines(bool choosing, Func<FrameworkElement> from)
+    private FrameworkElement LanguageLines(bool choosing, Func<FrameworkElement> from, Func<StandardLanguage, string>? saying = null)
     {
         var preferences = KeyboardPreferences.Read();
 
@@ -311,7 +312,7 @@ public sealed class SettingsWindow : Window
             }
             else
             {
-                name = new TextBlock { Text = language.Name };
+                name = new TextBlock { Text = saying is null ? language.Name : $"{language.Name}: {saying(language)}" };
             }
 
             name.VerticalAlignment = VerticalAlignment.Center;
@@ -347,26 +348,59 @@ public sealed class SettingsWindow : Window
         heading.Children.Add(new TextBlock { Text = language.Name, FontSize = TitleSize, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         form.Children.Add(heading);
         form.Children.Add(Section(Resource.String.spelling));
+        var now = KeyboardPreferences.Read().SpellingIn(code);
+        void Keep(Func<LanguageSpelling, LanguageSpelling> change)
+        {
+            var kept = KeyboardPreferences.Read();
+            kept.WithSpelling(code, change(kept.SpellingIn(code))).Keep();
+        }
+
         foreach (var choice in LanguageOptions.SpellingChoices(code, Texts.Get))
         {
-            var box = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(KeyboardPreferences.Read().SpellingIn(code)) };
-            form.Children.Add(FieldSaying(null, box, choice.Summary));
-            var state = Choosing(box, choice.Fetches, on =>
+            // Autocorrect and Suggestions in one line, as Android's: whether what corrects writes, offers, both or
+            // neither; under them the word list, the suggestions' and Glide typing's, then what corrects.
+            if (choice.Label == Resource.String.spelling_autocorrect)
             {
-                var now = KeyboardPreferences.Read();
-                now.WithSpelling(code, choice.Set(now.SpellingIn(code), on)).Keep();
-            });
+                var both = new StackPanel { Orientation = Orientation.Horizontal };
+                foreach (var (label, on, set) in new (int, bool, Func<LanguageSpelling, bool, LanguageSpelling>)[]
+                {
+                    (Resource.String.spelling_autocorrect, now.Autocorrect, (spelling, turned) => spelling with { Autocorrect = turned }),
+                    (Resource.String.spelling_suggestions, now.Suggestions, (spelling, turned) => spelling with { Suggestions = turned }),
+                })
+                {
+                    var box = new CheckBox { Content = Texts.Get(label), IsChecked = on, Margin = new Thickness(0, 0, FieldGapDp * 2, 0) };
+                    box.Click += (_, _) => Keep(spelling => set(spelling, box.IsChecked == true));
+                    both.Children.Add(box);
+                }
+
+                form.Children.Add(FieldSaying(null, both, Texts.Get(Resource.String.spelling_writes_offers_summary)));
+                form.Children.Add(FetchLine(LanguageOptions.WordListOf(language)));
+                form.Children.Add(ContextModelPart(code, now, Keep, () => ShowPage(LanguagePage(language, from))));
+                continue;
+            }
+
+            var choiceBox = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(now) };
+            form.Children.Add(FieldSaying(null, choiceBox, choice.Summary));
+            var state = Choosing(choiceBox, choice.Fetches, on => Keep(spelling => choice.Set(spelling, on)));
+
+            // While the context model is on it alone corrects: the others faded, kept as they are, a click saying why.
+            if (choice.Corrects && now.Context is not null)
+            {
+                choiceBox.Opacity = OffOpacity;
+                choiceBox.Click += (_, _) =>
+                {
+                    choiceBox.IsChecked = choice.Get(KeyboardPreferences.Read().SpellingIn(code));
+                    Log.Write($"Settings: {Texts.Get(choice.Label)} not turned: {Texts.Get(Resource.String.context_model_in_place)}");
+                    MessageBox.Show(Texts.Get(Resource.String.context_model_in_place), Texts.Get(choice.Label), MessageBoxButton.OK, MessageBoxImage.Information);
+                };
+            }
+
             if (state is not null)
             {
                 form.Children.Add(state);
             }
         }
 
-        // Glide typing, the language's own: its word list, and the model the first time.
-        form.Children.Add(Section(Resource.String.glide));
-        var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = KeyboardPreferences.Read().GlidesIn(code) };
-        form.Children.Add(FieldSaying(null, glide, LanguageOptions.GlideSummary(language, Texts.Get)));
-        form.Children.Add(Choosing(glide, LanguageOptions.GlideOf(language), on => KeyboardPreferences.Read().WithGlide(code, on).Keep())!);
         form.Children.Add(Section(Resource.String.dictionary));
         form.Children.Add(WordsPart(code));
         return form;
@@ -863,11 +897,17 @@ public sealed class SettingsWindow : Window
     private static FrameworkElement? Choosing(CheckBox box, Fetched? fetches, Action<bool> keep)
     {
         box.Click += (_, _) => keep(box.IsChecked == true);
-        if (fetches is null)
-        {
-            return null;
-        }
+        return fetches is null ? null : FetchLine(fetches);
+    }
 
+    /// <summary>
+    /// What a choice fetches, its line of one size whatever it says: where it
+    /// is (not here yet, how much while it comes with a bar under it, here) and
+    /// one button that fetches it, stops it coming, or fetches it again, as wide
+    /// as the widest of its words, so nothing moves.
+    /// </summary>
+    private static FrameworkElement FetchLine(Fetched fetches)
+    {
         var state = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
         var bar = new ProgressBar { Height = ProgressDp, Minimum = 0, Maximum = 1, Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Hidden };
         int[] words = [Resource.String.download, Resource.String.cancel, Resource.String.spelling_download_again];
@@ -894,7 +934,7 @@ public sealed class SettingsWindow : Window
         {
             var here = fetches.Downloaded();
             bar.Visibility = Visibility.Hidden;
-            state.Text = Texts.Get(here ? fetches.Done : Resource.String.spelling_not_downloaded);
+            state.Text = Texts.Get(here ? fetches.Done : fetches.Missing ?? Resource.String.spelling_not_downloaded);
             Say(here ? Resource.String.spelling_download_again : Resource.String.download);
         }
 
@@ -929,6 +969,68 @@ public sealed class SettingsWindow : Window
         return line;
     }
 
+    /// <summary>A choice that does not apply now, faded so it reads as off, as Android's.</summary>
+    private const double OffOpacity = 0.35;
+
+    /// <summary>
+    /// A language's Context model, as Android's (<see cref="ContextCorrector"/>):
+    /// its box and, under its line, Modelo and the list of the models put in
+    /// %LOCALAPPDATA%\Berpiztu\Keyboard\correctors, the one it reads with
+    /// chosen there; the list there whatever it holds, off while the model is.
+    /// On, it alone corrects the language (<see cref="LanguageSpelling.ContextAlone"/>):
+    /// the others under it are faded, kept as they were for when it is turned off, the page made again
+    /// (<paramref name="again"/>) as it is turned.
+    /// </summary>
+    private static FrameworkElement ContextModelPart(string code, LanguageSpelling now, Action<Func<LanguageSpelling, LanguageSpelling>> keep, Action again)
+    {
+        var names = ContextCorrector.Names(ContextCorrector.Folder).ToList();
+        var box = new CheckBox { Content = Texts.Get(Resource.String.context_model), IsChecked = now.Context is not null };
+        var list = new ComboBox { IsEnabled = now.Context is not null && names.Count > 0, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var name in names.Count > 0 ? names : [Texts.Get(Resource.String.context_model_none)])
+        {
+            list.Items.Add(new ComboBoxItem { Content = name });
+        }
+
+        var kept = now.Context ?? KeyboardPreferences.Read().ContextModelIn(code);
+        list.SelectedIndex = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
+        list.SelectionChanged += (_, _) =>
+        {
+            if (names.Count == 0 || list.SelectedIndex < 0)
+            {
+                return;
+            }
+
+            var name = names[list.SelectedIndex];
+            var preferences = KeyboardPreferences.Read().WithContextModel(code, name);
+            (preferences.SpellingIn(code) is { Context: not null } spelling ? preferences.WithSpelling(code, spelling with { Context = name }) : preferences).Keep();
+            Log.Write($"Corrector: {name} chosen for {code}");
+        };
+        box.Click += (_, _) =>
+        {
+            if (box.IsChecked == true && names.Count == 0)
+            {
+                box.IsChecked = false;
+                var said = Texts.Get(Resource.String.context_model_none_put, ContextCorrector.Folder);
+                Log.Write($"Settings: {Texts.Get(Resource.String.context_model)} not turned on: {said}");
+                MessageBox.Show(said, Texts.Get(Resource.String.context_model), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var model = box.IsChecked == true ? names[Math.Max(0, list.SelectedIndex)] : null;
+            keep(spelling => spelling with { Context = model });
+            list.IsEnabled = model is not null;
+            Log.Write(model is null ? $"Corrector: {code}'s context model off" : $"Corrector: {model} on for {code}");
+            again();
+        };
+        var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+        line.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.context_model_list), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) });
+        line.Children.Add(list);
+        var part = new StackPanel();
+        part.Children.Add(FieldSaying(null, box, Texts.Get(Resource.String.context_model_summary)));
+        part.Children.Add(line);
+        return part;
+    }
+
     /// <summary>How tall a download's bar is, under the words of its line.</summary>
     private const double ProgressDp = 4;
 
@@ -956,7 +1058,7 @@ public sealed class SettingsWindow : Window
         {
             Log.Write($"Spelling: the download of {what.Named} was stopped");
         }
-        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or System.IO.InvalidDataException or TaskCanceledException)
+        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or UnauthorizedAccessException or System.IO.InvalidDataException or TaskCanceledException)
         {
             Log.Write($"Spelling: {what.Named} could not be downloaded: {failure.Message}");
             MessageBox.Show(Texts.Get(what.Failed, failure.Message), Texts.Get(Resource.String.spelling), MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1202,18 +1304,29 @@ public sealed class SettingsWindow : Window
         return export;
     }
 
-    /// <summary>Glide typing, as Android's: swiping over the letters, its trail and ⌫ deleting a swiped word whole; FUTO Swipe's notice in sight, as its licence asks.</summary>
+    /// <summary>
+    /// Glide typing, as Android's: swiping over the letters, on and off for
+    /// every language, with FUTO Swipe's model's line; its trail and ⌫ deleting
+    /// a swiped word whole; whether each language's word list is here, fetched
+    /// on its page with its Suggestions; FUTO Swipe's notice in sight, as its
+    /// licence asks.
+    /// </summary>
     private FrameworkElement GlidePage()
     {
         var preferences = KeyboardPreferences.Read();
         var form = Form(Resource.String.glide);
-        form.Children.Add(Field(null, LanguageLines(choosing: false, GlidePage), Resource.String.glide_by_language));
+        var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = preferences.GlideTyping };
+        form.Children.Add(Field(null, glide, Resource.String.glide_on_summary));
+        form.Children.Add(Choosing(glide, LanguageOptions.GlideModel, on => (KeyboardPreferences.Read() with { GlideAll = on }).Keep())!);
         var trail = new CheckBox { Content = Texts.Get(Resource.String.glide_trail), IsChecked = preferences.GlideTrail };
         trail.Click += (_, _) => (KeyboardPreferences.Read() with { GlideTrail = trail.IsChecked == true }).Keep();
         form.Children.Add(Field(null, trail, Resource.String.glide_trail_summary));
         var deleteWord = new CheckBox { Content = Texts.Get(Resource.String.glide_delete_word), IsChecked = preferences.GlideDeleteWord };
         deleteWord.Click += (_, _) => (KeyboardPreferences.Read() with { GlideDeleteWord = deleteWord.IsChecked == true }).Keep();
         form.Children.Add(Field(null, deleteWord, Resource.String.glide_delete_word_summary));
+        form.Children.Add(Field(null, LanguageLines(choosing: false, GlidePage,
+            language => Texts.Get(SwipeData.HasWordList(language) ? Resource.String.glide_word_list_here : Resource.String.glide_word_list_missing)),
+            Resource.String.glide_word_lists));
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
         return form;
     }

@@ -69,6 +69,7 @@
     <Compile Include="..\CommonErrors.cs" Link="Shared\CommonErrors.cs" />
     <Compile Include="..\AccentModel.cs" Link="Shared\AccentModel.cs" />
     <Compile Include="..\PunctuationModel.cs" Link="Shared\PunctuationModel.cs" />
+    <Compile Include="..\ContextCorrector.cs" Link="Shared\ContextCorrector.cs" />
     <Compile Include="..\SwipeData.cs" Link="Shared\SwipeData.cs" />
     <Compile Include="..\SpellingEngine.cs" Link="Shared\SpellingEngine.cs" />
     <Compile Include="..\LanguageOptions.cs" Link="Shared\LanguageOptions.cs" />

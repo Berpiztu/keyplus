@@ -70,6 +70,20 @@ public static class SwipeData
     /// <summary>When a language's word list was last written: downloaded again, it is read again.</summary>
     public static DateTime WordListStamp(StandardLanguage language) => File.GetLastWriteTimeUtc(WordListPath(language));
 
+    /// <summary>The encoder fetched, one for every language; how much is done, told as it goes.</summary>
+    public static async Task DownloadModel(IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
+    {
+        await Downloads.FilesAsync([.. Model.Select(file => (Folder, file))], progress, cancel);
+        Log.Write("Glide typing: FUTO Swipe's model downloaded");
+    }
+
+    /// <summary>A language's word list fetched alone; how much is done, told as it goes.</summary>
+    public static async Task DownloadWordList(StandardLanguage language, IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
+    {
+        await Downloads.FilesAsync([WordListFile(language)], progress, cancel);
+        Log.Write($"Suggestions: the {language.Code} word list downloaded");
+    }
+
     /// <summary>A language's word list fetched, and the encoder with it where it is not here yet; how much of all is done, told as it goes.</summary>
     public static async Task DownloadFor(StandardLanguage language, IProgress<(long Done, long Total)> progress, CancellationToken cancel = default)
     {

@@ -23,8 +23,8 @@ public sealed class ColorsRow : FrameLayout
 {
     private const float GapDp = 4;
 
-    /// <summary>A part turned off, faded so it reads as off.</summary>
-    private const float OffAlpha = 0.35f;
+    /// <summary>A part turned off, faded so it reads as off; a settings row that does not apply now alike.</summary>
+    public const float OffAlpha = 0.35f;
 
     /// <summary>Tema's small type, its labels' and its lists' alike (<see cref="ThemeView"/>).</summary>
     public const float TextSp = 13;
@@ -162,7 +162,7 @@ public sealed class ColorsRow : FrameLayout
     }
 
     /// <summary>A part on or off where it does not apply, faded then so it reads as off; never hidden.</summary>
-    private static void Turned(View part, bool on)
+    public static void Turned(View part, bool on)
     {
         part.Enabled = on;
         part.Alpha = on ? 1 : OffAlpha;
@@ -210,13 +210,7 @@ public sealed class ColorsRow : FrameLayout
         lines.ScaleX = lines.ScaleY = scale;
     }
 
-    private TextView Words(int text)
-    {
-        var words = new TextView(Context) { Text = Context!.GetString(text) };
-        words.SetTextSize(ComplexUnitType.Sp, TextSp);
-        words.SetPadding(0, 0, Dp(GapDp), 0);
-        return words;
-    }
+    private TextView Words(int text) => SmallWords.Label(Context!, Context!.GetString(text)!);
 
     private CheckBox Check(int text, bool on, bool enabled, Action<bool> turned)
     {
@@ -231,22 +225,8 @@ public sealed class ColorsRow : FrameLayout
     /// <summary>A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing; that width kept (<see cref="widths"/>), for the applications' list to take.</summary>
     private Spinner Choices(IReadOnlyList<string> words, int chosen, Action<int> picked)
     {
-        var list = new Spinner(Context);
-        list.Adapter = new SmallWords(Context!, words);
-        if (chosen >= 0)
-        {
-            list.SetSelection(chosen, false);
-        }
-
-        list.ItemSelected += (_, e) => picked(e.Position);
-
-        // Its width at once, before it is drawn: measured with no limit, a list is as wide as its longest choice, its frame
-        // and arrow too. Set after it was first drawn, the applications' list showed at its own width for half a second
-        // each time the page was made again (De la app turned).
-        var unspecified = MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified);
-        list.Measure(unspecified, unspecified);
-        widths[list] = list.MeasuredWidth;
-        list.LayoutParameters = new LinearLayout.LayoutParams(list.MeasuredWidth, ViewGroup.LayoutParams.WrapContent) { LeftMargin = Dp(GapDp) };
+        var list = SmallWords.List(Context!, words, chosen, picked);
+        widths[list] = list.LayoutParameters!.Width;
         return list;
     }
 
@@ -279,10 +259,51 @@ public sealed class ColorsRow : FrameLayout
     private int Dp(float value) => (int)((value * Resources!.DisplayMetrics!.Density) + 0.5f);
 }
 
-/// <summary>A list's words in Tema's small type (<see cref="ColorsRow.TextSp"/>), the shown one and those dropped down alike; the shown one on one line, cut short with … where its list is narrower, those dropped down whole.</summary>
+/// <summary>
+/// A list's words in Tema's small type (<see cref="ColorsRow.TextSp"/>), the shown one and those dropped down alike; the
+/// shown one on one line, cut short with … where its list is narrower, those dropped down whole. Its list and the label
+/// before it (<see cref="List"/>, <see cref="Label"/>) are the settings' one list, Tema's and a language's context
+/// model's alike.
+/// </summary>
 public sealed class SmallWords(Context context, IReadOnlyList<string> words)
     : ArrayAdapter<string>(context, Android.Resource.Layout.SimpleSpinnerItem, words.ToList())
 {
+    private const float GapDp = 4;
+
+    /// <summary>
+    /// A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing. A choice
+    /// tells <paramref name="picked"/>; so does a list as it is first laid out, of the one it shows.
+    /// </summary>
+    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked)
+    {
+        var list = new Spinner(context) { Adapter = new SmallWords(context, words) };
+        if (chosen >= 0)
+        {
+            list.SetSelection(chosen, false);
+        }
+
+        list.ItemSelected += (_, e) => picked(e.Position);
+
+        // Its width at once, before it is drawn: measured with no limit, a list is as wide as its longest choice, its frame
+        // and arrow too. Set after it was first drawn, the applications' list showed at its own width for half a second
+        // each time the page was made again (De la app turned).
+        var unspecified = View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified);
+        list.Measure(unspecified, unspecified);
+        list.LayoutParameters = new LinearLayout.LayoutParams(list.MeasuredWidth, ViewGroup.LayoutParams.WrapContent) { LeftMargin = Dp(context, GapDp) };
+        return list;
+    }
+
+    /// <summary>The words before a list, in its small type.</summary>
+    public static TextView Label(Context context, string text)
+    {
+        var label = new TextView(context) { Text = text };
+        label.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
+        label.SetPadding(0, 0, Dp(context, GapDp), 0);
+        return label;
+    }
+
+    private static int Dp(Context context, float value) => (int)((value * context.Resources!.DisplayMetrics!.Density) + 0.5f);
+
     public override View GetView(int position, View? convertView, ViewGroup parent)
     {
         var shown = Small(base.GetView(position, convertView, parent));

@@ -118,7 +118,7 @@ public sealed class KeyboardWindow : Window
     /// <summary>The toolbar's Spelling on and off (<see cref="KeyboardPreferences.SpellingOn"/>), lit while on.</summary>
     private readonly SignButton spellingButton;
 
-    /// <summary>The toolbar's Glide typing on and off for the language typed in (<see cref="KeyboardPreferences.GlidesIn"/>), lit while on with its files.</summary>
+    /// <summary>The toolbar's Glide typing on and off for every language (<see cref="KeyboardPreferences.GlideTyping"/>), lit while on with the language typed in's files.</summary>
     private readonly SignButton glideButton;
     private readonly FocusWatch focus = new();
     private readonly IDisposable preferencesWatch;
@@ -271,7 +271,9 @@ public sealed class KeyboardWindow : Window
         keys.KeyPressed += LogFieldSoon;
         spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
             () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList)), Log.Write);
-        keys.Suggesting = (language, typed) => personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered);
+        keys.Suggesting = (language, typed) => preferences.Applied(language.Code).Suggestions
+            ? personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered)
+            : [];
         spellingEngine.FixesFound += (language, word) =>
         {
             if (keys.TypingWord == word)
@@ -282,26 +284,26 @@ public sealed class KeyboardWindow : Window
         keys.SpellingIn = language => preferences.Applied(language.Code);
         keys.Fixing = (language, word) => spellingEngine.Fix(language, word);
         keys.WordFixed += ShowWordFix;
+        context = new(() => preferences.Applied(keys.KeyLanguage.Code).Context,
+            () => preferences.Applied(keys.KeyLanguage.Code).Context is { } name ? ContextCorrector.Load(System.IO.Path.Combine(ContextCorrector.Folder, name)) : null,
+            old => old.Dispose());
+        keys.WordEnded += MendWordByModel;
         keys.CorrectFieldNow = ended =>
         {
-            var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation ? spellingEngine.PunctuationOf(keys.KeyLanguage.Code)?.InUse() : null;
-            var accents = spelling.Accents ? spellingEngine.Accents.InUse() : null;
-            if ((punctuation is null && accents is null) || FieldEndingWith(ended) is not ({ } text, var readAt)
+            var models = ModelsNow(preferences.Applied(keys.KeyLanguage.Code));
+            if (models.None || FieldEndingWith(ended) is not ({ } text, var readAt)
                 || SentenceIn(text, closedNow: false) is not { } sentence)
             {
                 return false;
             }
 
-            var corrected = Corrected(sentence, punctuation, accents, opens: true);
+            var corrected = models.Correct(sentence, opens: true);
             return corrected == sentence || keys.ReplaceRead(sentence, corrected, readAt);
         };
         keys.FieldSentenceClosed += async closing =>
         {
-            var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation && spellingEngine.PunctuationOf(keys.KeyLanguage.Code) is { } punctuationModel ? await punctuationModel.Async() : null;
-            var accents = spelling.Accents ? await spellingEngine.Accents.Async() : null;
-            if (punctuation is null && accents is null)
+            var models = await ModelsAsync(preferences.Applied(keys.KeyLanguage.Code));
+            if (models.None)
             {
                 return;
             }
@@ -316,7 +318,7 @@ public sealed class KeyboardWindow : Window
                 return;
             }
 
-            var corrected = await Task.Run(() => Corrected(sentence, punctuation, accents, opens: true));
+            var corrected = await Task.Run(() => models.Correct(sentence, opens: true));
             if (corrected == sentence)
             {
                 Log.Detail("Spelling: the model changed nothing in a sentence");
@@ -328,38 +330,40 @@ public sealed class KeyboardWindow : Window
         };
         keys.CorrectNow = (sentence, byKeys) =>
         {
-            var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation ? spellingEngine.PunctuationOf(keys.KeyLanguage.Code)?.InUse() : null;
-            var accents = spelling.Accents ? spellingEngine.Accents.InUse() : null;
-            if (punctuation is null && accents is null)
+            var models = ModelsNow(preferences.Applied(keys.KeyLanguage.Code));
+            if (models.None)
             {
                 return null;
             }
 
             // Enter cannot wait long: the field read for a moment, else whether these keys began the sentence.
-            var reading = OpensSentence(sentence, byKeys);
-            var opens = punctuation is not null && (reading.Wait(FieldWait) ? reading.Result : byKeys);
-            return Corrected(sentence, punctuation, accents, opens);
+            var opens = false;
+            if (models.Punctuation is not null)
+            {
+                var reading = OpensSentence(sentence, byKeys);
+                opens = reading.Wait(FieldWait) ? reading.Result : byKeys;
+            }
+
+            return models.Correct(sentence, opens);
         };
         keys.SentenceClosed += async (sentence, byKeys) =>
         {
             var spelling = preferences.Applied(keys.KeyLanguage.Code);
-            var punctuation = spelling.Punctuation && spellingEngine.PunctuationOf(keys.KeyLanguage.Code) is { } punctuationModel ? await punctuationModel.Async() : null;
-            var accents = spelling.Accents ? await spellingEngine.Accents.Async() : null;
-            if (punctuation is null && accents is null)
+            var models = await ModelsAsync(spelling);
+            if (models.None || (!spelling.Autocorrect && !spelling.Suggestions))
             {
                 return;
             }
 
             var opens = false;
-            if (punctuation is not null)
+            if (models.Punctuation is not null)
             {
                 await Task.Delay(FieldSettles);
                 opens = await OpensSentence(sentence, byKeys);
             }
 
             // Autocorrect: applied at once, what it was offered in the toolbar to take back; else the correction offered there.
-            var corrected = await Task.Run(() => Corrected(sentence, punctuation, accents, opens));
+            var corrected = await Task.Run(() => models.Correct(sentence, opens));
             if (corrected == sentence)
             {
                 Log.Detail("Spelling: the model changed nothing in a sentence");
@@ -505,7 +509,7 @@ public sealed class KeyboardWindow : Window
         };
         DockPanel.SetDock(spellingButton, Dock.Left);
 
-        // The language typed in swiped or not, lit while on; without its files, said, with Download beside it for that language alone.
+        // Glide typing on or off for every language, lit while on; without the model or the language typed in's word list, said, with Download beside it for what is missing.
         glideButton.Clicked += () =>
         {
             var language = keys.KeyLanguage;
@@ -513,11 +517,11 @@ public sealed class KeyboardWindow : Window
             {
                 Log.Write($"Glide typing: {language.Code}'s word list or the model is not downloaded, so the toolbar's button stays off");
                 OfferDownload(Texts.Get(Resource.String.glide_not_downloaded, language.Name), $"glide typing for {language.Code}", progress => SwipeData.DownloadFor(language, progress),
-                    () => KeyboardPreferences.Read().WithGlide(language.Code, true).Keep(), Resource.String.glide_downloaded, Resource.String.glide_download_failed);
+                    () => (KeyboardPreferences.Read() with { GlideAll = true }).Keep(), Resource.String.glide_downloaded, Resource.String.glide_download_failed);
                 return;
             }
 
-            KeyboardPreferences.Read().WithGlide(language.Code, !glideButton.Lit).Keep();
+            (KeyboardPreferences.Read() with { GlideAll = !glideButton.Lit }).Keep();
         };
         DockPanel.SetDock(glideButton, Dock.Left);
         DockPanel.SetDock(close, Dock.Right);
@@ -612,6 +616,7 @@ public sealed class KeyboardWindow : Window
         };
         Closed += (_, _) =>
         {
+            Log.Detail("Keyboard: closed, letting its watches go");
             voice.Dispose();
             focus.Dispose();
             input.Dispose();
@@ -623,6 +628,7 @@ public sealed class KeyboardWindow : Window
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= DisplayChanged;
             tray.Dispose();
             icon.Close();
+            Log.Detail("Keyboard: closed, its watches let go");
         };
         LocationChanged += (_, _) => KeepSoon();
         SizeChanged += (_, _) => KeepSoon();
@@ -851,6 +857,7 @@ public sealed class KeyboardWindow : Window
         var shown = show || IsVisible;
         dockedBar?.Undock();
         var made = new KeyboardWindow(app, ownColor);
+        Log.Detail("Keyboard: the new one made, the old one closing");
         Application.Current.MainWindow = made;
         if (shown)
         {
@@ -1022,7 +1029,7 @@ public sealed class KeyboardWindow : Window
                 ShowSuggestions([], null);
                 Notice(Texts.Get(done));
             }
-            catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+            catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or TaskCanceledException)
             {
                 Log.Write($"Downloads: {named} could not be downloaded from the toolbar: {failure.Message}");
                 ShowSuggestions([], null);
@@ -1035,13 +1042,13 @@ public sealed class KeyboardWindow : Window
     }
 
     /// <summary>
-    /// Glide typing as the language typed in has it: swiped, and its toolbar
-    /// button lit, only while it is on in that language and its word list and
-    /// the model are downloaded; another language, its own.
+    /// Glide typing as it is for every language: swiped, and its toolbar
+    /// button lit, only while it is on and the model and the language typed
+    /// in's word list are downloaded.
     /// </summary>
     private void TakeGlide(KeyboardPreferences kept)
     {
-        var on = kept.GlidesIn(keys.KeyLanguage.Code) && SwipeData.ReadyFor(keys.KeyLanguage);
+        var on = kept.GlideTyping && SwipeData.ReadyFor(keys.KeyLanguage);
         keys.Glides = on;
         glideButton.Lit = on;
 
@@ -1073,6 +1080,61 @@ public sealed class KeyboardWindow : Window
         // What words were found to mean may change with what is now turned on.
         spellingEngine.Forget();
         spellingEngine.Prepare(keys.KeyLanguage);
+        _ = context.Async();
+    }
+
+    /// <summary>The context model of the language typed in (its Spelling's), loaded as its Spelling is taken and again once the language or its model changes; only one in memory.</summary>
+    private readonly Loaded<ContextCorrector> context;
+
+    /// <summary>
+    /// The models that read a sentence of the language typed in, as its
+    /// Spelling has them: its context model alone where it is on (one loaded
+    /// for another language is not used), else its punctuation and accent models.
+    /// </summary>
+    private sealed record SentenceModels(ContextCorrector? Context, PunctuationModel? Punctuation, AccentModel? Accents)
+    {
+        public bool None => Context is null && Punctuation is null && Accents is null;
+
+        /// <summary>The sentence as they write it: the context model's, or punctuated then its accents restored (<see cref="Corrected"/>).</summary>
+        public string Correct(string sentence, bool opens) => Context?.Correct(sentence) ?? Corrected(sentence, Punctuation, Accents, opens);
+    }
+
+    /// <summary>The sentence's models as they are loaded now, for Enter, which cannot wait.</summary>
+    private SentenceModels ModelsNow(LanguageSpelling spelling) => new(
+        spelling.Context is { } name && context.InUse() is { } corrector && corrector.Name == name ? corrector : null,
+        spelling.Punctuation ? spellingEngine.PunctuationOf(keys.KeyLanguage.Code)?.InUse() : null,
+        spelling.Accents ? spellingEngine.Accents.InUse() : null);
+
+    /// <summary>The sentence's models, waited for as they load.</summary>
+    private async Task<SentenceModels> ModelsAsync(LanguageSpelling spelling) => new(
+        spelling.Context is { } name && await context.Async() is { } corrector && corrector.Name == name ? corrector : null,
+        spelling.Punctuation && spellingEngine.PunctuationOf(keys.KeyLanguage.Code) is { } punctuation ? await punctuation.Async() : null,
+        spelling.Accents ? await spellingEngine.Accents.Async() : null);
+
+    /// <summary>
+    /// A word ended with a space where the language's context model is on: the
+    /// sentence so far read by it away from the window's thread, and the word
+    /// as it writes it (the marks it puts round a sentence's end aside, which
+    /// it writes as the sentence closes) taken by the keys, as Android's; only
+    /// where it reads the sentence word for word, and Autocorrect or
+    /// Suggestions is on.
+    /// </summary>
+    private async void MendWordByModel(string sentence, string word, long endedAt)
+    {
+        var spelling = preferences.Applied(keys.KeyLanguage.Code);
+        if (!(spelling.Autocorrect && focus.Document) && !spelling.Suggestions || (await ModelsAsync(spelling)).Context is not { } corrector)
+        {
+            return;
+        }
+
+        var written = (await Task.Run(() => corrector.Correct(sentence))).Split(' ');
+        if (written.Length != sentence.Split(' ').Length
+            || written[^1].TrimStart('¿', '¡').TrimEnd('.', ',', ';', ':', '?', '!', '…') is not { Length: > 0 } mended || mended == word)
+        {
+            return;
+        }
+
+        keys.TakeModelWord(word, mended, endedAt);
     }
 
     /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
@@ -1090,6 +1152,11 @@ public sealed class KeyboardWindow : Window
     /// </summary>
     private void ShowWordFix(string typed, IReadOnlyList<string> meant, bool applied)
     {
+        if (!preferences.Applied(keys.KeyLanguage.Code).Suggestions)
+        {
+            return;
+        }
+
         suggestions.Children.Clear();
         suggestions.ColumnDefinitions.Clear();
         suggestions.Visibility = Visibility.Visible;
@@ -1181,6 +1248,11 @@ public sealed class KeyboardWindow : Window
     /// </summary>
     private void ShowSentence(string original, string corrected, bool applied)
     {
+        if (!preferences.Applied(keys.KeyLanguage.Code).Suggestions)
+        {
+            return;
+        }
+
         var shown = (applied ? original : corrected).Split(' ').Zip((applied ? corrected : original).Split(' '))
             .Where(pair => pair.First != pair.Second).Select(pair => pair.First);
         var place = SuggestionPlace((applied ? "↶ " : "✓ ") + string.Join(' ', shown), bold: true,
@@ -1275,6 +1347,12 @@ public sealed class KeyboardWindow : Window
     {
         var language = keys.KeyLanguage;
         var typed = keys.TypingWord;
+        if (!preferences.Applied(language.Code).Suggestions)
+        {
+            ShowSuggestions([], null);
+            return;
+        }
+
         if (typed.Length < 2 || keys.TypingAddress || !personal.LearnTyped || !Learns(language) || !spellingEngine.Unknown(language, typed))
         {
             ShowSuggestions(words, null);
