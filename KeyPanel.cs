@@ -2935,7 +2935,7 @@ public sealed class KeyPanel
     private bool sounds;
     private bool showsTrail = true;
 
-    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed.</summary>
+    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes the word it typed, the space before it kept.</summary>
     private bool deletesSwipedWord = true;
 
     /// <summary>Preferencias' Extra line for suggestions and recent emoji (<see cref="KeyPlusPreferences.EmojiRowKey"/>).</summary>
@@ -4505,9 +4505,10 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// ⌫ right after a swiped word, with Delete a swiped word whole on (as
-    /// Gboard's): all the swipe typed deleted, the word and the space it put
-    /// before it, and the swipe's words gone; ⌫ held goes on letter by letter.
+    /// ⌫ right after a swiped word, with Delete a swiped word whole on: the
+    /// word deleted, the space it put before it kept, so what comes next,
+    /// swiped or tapped, starts a word of its own and never sticks to the one
+    /// before; the swipe's words gone; ⌫ held goes on letter by letter.
     /// Whether it was.
     /// </summary>
     private bool DeleteSwiped()
@@ -4517,13 +4518,14 @@ public sealed class KeyPanel
             return false;
         }
 
+        var word = typed.TrimStart(' ');
         if (ReplaceBeforeCaret is { } replace)
         {
-            replace(typed.Length, "");
+            replace(word.Length, "");
         }
         else
         {
-            foreach (var _ in typed)
+            foreach (var _ in word)
             {
                 Send(Keycode.Del, MetaKeyStates.None);
             }

@@ -23,6 +23,9 @@ internal sealed class AutomationFocus : IDisposable
     private const int IsValuePatternAvailableProperty = 30043;
     private const int ValueIsReadOnlyProperty = 30046;
     private const int EditControl = 50004;
+
+    /// <summary>Windows Terminal's text area: a control of text (50020), with no value, where every key is typed.</summary>
+    public const string TerminalClass = "TermControl";
     private const int DocumentControl = 50030;
     private const int MenuControl = 50009;
     private const int MenuBarControl = 50010;
@@ -178,15 +181,17 @@ internal sealed class AutomationFocus : IDisposable
     }
 
     /// <summary>
-    /// What is focused: text is typed in an edit not read-only, and in a document only where it says it takes a value
-    /// that is not read-only (a page in a browser, read, is a document too).
+    /// What is focused: text is typed in an edit not read-only, in a document only where it says it takes a value
+    /// that is not read-only (a page in a browser, read, is a document too), and in Windows Terminal's text area, which
+    /// says it is text only (<see cref="TerminalClass"/>).
     /// </summary>
     private static Focused Read(IUIAutomationElement element)
     {
         var type = element.GetCurrentPropertyValue(ControlTypeProperty) is int control ? control : 0;
         var takesValue = element.GetCurrentPropertyValue(IsValuePatternAvailableProperty) is true;
         var readOnly = takesValue && element.GetCurrentPropertyValue(ValueIsReadOnlyProperty) is true;
-        var editable = !readOnly && (type == EditControl || (type == DocumentControl && takesValue));
+        var terminal = element.GetCurrentPropertyValue(ClassNameProperty) as string == TerminalClass;
+        var editable = !readOnly && (type == EditControl || (type == DocumentControl && takesValue) || terminal);
         var place = element.GetCurrentPropertyValue(BoundingRectangleProperty) is double[] { Length: 4 } box && box[2] > 0 && box[3] > 0
             ? new Int32Rect((int)box[0], (int)box[1], (int)box[2], (int)box[3])
             : (Int32Rect?)null;

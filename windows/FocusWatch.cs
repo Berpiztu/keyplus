@@ -427,13 +427,14 @@ public sealed class FocusWatch : IDisposable
     /// <summary>
     /// A field by its UI Automation id and class: the settings' boxes by their ids (<see cref="FieldIds"/>); a browser's
     /// address bar a web address's: Chrome's and Edge's (Chromium's OmniboxViewViews), Firefox's (urlbar-input); and a
-    /// terminal's, xterm.js's input (xterm-helper-textarea: VS Code's terminal, and the browser's terminals made with it).
+    /// terminal's, xterm.js's input (xterm-helper-textarea: VS Code's terminal, and the browser's terminals made with it)
+    /// or Windows Terminal's text area (<see cref="AutomationFocus.TerminalClass"/>).
     /// </summary>
     internal static TextField FieldOf(string? automationId, string? className) => new(
         automationId is not null && FieldIds.TryGetValue(automationId, out var kind) ? kind
         : className == "OmniboxViewViews" || automationId == "urlbar-input" ? StandardField.Web
         : StandardField.Text,
-        className == "xterm-helper-textarea");
+        className is "xterm-helper-textarea" or AutomationFocus.TerminalClass);
 
     /// <summary>The settings' boxes' UI Automation ids, each a kind of field.</summary>
     public const string NumberFieldId = "Berpiztu.Field.Number";

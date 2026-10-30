@@ -317,8 +317,9 @@ a window that does.
   you type and how common a correction is. Neither the installer nor the APK
   carries any of it.
 - **Settings › Glide typing › Delete a swiped word whole** (on):
-  ⌫ right after a swiped word deletes all the swipe typed, the word and the
-  space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes
+  ⌫ right after a swiped word deletes the word, the space it put before it
+  kept, so the next word, swiped or tapped, never sticks to the one before;
+  held, ⌫ goes on letter by letter. Off, ⌫ takes
   only the last letter. On Windows and Android alike.
 - **On a headset (Galaxy XR), a third: Standard XR**: a tablet's
   keys, the digits over the letters, Tab, Caps Lock, ⇧ at both ends, ◀ and
