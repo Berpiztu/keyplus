@@ -172,6 +172,170 @@ public sealed class ContextCorrector : IDisposable
         return lead + corrected + trail;
     }
 
+    /// <summary>What a sentence is given as to be asked for the words to offer, as llm-create taught it (suggest_pairs.TAG).</summary>
+    private const string SuggestTag = "sugerir: ";
+
+    /// <summary>The words offered, as llm-create measures them (common.suggest): the likeliest of a beam search of this many…</summary>
+    private const int Beams = 5;
+
+    /// <summary>…written up to this many tokens, each a word…</summary>
+    private const int WordTokens = 12;
+
+    /// <summary>…of which the three likeliest are offered.</summary>
+    public const int Offered = 3;
+
+    /// <summary>
+    /// The words the model offers for the sentence typed so far, its last word being typed ("hola que t": "tal"), the
+    /// likeliest first, as llm-create taught and measures it: a beam search of <see cref="Beams"/>, each hypothesis
+    /// scored by its log-probability over its length, the <see cref="Offered"/> best of those ended. None where the
+    /// sentence is empty or too long, the corrector was let go, or <paramref name="cancel"/> asked to stop (a newer letter).
+    /// </summary>
+    public IReadOnlyList<string> Suggest(string typed, CancellationToken cancel = default)
+    {
+        var text = typed.TrimStart();
+        if (text.Length == 0)
+        {
+            return [];
+        }
+
+        var started = Stopwatch.StartNew();
+        long[] read = [.. prefix, .. tokenizer.EncodeToIds(SuggestTag + text).Select(id => (long)id), Eos];
+        if (read.Length > MostTokens)
+        {
+            return [];
+        }
+
+        var ended = new List<(List<long> Tokens, double Score)>();
+        lock (running)
+        {
+            if (disposed || cancel.IsCancellationRequested)
+            {
+                return [];
+            }
+
+            var ids = new DenseTensor<long>(read, [1, read.Length]);
+            var mask = new DenseTensor<long>(Enumerable.Repeat(1L, read.Length).ToArray(), [1, read.Length]);
+            using var encoded = encoder.Run([NamedOnnxValue.CreateFromTensor("input_ids", ids), NamedOnnxValue.CreateFromTensor("attention_mask", mask)]);
+            var hidden = encoded.First().AsTensor<float>();
+            var (length, width) = (hidden.Dimensions[1], hidden.Dimensions[2]);
+            var start = prefix.Length > 0 ? prefix[0] : Pad;
+            var beams = new List<(List<long> Tokens, double LogProbability)> { ([start], 0) };
+            for (var step = 0; step < WordTokens && beams.Count > 0 && !cancel.IsCancellationRequested; step++)
+            {
+                // Every beam in one run: the sentence read, and its mask, once for each.
+                var rows = beams.Count;
+                var written = new DenseTensor<long>([rows, beams[0].Tokens.Count]);
+                var heard = new DenseTensor<float>([rows, length, width]);
+                var masks = new DenseTensor<long>([rows, read.Length]);
+                for (var row = 0; row < rows; row++)
+                {
+                    for (var at = 0; at < beams[row].Tokens.Count; at++)
+                    {
+                        written[row, at] = beams[row].Tokens[at];
+                    }
+
+                    for (var at = 0; at < length; at++)
+                    {
+                        for (var unit = 0; unit < width; unit++)
+                        {
+                            heard[row, at, unit] = hidden[0, at, unit];
+                        }
+                    }
+
+                    for (var at = 0; at < read.Length; at++)
+                    {
+                        masks[row, at] = 1;
+                    }
+                }
+
+                using var next = decoder.Run([
+                    NamedOnnxValue.CreateFromTensor("decoder_input_ids", written),
+                    NamedOnnxValue.CreateFromTensor("encoder_hidden_states", heard),
+                    NamedOnnxValue.CreateFromTensor("encoder_attention_mask", masks),
+                ]);
+                var logits = next.First().AsTensor<float>();
+                var vocabulary = logits.Dimensions[^1];
+                var grown = new List<(List<long> Tokens, double LogProbability)>();
+                for (var row = 0; row < rows; row++)
+                {
+                    // Each beam's log-probabilities (a log-softmax of its row), its best few grown.
+                    var most = float.MinValue;
+                    for (var token = 0; token < vocabulary; token++)
+                    {
+                        most = Math.Max(most, logits[row, token]);
+                    }
+
+                    var sum = 0.0;
+                    for (var token = 0; token < vocabulary; token++)
+                    {
+                        sum += Math.Exp(logits[row, token] - most);
+                    }
+
+                    var logSum = most + Math.Log(sum);
+                    // The 2 × Beams likeliest tokens, kept in a small heap whose least is let go: only a token above it goes in.
+                    var best = new PriorityQueue<int, float>();
+                    for (var token = 0; token < vocabulary; token++)
+                    {
+                        var score = logits[row, token];
+                        if (best.Count < Beams * 2)
+                        {
+                            best.Enqueue(token, score);
+                        }
+                        else if (best.TryPeek(out _, out var least) && score > least)
+                        {
+                            best.DequeueEnqueue(token, score);
+                        }
+                    }
+
+                    while (best.TryDequeue(out var token, out var logit))
+                    {
+                        grown.Add(([.. beams[row].Tokens, token], beams[row].LogProbability + logit - logSum));
+                    }
+                }
+
+                beams = [];
+                foreach (var hypothesis in grown.OrderByDescending(hypothesis => hypothesis.LogProbability).Take(Beams * 2))
+                {
+                    if (hypothesis.Tokens[^1] == Eos)
+                    {
+                        // Ended: scored over its length, as the beam search llm-create measures with (length penalty 1).
+                        ended.Add((hypothesis.Tokens, hypothesis.LogProbability / (hypothesis.Tokens.Count - 1)));
+                    }
+                    else if (beams.Count < Beams)
+                    {
+                        beams.Add(hypothesis);
+                    }
+                }
+
+                // Done once enough have ended and none still growing can beat the worst of the best ended.
+                if (ended.Count >= Beams && beams.All(beam => beam.LogProbability / beam.Tokens.Count <= ended.OrderByDescending(end => end.Score).ElementAt(Beams - 1).Score))
+                {
+                    break;
+                }
+            }
+
+            // Those still growing only where too few ended, as the beam search llm-create measures with: a long one written
+            // with ease would else outscore a word that ended ("te").
+            if (ended.Count < Offered)
+            {
+                ended.AddRange(beams.Select(beam => (beam.Tokens, beam.LogProbability / beam.Tokens.Count)));
+            }
+        }
+
+        if (cancel.IsCancellationRequested)
+        {
+            return [];
+        }
+
+        var words = ended.OrderByDescending(end => end.Score)
+            .Select(end => tokenizer.Decode(end.Tokens.Skip(1).Where(id => !notText.Contains(id)).Select(id => (int)id))?.Trim() ?? "")
+            // A word is what the toolbar offers: where the model wrote on after it ("corregiendo. ¿Quién…"), its first, its marks aside.
+            .Select(written => written.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim('.', ',', ';', ':', '?', '!', '¿', '¡', '…', '"') ?? "")
+            .Where(word => word.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(Offered).ToList();
+        Log.Detail($"Corrector: {Name} offered {string.Join(" | ", words)} for «{text}» in {started.ElapsedMilliseconds} ms");
+        return words;
+    }
+
     private static long Likeliest(Tensor<float> logits)
     {
         var best = 0;

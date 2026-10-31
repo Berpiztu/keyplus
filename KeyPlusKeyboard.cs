@@ -775,6 +775,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.VoiceTapped += Dictate;
             panel.Suggesting = (language, typed) => accountField ? [.. Addresses(typed).Take(WordSuggestions.Offered)]
                 : WordsField ? personal.WithAddresses(spelling.Suggest(language, typed), typed, WordSuggestions.Offered) : [];
+            // While a word is typed, the words the language's context model offers for its sentence first (llm-create
+            // taught them), the word list's after them; none where it has no model on, or the field is not words'.
+            panel.ModelSuggesting = async (language, sentence, cancel) =>
+                WordsField && ContextModelOf(language.Code) is { } named && await context.Async() is { } suggester && suggester.Name == named
+                    ? await Task.Run(() => suggester.Suggest(sentence, cancel), cancel)
+                    : [];
+            panel.KnownWord = (language, word) => !spelling.Unknown(language, word);
             panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
             panel.SwipeChosen = (language, read, word) =>
             {

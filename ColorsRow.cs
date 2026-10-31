@@ -265,21 +265,21 @@ public sealed class ColorsRow : FrameLayout
 /// before it (<see cref="List"/>, <see cref="Label"/>) are the settings' one list, Tema's and a language's context
 /// model's alike.
 /// </summary>
-public sealed class SmallWords(Context context, IReadOnlyList<string> words, float textSp = ColorsRow.TextSp)
+public sealed class SmallWords(Context context, IReadOnlyList<string> words)
     : ArrayAdapter<string>(context, Android.Resource.Layout.SimpleSpinnerItem, words.ToList())
 {
     private const float GapDp = 4;
-
-    /// <summary>A language's context models' list, twice the small type: its names are read and told apart, not glanced at.</summary>
-    public const float ModelsSp = ColorsRow.TextSp * 2;
 
     /// <summary>
     /// A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing. A choice
     /// tells <paramref name="picked"/>; so does a list as it is first laid out, of the one it shows.
     /// </summary>
-    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked, float textSp = ColorsRow.TextSp)
+    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked)
     {
-        var list = new Spinner(context) { Adapter = new SmallWords(context, words, textSp) };
+        // Dropped down in Android's own rows, a finger's height each, as Tema's lists are.
+        var adapter = new SmallWords(context, words);
+        adapter.SetDropDownViewResource(Android.Resource.Layout.SimpleSpinnerDropDownItem);
+        var list = new Spinner(context) { Adapter = adapter };
         if (chosen >= 0)
         {
             list.SetSelection(chosen, false);
@@ -297,10 +297,10 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words, flo
     }
 
     /// <summary>The words before a list, in its small type.</summary>
-    public static TextView Label(Context context, string text, float textSp = ColorsRow.TextSp)
+    public static TextView Label(Context context, string text)
     {
         var label = new TextView(context) { Text = text };
-        label.SetTextSize(ComplexUnitType.Sp, textSp);
+        label.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
         label.SetPadding(0, 0, Dp(context, GapDp), 0);
         return label;
     }
@@ -323,7 +323,7 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words, flo
 
     private View Small(View? view)
     {
-        (view as TextView)?.SetTextSize(ComplexUnitType.Sp, textSp);
+        (view as TextView)?.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
         return view!;
     }
 }

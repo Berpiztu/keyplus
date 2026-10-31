@@ -542,6 +542,22 @@ public sealed class KeyPanel
     /// <summary>The words to offer for a word being typed in a language, the likeliest first (<see cref="WordSuggestions"/>); none, nothing is offered as letters are typed.</summary>
     public Func<StandardLanguage, string, IReadOnlyList<string>>? Suggesting { get; set; }
 
+    /// <summary>
+    /// The words the language's context model offers for the sentence typed so far, its last word being typed (<see
+    /// cref="ContextCorrector.Suggest"/>); none where it has no model on. Asked at each letter, the newest only: a
+    /// letter typed before it answers cancels the question before it.
+    /// </summary>
+    public Func<StandardLanguage, string, CancellationToken, Task<IReadOnlyList<string>>>? ModelSuggesting { get; set; }
+
+    /// <summary>The question to the context model for the words being offered, cancelled by the next letter's.</summary>
+    private CancellationTokenSource? modelAsked;
+
+    /// <summary>The last words the context model offered, and the word typed they were for: its first is what a space takes.</summary>
+    private (string Word, IReadOnlyList<string> Offered)? modelOffer;
+
+    /// <summary>Whether a word is one the language's word lists or the personal dictionary have (the keyboard's SpellingEngine).</summary>
+    public Func<StandardLanguage, string, bool>? KnownWord { get; set; }
+
     /// <summary>The letters right before the caret, the word being typed; none or empty where there is none.</summary>
     public Func<string?>? WordBeforeCaret { get; set; }
 
@@ -4567,6 +4583,7 @@ public sealed class KeyPanel
 
         IReadOnlyList<string> words = word.Length > 0 && Suggests ? Suggesting!(standard!.Language, word) : [];
         var learning = word.Length >= 2 && Suggests && Learnable?.Invoke(standard!.Language, word) == true;
+        OfferModelWords(word);
         if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
         {
             return;
@@ -4576,6 +4593,49 @@ public sealed class KeyPanel
         typingWord = word;
         learnable = learning;
         ShowBars();
+    }
+
+    /// <summary>
+    /// The context model asked for the words to offer for the word being typed, in its sentence; its words, where the
+    /// same word is still being typed when it answers, put first, the word list's after them, three in all.
+    /// </summary>
+    private async void OfferModelWords(string word)
+    {
+        modelAsked?.Cancel();
+        if (word.Length == 0 || !Suggests || ModelSuggesting is not { } asking || standard is null)
+        {
+            return;
+        }
+
+        var asked = modelAsked = new CancellationTokenSource();
+        // The sentence typed so far: from the last one closed (. ? ! or a new line) to the caret.
+        var before = RecentText?.Invoke() ?? word;
+        var from = before.LastIndexOfAny(['.', '?', '!', '\n']) + 1;
+        var sentence = before[from..].TrimStart();
+        IReadOnlyList<string> offered;
+        try
+        {
+            offered = await asking(standard.Language, sentence, asked.Token);
+        }
+        catch (System.OperationCanceledException)
+        {
+            return;
+        }
+
+        handler.Post(() =>
+        {
+            // Still that word being typed, nothing swiped since: the field read again, as the answer may come late.
+            if (asked.IsCancellationRequested || offered.Count == 0 || swipedText is not null || WordBeforeCaret?.Invoke() != word)
+            {
+                return;
+            }
+
+            var listed = typingWord == word ? typingWords : [];
+            modelOffer = (word, offered);
+            typingWord = word;
+            typingWords = [.. offered.Concat(listed).Distinct(StringComparer.OrdinalIgnoreCase).Take(ContextCorrector.Offered)];
+            ShowBars();
+        });
     }
 
     /// <summary>The words offered again once a key (⌫, an arrow) has reached the field.</summary>
@@ -4893,14 +4953,27 @@ public sealed class KeyPanel
         }
 
         var typed = sentence.Split(' ');
-        if (await CorrectSentence(language, sentence) is not { } corrected
-            || corrected.Split(' ') is not { } written || written.Length != typed.Length)
+        var word = typed[^1];
+        string mended;
+        // A word no list has, which the model offered a word of the lists for as it was typed (the centre of the
+        // toolbar): that word, as Gboard takes its centre's ("plat": "plato"), its capital kept. Asked to write the
+        // whole sentence again, the model may leave such a word as it is.
+        if (modelOffer is { Word: var offeredFor, Offered: [var first, ..] } && offeredFor == word && KnownWord is { } known
+            && !first.Equals(word, StringComparison.OrdinalIgnoreCase) && !known(language, word) && known(language, first))
+        {
+            mended = char.IsUpper(word[0]) ? char.ToUpper(first[0], CultureInfo.CurrentCulture) + first[1..] : first;
+            Log.Detail($"Spelling: a word no list has in {language.Code} taken as the context model's first offered");
+        }
+        else if (await CorrectSentence(language, sentence) is not { } corrected
+                 || corrected.Split(' ') is not { } written || written.Length != typed.Length)
         {
             return;
         }
+        else
+        {
+            mended = written[^1].TrimStart('¿', '¡').TrimEnd('.', ',', ';', ':', '?', '!', '…');
+        }
 
-        var word = typed[^1];
-        var mended = written[^1].TrimStart('¿', '¡').TrimEnd('.', ',', ';', ':', '?', '!', '…');
         if (mended.Length == 0 || mended == word || RecentText?.Invoke() is not { } now || !now.EndsWith(word + " ", StringComparison.Ordinal))
         {
             return;

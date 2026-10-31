@@ -290,8 +290,10 @@ a window that does.
   chosen by name in its list. On, it alone corrects that language: each word
   as a space ends it, and the whole sentence as . ? ! or Enter closes it,
   its spelling, accents, punctuation and capitals; the other choices are
-  faded and kept as they were for when it is turned off; the words offered as
-  you type still come from the word list.
+  faded and kept as they were for when it is turned off. On Android, it also
+  offers the words as you type: its three likeliest for the sentence so far
+  first, the word list's after them; and a word no list has, ended with a
+  space, becomes the word it offered in the centre ("plat": "plato").
   Autocorrect writes by itself only where the field is surely a document
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,
