@@ -915,12 +915,12 @@ public sealed class MainActivity : Activity
             }
 
             Log.Write($"Corrector: {name} chosen for {code}");
-        });
+        }, SmallWords.ModelsSp);
         ((LinearLayout.LayoutParams)list.LayoutParameters!).LeftMargin = 0;
         ColorsRow.Turned(list, now.Context is not null && names.Count > 0);
         var line = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         line.SetGravity(GravityFlags.CenterVertical);
-        line.AddView(SmallWords.Label(this, GetString(Resource.String.context_model_list)!));
+        line.AddView(SmallWords.Label(this, GetString(Resource.String.context_model_list)!, SmallWords.ModelsSp));
         line.AddView(list);
 
         return new(GetString(Resource.String.context_model), GetString(Resource.String.context_model_summary), On: now.Context is not null,

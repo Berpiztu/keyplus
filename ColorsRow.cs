@@ -265,18 +265,21 @@ public sealed class ColorsRow : FrameLayout
 /// before it (<see cref="List"/>, <see cref="Label"/>) are the settings' one list, Tema's and a language's context
 /// model's alike.
 /// </summary>
-public sealed class SmallWords(Context context, IReadOnlyList<string> words)
+public sealed class SmallWords(Context context, IReadOnlyList<string> words, float textSp = ColorsRow.TextSp)
     : ArrayAdapter<string>(context, Android.Resource.Layout.SimpleSpinnerItem, words.ToList())
 {
     private const float GapDp = 4;
+
+    /// <summary>A language's context models' list, twice the small type: its names are read and told apart, not glanced at.</summary>
+    public const float ModelsSp = ColorsRow.TextSp * 2;
 
     /// <summary>
     /// A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing. A choice
     /// tells <paramref name="picked"/>; so does a list as it is first laid out, of the one it shows.
     /// </summary>
-    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked)
+    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked, float textSp = ColorsRow.TextSp)
     {
-        var list = new Spinner(context) { Adapter = new SmallWords(context, words) };
+        var list = new Spinner(context) { Adapter = new SmallWords(context, words, textSp) };
         if (chosen >= 0)
         {
             list.SetSelection(chosen, false);
@@ -294,10 +297,10 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words)
     }
 
     /// <summary>The words before a list, in its small type.</summary>
-    public static TextView Label(Context context, string text)
+    public static TextView Label(Context context, string text, float textSp = ColorsRow.TextSp)
     {
         var label = new TextView(context) { Text = text };
-        label.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
+        label.SetTextSize(ComplexUnitType.Sp, textSp);
         label.SetPadding(0, 0, Dp(context, GapDp), 0);
         return label;
     }
@@ -320,7 +323,7 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words)
 
     private View Small(View? view)
     {
-        (view as TextView)?.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
+        (view as TextView)?.SetTextSize(ComplexUnitType.Sp, textSp);
         return view!;
     }
 }
