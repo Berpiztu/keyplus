@@ -26,8 +26,8 @@
          number (1.0.40 is 100040000). A build of this checkout counts itself
          as a fourth part (1.0.40.3, versionCode 100040003) in
          private\version.props, taken here when above the release's. -->
-    <ApplicationDisplayVersion>1.0.67</ApplicationDisplayVersion>
-    <ApplicationVersion>100067000</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.68</ApplicationDisplayVersion>
+    <ApplicationVersion>100068000</ApplicationVersion>
     <ApplicationDisplayVersion Condition="'$(KeyPlusLocalVersion)' != '' And $([MSBuild]::VersionGreaterThan('$(KeyPlusLocalVersion)', '$(ApplicationDisplayVersion)'))">$(KeyPlusLocalVersion)</ApplicationDisplayVersion>
     <ApplicationVersion Condition="'$(KeyPlusLocalBuild)' != '' And $(KeyPlusLocalBuild) &gt; $(ApplicationVersion)">$(KeyPlusLocalBuild)</ApplicationVersion>
     <!-- Only the APK, which is copied to the phone: no app bundle for a store,
