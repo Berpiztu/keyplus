@@ -38,6 +38,14 @@ public static class LanguageChoices
     public static string? ContextModelIn(Context context, string language) =>
         KeyPlusPreferences.Global(context).GetString(Key("spellingContextModel", language), "") is { Length: > 0 } name ? name : null;
 
+    /// <summary>Whether a language's context model gives the words offered as a word is typed too (Use it for suggestions too); on until turned off, and turned on with the model.</summary>
+    public static bool ContextSuggestsIn(Context context, string language) =>
+        KeyPlusPreferences.Global(context).GetBoolean(Key("spellingContextSuggests", language), true);
+
+    /// <summary>A language's Use it for suggestions too, kept as turned.</summary>
+    public static void SetContextSuggests(Context context, string language, bool on) =>
+        KeyPlusPreferences.Global(context).Edit()!.PutBoolean(Key("spellingContextSuggests", language), on)!.Apply();
+
     /// <summary>A language's context model chosen in its list, the model on or off.</summary>
     public static void SetContextModel(Context context, string language, string name) =>
         KeyPlusPreferences.Global(context).Edit()!.PutString(Key("spellingContextModel", language), name)!.Apply();

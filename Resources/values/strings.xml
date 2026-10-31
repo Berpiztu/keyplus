@@ -299,7 +299,10 @@
   <string name="spelling_dictionary_en">English (US)</string>
   <string name="spelling_on">Correct as I type</string>
   <string name="context_model">Context model</string>
-  <string name="context_model_summary">A model on this device, chosen in the list, alone corrects this language: at each space it reads the sentence so far and mends its last word, and as . ? ! or Enter closes it, it writes it whole again mended (spelling, accents, punctuation and capitals). The words offered as a word is typed still come from the word list. The choices under it stay faded, kept as they are, until it is turned off</string>
+  <string name="context_model_summary">A model on this device, chosen in the list, alone corrects this language: at each space it reads the sentence so far and mends its last word, and as . ? ! or Enter closes it, it writes it whole again mended (spelling, accents, punctuation and capitals). The words offered as a word is typed come from the word list, unless Use it for suggestions too is on. The choices under it stay faded, kept as they are, until it is turned off</string>
+  <string name="context_model_suggests">Use it for suggestions too</string>
+  <string name="context_model_suggests_summary">The words offered as a word is typed come from the model, which reads the sentence so far; where it offers none, from the word list. A space takes the word in the centre for a word no list has. Off, they come from the word list</string>
+  <string name="context_model_suggests_off">Turn the context model on to use it for suggestions too.</string>
   <string name="context_model_list">Model</string>
   <string name="spelling_suggestions">Suggestions</string>
   <string name="spelling_writes_offers_summary">Autocorrect writes the correction in the text; Suggestions offers it in the toolbar, and the words starting as typed. Both come from what is chosen below: the context model, or the choices under it. Both off, nothing is written or offered</string>

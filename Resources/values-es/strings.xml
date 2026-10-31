@@ -293,7 +293,10 @@
   <string name="spelling_dictionary_en">inglés (EE. UU.)</string>
   <string name="spelling_on">Corregir mientras escribo</string>
   <string name="context_model">Modelo de contexto</string>
-  <string name="context_model_summary">Un modelo en este dispositivo, elegido en la lista, corrige él solo este idioma: con cada espacio lee la frase hasta ahí y corrige la última palabra, y al cerrarla con . ? ! o Intro la escribe entera corregida (ortografía, acentos, puntuación y mayúsculas). Las sugerencias de completar palabra siguen saliendo de la lista de palabras. Las opciones de debajo quedan en gris, guardadas como están, hasta que lo apagues</string>
+  <string name="context_model_summary">Un modelo en este dispositivo, elegido en la lista, corrige él solo este idioma: con cada espacio lee la frase hasta ahí y corrige la última palabra, y al cerrarla con . ? ! o Intro la escribe entera corregida (ortografía, acentos, puntuación y mayúsculas). Las sugerencias de completar palabra salen de la lista de palabras, salvo con Usarlo también para sugerencias encendido. Las opciones de debajo quedan en gris, guardadas como están, hasta que lo apagues</string>
+  <string name="context_model_suggests">Usarlo también para sugerencias</string>
+  <string name="context_model_suggests_summary">Las palabras que se ofrecen al escribir salen del modelo, que lee la frase hasta ahí; si no ofrece ninguna, de la lista de palabras. Un espacio cambia una palabra que no está en ninguna lista por la del centro. Apagado, salen de la lista de palabras</string>
+  <string name="context_model_suggests_off">Enciende el modelo de contexto para usarlo también para sugerencias.</string>
   <string name="context_model_list">Modelo</string>
   <string name="spelling_suggestions">Sugerencias</string>
   <string name="spelling_writes_offers_summary">Autocorregir escribe la corrección en el texto; Sugerencias la ofrece en la barra, con las palabras que empiezan como lo escrito. Las dos salen de lo elegido abajo: el modelo de contexto o las opciones de debajo. Apagadas las dos, no se escribe ni se ofrece nada</string>

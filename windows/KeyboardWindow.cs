@@ -1157,22 +1157,31 @@ public sealed class KeyboardWindow : Window
 
     /// <summary>
     /// The context model asked for the words to offer for the word being typed, in its sentence (<see
-    /// cref="ContextCorrector.Suggest"/>), the newest letter only; its words, where that word is still being typed when it
-    /// answers, put first, the word list's after them, three in all. None asked where the language has no model on, or
-    /// the sentence is not known.
+    /// cref="ContextCorrector.Suggest"/>), the newest letter only; its words shown where that word is still being typed
+    /// when it answers, the last ones shown till then. None asked where the language has no model on, or the sentence is
+    /// not known.
     /// </summary>
     private async void OfferModelWords(string word, IReadOnlyList<string> listed)
     {
         modelAsked?.Cancel();
         var spelling = preferences.Applied(keys.KeyLanguage.Code);
+        // The sentence not known to these keys (a click put the caret in it), or no model: the word list's words.
         if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
         {
+            modelOffer = null;
+            ShowSuggestions(listed, null);
             return;
         }
 
         var asked = modelAsked = new CancellationTokenSource();
         if ((await ModelsAsync(spelling)).Context is not { } corrector || asked.IsCancellationRequested)
         {
+            if (!asked.IsCancellationRequested)
+            {
+                modelOffer = null;
+                ShowSuggestions(listed, null);
+            }
+
             return;
         }
 
@@ -1186,13 +1195,14 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
-        if (asked.IsCancellationRequested || offered.Count == 0 || keys.TypingWord != word)
+        if (asked.IsCancellationRequested || keys.TypingWord != word)
         {
             return;
         }
 
-        modelOffer = (word, offered);
-        ShowSuggestions([.. offered.Concat(listed).Distinct(StringComparer.OrdinalIgnoreCase).Take(ContextCorrector.Offered)], null);
+        // None offered (the sentence too long, the model let go): the word list's, as with no model on.
+        modelOffer = offered.Count > 0 ? (word, offered) : null;
+        ShowSuggestions(offered.Count > 0 ? [.. offered.Take(ContextCorrector.Offered)] : listed, null);
     }
 
     /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
@@ -1405,7 +1415,16 @@ public sealed class KeyboardWindow : Window
     {
         var language = keys.KeyLanguage;
         var typed = keys.TypingWord;
-        OfferModelWords(typed, words);
+
+        // The context model's words or the word list's, never both: shown one after the other, the centre changed under
+        // the finger and a space took a word not seen ("mej": "mejor" from the list, then "mañana" from the model).
+        var applied = preferences.Applied(language.Code);
+        if (typed.Length > 0 && applied.Suggestions && applied.Context is not null && !keys.TypingAddress)
+        {
+            OfferModelWords(typed, words);
+            return;
+        }
+
         if (!preferences.Applied(language.Code).Suggestions)
         {
             ShowSuggestions([], null);

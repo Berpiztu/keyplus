@@ -834,6 +834,15 @@ public sealed class MainActivity : Activity
                 // The word list, the suggestions' and Glide typing's: fetched here, only said on Glide typing's page.
                 spelling.Add(FetchRow(LanguageOptions.WordListOf(language), Again));
                 spelling.Add(ContextModelRow(code, now, Again));
+                // Under it, the model's words offered as a word is typed too, the word list's where it offers none: faded while it is off.
+                spelling.Add(new(GetString(Resource.String.context_model_suggests), GetString(Resource.String.context_model_suggests_summary),
+                    On: LanguageChoices.ContextSuggestsIn(this, code), Enabled: now.Context is not null,
+                    Tapped: () => Told(Resource.String.context_model_suggests, GetString(Resource.String.context_model_suggests_off)!),
+                    Switched: on =>
+                    {
+                        LanguageChoices.SetContextSuggests(this, code, on);
+                        Log.Write($"Corrector: {code}'s context model {(on ? "gives" : "no longer gives")} the words offered as a word is typed");
+                    }));
                 continue;
             }
 
@@ -937,6 +946,12 @@ public sealed class MainActivity : Activity
                 var model = !turned ? null
                     : LanguageChoices.ContextModelIn(this, code) is { } chosen && names.Contains(chosen) ? chosen : names[shownAt];
                 KeepSpelling(code, spelling => spelling with { Context = model });
+                // Turned on, its words offered as a word is typed too, as the owner wants it each time.
+                if (model is not null)
+                {
+                    LanguageChoices.SetContextSuggests(this, code, true);
+                }
+
                 Log.Write(model is null ? $"Corrector: {code}'s context model off" : $"Corrector: {model} on for {code}");
                 settings!.Refresh(page());
             });

@@ -555,6 +555,9 @@ public sealed class KeyPanel
     /// <summary>The last words the context model offered, and the word typed they were for: its first is what a space takes.</summary>
     private (string Word, IReadOnlyList<string> Offered)? modelOffer;
 
+    /// <summary>Whether the language's context model gives the words offered as a word is typed, the word list's then never shown.</summary>
+    public Func<StandardLanguage, bool>? ModelOffers { get; set; }
+
     /// <summary>Whether a word is one the language's word lists or the personal dictionary have (the keyboard's SpellingEngine).</summary>
     public Func<StandardLanguage, string, bool>? KnownWord { get; set; }
 
@@ -4581,9 +4584,20 @@ public sealed class KeyPanel
             word = "";
         }
 
+        // The context model's words or the word list's, never both: shown one after the other, the centre changed under
+        // the finger and a space took a word not seen ("mej": "mejor" from the list, then "mañana" from the model).
+        if (word.Length > 0 && Suggests && ModelOffers?.Invoke(standard!.Language) == true)
+        {
+            typingWord = word;
+            OfferModelWords(word);
+            return;
+        }
+
+        modelAsked?.Cancel();
+        modelOffer = null;
+
         IReadOnlyList<string> words = word.Length > 0 && Suggests ? Suggesting!(standard!.Language, word) : [];
         var learning = word.Length >= 2 && Suggests && Learnable?.Invoke(standard!.Language, word) == true;
-        OfferModelWords(word);
         if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
         {
             return;
@@ -4596,13 +4610,13 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// The context model asked for the words to offer for the word being typed, in its sentence; its words, where the
-    /// same word is still being typed when it answers, put first, the word list's after them, three in all.
+    /// The context model asked for the words to offer for the word being typed, in its sentence; its words shown where
+    /// the same word is still being typed when it answers, the last ones shown till then.
     /// </summary>
     private async void OfferModelWords(string word)
     {
         modelAsked?.Cancel();
-        if (word.Length == 0 || !Suggests || ModelSuggesting is not { } asking || standard is null)
+        if (ModelSuggesting is not { } asking || standard is null)
         {
             return;
         }
@@ -4625,15 +4639,15 @@ public sealed class KeyPanel
         handler.Post(() =>
         {
             // Still that word being typed, nothing swiped since: the field read again, as the answer may come late.
-            if (asked.IsCancellationRequested || offered.Count == 0 || swipedText is not null || WordBeforeCaret?.Invoke() != word)
+            if (asked.IsCancellationRequested || swipedText is not null || WordBeforeCaret?.Invoke() != word)
             {
                 return;
             }
 
-            var listed = typingWord == word ? typingWords : [];
-            modelOffer = (word, offered);
+            // None offered (the sentence too long, the model let go): the word list's, as with the model's words off.
+            modelOffer = offered.Count > 0 ? (word, offered) : null;
             typingWord = word;
-            typingWords = [.. offered.Concat(listed).Distinct(StringComparer.OrdinalIgnoreCase).Take(WordSuggestions.Offered)];
+            typingWords = offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(standard.Language, word) ?? [];
             ShowBars();
         });
     }
