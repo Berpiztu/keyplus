@@ -18,7 +18,7 @@
          listed and taken only when the person says so.
       2. Brings main up to date (rebasing that commit on top). Then, for
          each open pull request into main, waits for its checks and asks
-         whether to merge it (squash); one whose checks fail is reported and
+         whether to merge it (squash, its branch kept); one whose checks fail is reported and
          left alone. main is brought up to date again with what was merged,
          so the release carries it.
       3. Writes the new version: the next patch after the last release's, or
@@ -160,7 +160,8 @@ foreach ($line in $open) {
     }
     $answer = Read-Host "Its checks passed, or it has none. Merge #$number into this release? (y/n)"
     if ($answer -notmatch '^(y|yes|s|si)$') { continue }
-    gh pr merge $number --squash --delete-branch
+    # The pull request's branch is never deleted: work goes on there (develop).
+    gh pr merge $number --squash
     if ($LASTEXITCODE -ne 0) { throw "#$number could not be merged; merge it on GitHub and run this again." }
 }
 if ($open.Count -gt 0) { Sync-Main }
