@@ -696,20 +696,12 @@ public sealed class MainActivity : Activity
     /// Spelling, what goes for every language, as Windows': all of it on and
     /// off at once (the keyboard's spellcheck tool too), off while no
     /// language has anything downloaded to correct with and saying so then;
-    /// Download again, for what every language's choices turned on fetched;
-    /// and the languages, each opening its page, where its Spelling is.
+    /// and the languages, each opening its page, where its Spelling is; what
+    /// a choice downloads is fetched by the button on its own line there.
     /// </summary>
     private SettingsPage SpellingPage()
     {
         bool AnyCorrects() => StandardKeys.Languages.Any(language => LanguageChoices.CanCorrect(this, language.Code));
-        var turnedOn = StandardKeys.Languages
-            .SelectMany(language => LanguageOptions.SpellingChoices(language.Code, Text)
-                .Where(choice => choice.Fetches is not null && choice.Get(LanguageChoices.SpellingIn(this, language.Code)))
-                .Select(choice => choice.Fetches!))
-            .Concat(StandardKeys.Languages.Where(language => LanguageChoices.GlidesIn(this, language.Code)).Select(LanguageOptions.GlideOf))
-            .DistinctBy(fetched => fetched.Named)
-            .ToList();
-        var again = turnedOn.Select(fetched => downloading.GetValueOrDefault(fetched.Named)).FirstOrDefault(state => state is not null);
         List<SettingsRow> general =
         [
             new(GetString(Resource.String.spelling_on), GetString(Resource.String.spelling_on_summary), On: LanguageChoices.SpellingOn(this) && AnyCorrects(),
@@ -727,17 +719,6 @@ public sealed class MainActivity : Activity
                 }),
             Switch(Resource.String.spelling_capitalize, Resource.String.spelling_capitalize_summary, KeyPlusPreferences.CapitalizeSentencesKey, byDefault: false),
         ];
-        if (turnedOn.Count > 0)
-        {
-            general.Add(new(GetString(Resource.String.spelling_download_again), again ?? GetString(Resource.String.spelling_download_again_summary), Tapped: async () =>
-            {
-                foreach (var fetched in turnedOn)
-                {
-                    await FetchAsync(fetched, SpellingPage);
-                }
-            }));
-        }
-
         return new(GetString(Resource.String.spelling), [general, LanguageRows(Resource.String.spelling_by_language)]);
     }
 
@@ -838,23 +819,33 @@ public sealed class MainActivity : Activity
         var code = language.Code;
         SettingsPage Again() => LanguagePage(language);
         List<SettingsRow> spelling = [new(GetString(Resource.String.spelling))];
+        var now = LanguageChoices.SpellingIn(this, code);
         foreach (var choice in LanguageOptions.SpellingChoices(code, Text))
         {
-            spelling.AddRange(ChoiceRows(choice.Label, choice.Summary, choice.Get(LanguageChoices.SpellingIn(this, code)), choice.Fetches,
-                on => LanguageChoices.SetSpelling(this, code, choice.Set(LanguageChoices.SpellingIn(this, code), on)), Again));
+            // Autocorrect and Suggestions in one row, as Android's: whether what corrects writes, offers, both or
+            // neither; then what corrects, the context model or the others under it.
+            if (choice.Label == Resource.String.spelling_autocorrect)
+            {
+                spelling.Add(new(GetString(Resource.String.spelling_autocorrect), GetString(Resource.String.spelling_writes_offers_summary), Toggles:
+                [
+                    new(GetString(Resource.String.spelling_autocorrect), now.Autocorrect, on => KeepSpelling(code, spelling => spelling with { Autocorrect = on })),
+                    new(GetString(Resource.String.spelling_suggestions), now.Suggestions, on => KeepSpelling(code, spelling => spelling with { Suggestions = on })),
+                ]));
+                // The word list, the suggestions' and Glide typing's: fetched here, only said on Glide typing's page.
+                spelling.Add(FetchRow(LanguageOptions.WordListOf(language), Again));
+                spelling.Add(ContextModelRow(code, now, Again));
+                continue;
+            }
+
+            spelling.AddRange(ChoiceRows(choice.Label, choice.Summary, choice.Get(now), choice.Fetches,
+                on => KeepSpelling(code, spelling => choice.Set(spelling, on)), Again,
+                refused: choice.Corrects && now.Context is not null ? GetString(Resource.String.context_model_in_place) : null));
         }
 
-        List<SettingsRow> glide =
-        [
-            new(GetString(Resource.String.glide)),
-            .. ChoiceRows(Resource.String.glide, LanguageOptions.GlideSummary(language, Text), LanguageChoices.GlidesIn(this, code), LanguageOptions.GlideOf(language),
-                on => LanguageChoices.SetGlide(this, code, on), Again),
-        ];
         var personal = Personal();
         List<IReadOnlyList<SettingsRow>> groups =
         [
             spelling,
-            glide,
             [
                 new(GetString(Resource.String.dictionary)),
                 new(GetString(Resource.String.dictionary_import), GetString(Resource.String.dictionary_import_summary), Tapped: () =>
@@ -891,70 +882,158 @@ public sealed class MainActivity : Activity
         return new(language.Name, groups);
     }
 
-    /// <summary>What is being downloaded now, by its name, and how much: its row says so while it comes.</summary>
-    private readonly Dictionary<string, string> downloading = [];
-
     /// <summary>
-    /// A choice's rows: its switch, kept as it is turned (<paramref name="keep"/>);
-    /// where it fetches files, fetched as it is turned on, and under it a row
-    /// saying how much while they come, that they are here, or, turned on
-    /// without them, that they are missing, tapped to download them.
+    /// A language's Context model (<see cref="ContextCorrector"/>): its switch,
+    /// and under its line the list of the models put on this device, where the
+    /// one it reads with is chosen; the list there whatever it holds, off and
+    /// faded while the model is, as wide as its longest name so a choice moves
+    /// nothing, with its label before it as Tema's (<see cref="SmallWords"/>).
+    /// On, it alone corrects the language and offers in the toolbar
+    /// (<see cref="LanguageSpelling.ContextAlone"/>): the others under it are
+    /// faded, kept as they were for when it is turned off.
     /// </summary>
-    private IEnumerable<SettingsRow> ChoiceRows(int label, string summary, bool on, Fetched? fetches, Action<bool> keep, Func<SettingsPage> page)
+    private SettingsRow ContextModelRow(string code, LanguageSpelling now, Func<SettingsPage> page)
     {
-        yield return new(GetString(label), summary, On: on, Switched: async turned =>
+        var folder = KeyPlusPreferences.CorrectorsFolder(this);
+        var names = ContextCorrector.Names(folder).ToList();
+        var kept = now.Context ?? LanguageChoices.ContextModelIn(this, code);
+        var shownAt = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
+        var list = SmallWords.List(this, names.Count > 0 ? names : [GetString(Resource.String.context_model_none)!], shownAt, chosen =>
         {
-            if (turned && fetches is not null && !fetches.Downloaded())
+            // Only a choice made: a list just shown tells the one it shows too.
+            if (names.Count == 0 || chosen == shownAt)
             {
-                await FetchAsync(fetches, page);
-                turned = fetches.Downloaded();
+                return;
             }
 
-            keep(turned);
-            settings?.Refresh(page());
-        });
-        if (fetches is null)
-        {
-            yield break;
-        }
+            shownAt = chosen;
+            var name = names[chosen];
+            LanguageChoices.SetContextModel(this, code, name);
+            if (LanguageChoices.SpellingIn(this, code) is { Context: not null } spelling)
+            {
+                LanguageChoices.SetSpelling(this, code, spelling with { Context = name });
+            }
 
-        if (downloading.TryGetValue(fetches.Named, out var coming))
+            Log.Write($"Corrector: {name} chosen for {code}");
+        });
+        ((LinearLayout.LayoutParams)list.LayoutParameters!).LeftMargin = 0;
+        ColorsRow.Turned(list, now.Context is not null && names.Count > 0);
+        var line = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        line.SetGravity(GravityFlags.CenterVertical);
+        line.AddView(SmallWords.Label(this, GetString(Resource.String.context_model_list)!));
+        line.AddView(list);
+
+        return new(GetString(Resource.String.context_model), GetString(Resource.String.context_model_summary), On: now.Context is not null,
+            Below: line,
+            Switched: turned =>
+            {
+                if (turned && names.Count == 0)
+                {
+                    Refused(Resource.String.context_model, Said(Resource.String.context_model_none_put, folder));
+                    settings!.Refresh(page());
+                    return;
+                }
+
+                var model = !turned ? null
+                    : LanguageChoices.ContextModelIn(this, code) is { } chosen && names.Contains(chosen) ? chosen : names[shownAt];
+                KeepSpelling(code, spelling => spelling with { Context = model });
+                Log.Write(model is null ? $"Corrector: {code}'s context model off" : $"Corrector: {model} on for {code}");
+                settings!.Refresh(page());
+            });
+    }
+
+    /// <summary>A language's Spelling changed and kept, from what it is now.</summary>
+    private void KeepSpelling(string code, Func<LanguageSpelling, LanguageSpelling> change) =>
+        LanguageChoices.SetSpelling(this, code, change(LanguageChoices.SpellingIn(this, code)));
+
+    /// <summary>A choice that cannot be made now, and why, said in a window and the log.</summary>
+    private void Refused(int label, string why)
+    {
+        Log.Write($"Settings: {GetString(label)} not turned on: {why}");
+        Told(label, why);
+    }
+
+    /// <summary>What is being downloaded now, by its name: what its row says and how much is done, told to the row as it changes, and what stops it.</summary>
+    private readonly Dictionary<string, (SettingsLive Live, CancellationTokenSource Stop)> downloading = [];
+
+    /// <summary>
+    /// A choice's rows: its switch, which only turns it on or off and is kept
+    /// as it is turned (<paramref name="keep"/>); where it fetches files, under
+    /// it a row of one size whatever it says: where they are (not here yet, how
+    /// much while they come with a bar under it, here) and its own button,
+    /// which fetches them, stops them coming, or fetches them again. Nothing is
+    /// fetched but by that button. Where another choice takes its place
+    /// (<paramref name="refused"/>, why), its switch is faded and a tap says why.
+    /// </summary>
+    private IEnumerable<SettingsRow> ChoiceRows(int label, string summary, bool on, Fetched? fetches, Action<bool> keep, Func<SettingsPage> page, string? refused = null)
+    {
+        yield return new(GetString(label), summary, On: on, Enabled: refused is null,
+            Tapped: refused is null ? null : () => Refused(label, refused),
+            Switched: turned =>
+            {
+                keep(turned);
+                settings?.Refresh(page());
+            });
+        if (fetches is not null)
         {
-            yield return new(coming);
-        }
-        else if (fetches.Downloaded())
-        {
-            yield return new(GetString(fetches.Done));
-        }
-        else if (on)
-        {
-            yield return new(GetString(Resource.String.download), GetString(Resource.String.spelling_not_downloaded), Tapped: async () => await FetchAsync(fetches, page));
+            yield return FetchRow(fetches, page);
         }
     }
 
     /// <summary>
-    /// What a choice fetches fetched, how much said in its row as it comes (the
-    /// page made again a few times a second at most); a failure said in a
-    /// window and the log, the files there before kept until new ones are checked.
+    /// What a choice fetches, its row of one size whatever it says: where
+    /// it is (not here yet, how much while it comes with a bar under it, here)
+    /// and its own button, which fetches it, stops it coming, or fetches it again.
+    /// </summary>
+    private SettingsRow FetchRow(Fetched fetches, Func<SettingsPage> page)
+    {
+        string[] sayings = [GetString(Resource.String.download), GetString(Resource.String.cancel), GetString(Resource.String.spelling_download_again)];
+        if (downloading.TryGetValue(fetches.Named, out var coming))
+        {
+            return new(coming.Live.Said, Button: new(sayings[1], sayings, () => coming.Stop.Cancel(), coming.Live.Done, coming.Live));
+        }
+
+        return fetches.Downloaded()
+            ? new(GetString(fetches.Done), Button: new(sayings[2], sayings, async () => await FetchAsync(fetches, page)))
+            : new(GetString(fetches.Missing ?? Resource.String.spelling_not_downloaded), Button: new(sayings[0], sayings, async () => await FetchAsync(fetches, page)));
+    }
+
+    /// <summary>
+    /// What a choice fetches fetched, how much said in its row and its bar as
+    /// it comes (the row told in place, the page made again only as it starts
+    /// and ends); stopped by its button, said in the log; a failure said
+    /// in a window and the log, the files there before kept until new ones
+    /// are checked.
     /// </summary>
     private async Task FetchAsync(Fetched what, Func<SettingsPage> page)
     {
+        if (downloading.ContainsKey(what.Named))
+        {
+            return;
+        }
+
+        using var stop = new CancellationTokenSource();
+        var live = new SettingsLive(Said(what.Downloading, Megabytes(0), "…"), -1);
         var shown = 0L;
-        downloading[what.Named] = Said(what.Downloading, Megabytes(0), "…");
+        downloading[what.Named] = (live, stop);
         settings?.Refresh(page());
         try
         {
             await what.Download(new Progress<(long Done, long Total)>(at =>
             {
-                downloading[what.Named] = Said(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)));
-                if (System.Environment.TickCount64 - shown > 300)
+                if (System.Environment.TickCount64 - shown > 200)
                 {
                     shown = System.Environment.TickCount64;
-                    settings?.Refresh(page());
+                    live.Set(Said(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done))),
+                        at.Total > 0 ? Math.Min(1, (double)at.Done / at.Total) : -1);
                 }
-            }), CancellationToken.None);
+            }), stop.Token);
         }
-        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+        catch (System.OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            Log.Write($"Downloads: the download of {what.Named} was stopped");
+        }
+        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or TaskCanceledException)
         {
             Log.Write($"Downloads: {what.Named} could not be downloaded: {failure.Message}");
             Told(Resource.String.spelling, Said(what.Failed, failure.Message));
@@ -1033,10 +1112,18 @@ public sealed class MainActivity : Activity
     private SettingsPage GlidePage() => new(GetString(Resource.String.glide),
     [
         [
+            .. ChoiceRows(Resource.String.glide, GetString(Resource.String.glide_on_summary), LanguageChoices.GlideOn(this), LanguageOptions.GlideModel,
+                on => LanguageChoices.SetGlideOn(this, on), GlidePage),
             Switch(Resource.String.glide_trail, Resource.String.glide_trail_summary, KeyPlusPreferences.SwipeTrailKey),
             Switch(Resource.String.glide_delete_word, Resource.String.glide_delete_word_summary, KeyPlusPreferences.SwipeDeleteWordKey),
         ],
-        LanguageRows(Resource.String.glide_by_language),
+        // Each language's word list, only said here: it is fetched with its Suggestions, on its page, which a tap opens.
+        [
+            new(GetString(Resource.String.glide_word_lists)),
+            .. StandardKeys.Languages.Select(language => new SettingsRow(language.Name,
+                GetString(SwipeData.HasWordList(language) ? Resource.String.glide_word_list_here : Resource.String.glide_word_list_missing),
+                Tapped: () => settings!.Open(() => LanguagePage(language)), Opens: true)),
+        ],
         // FUTO Swipe's model weights license asks for this notice in sight.
         [new(GetString(Resource.String.futo))],
     ]);

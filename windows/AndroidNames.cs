@@ -215,7 +215,6 @@ namespace Berpiztu.KeyPlus
             public const int spelling_dictionary_downloaded = 161;
             public const int spelling_dictionary_download_failed = 162;
             public const int spelling_download_again = 163;
-            public const int spelling_download_again_summary = 164;
             public const int try_keys = 165;
             public const int spelling_wikipedia = 166;
             public const int spelling_wikipedia_summary = 167;
@@ -281,6 +280,26 @@ namespace Berpiztu.KeyPlus
             public const int running_as_administrator = 212;
             public const int spelling_punctuation = 213;
             public const int spelling_punctuation_summary = 214;
+            public const int word_list_downloading = 215;
+            public const int word_list_downloaded = 216;
+            public const int word_list_download_failed = 217;
+            public const int word_list_missing = 218;
+            public const int glide_model_downloading = 219;
+            public const int glide_model_downloaded = 220;
+            public const int glide_model_download_failed = 221;
+            public const int glide_model_missing = 222;
+            public const int glide_on_summary = 223;
+            public const int glide_word_lists = 224;
+            public const int glide_word_list_here = 225;
+            public const int glide_word_list_missing = 226;
+            public const int context_model = 227;
+            public const int context_model_summary = 228;
+            public const int context_model_none = 229;
+            public const int context_model_none_put = 230;
+            public const int context_model_in_place = 231;
+            public const int context_model_list = 232;
+            public const int spelling_suggestions = 233;
+            public const int spelling_writes_offers_summary = 234;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

@@ -288,9 +288,10 @@ public sealed class SettingsWindow : Window
     /// The keyboard's languages, a line each with More options, which opens
     /// the language's page, its ← back to the page it was opened from
     /// (<paramref name="from"/>): on Languages, the one typed in marked and
-    /// chosen there; on Spelling and Dictionary, only named.
+    /// chosen there; on Spelling and Dictionary, only named; on Glide typing,
+    /// named with what is said of it (<paramref name="saying"/>).
     /// </summary>
-    private FrameworkElement LanguageLines(bool choosing, Func<FrameworkElement> from)
+    private FrameworkElement LanguageLines(bool choosing, Func<FrameworkElement> from, Func<StandardLanguage, string>? saying = null)
     {
         var preferences = KeyboardPreferences.Read();
 
@@ -311,7 +312,7 @@ public sealed class SettingsWindow : Window
             }
             else
             {
-                name = new TextBlock { Text = language.Name };
+                name = new TextBlock { Text = saying is null ? language.Name : $"{language.Name}: {saying(language)}" };
             }
 
             name.VerticalAlignment = VerticalAlignment.Center;
@@ -332,8 +333,8 @@ public sealed class SettingsWindow : Window
     /// A language's own page, opened from Languages, Spelling or Dictionary
     /// (← back to it, <paramref name="from"/>): its
     /// Spelling, only what Spelling has for it (<see cref="LanguageOptions.SpellingChoices"/>),
-    /// a choice that fetches files fetching them as it is turned on, its line
-    /// under it saying how much while it does; and its words, your
+    /// a choice that fetches files with its line under it and its own button
+    /// that fetches them (<see cref="Choosing"/>); and its words, your
     /// dictionary's (<see cref="WordsPart"/>).
     /// </summary>
     private FrameworkElement LanguagePage(StandardLanguage language, Func<FrameworkElement> from)
@@ -347,26 +348,59 @@ public sealed class SettingsWindow : Window
         heading.Children.Add(new TextBlock { Text = language.Name, FontSize = TitleSize, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         form.Children.Add(heading);
         form.Children.Add(Section(Resource.String.spelling));
+        var now = KeyboardPreferences.Read().SpellingIn(code);
+        void Keep(Func<LanguageSpelling, LanguageSpelling> change)
+        {
+            var kept = KeyboardPreferences.Read();
+            kept.WithSpelling(code, change(kept.SpellingIn(code))).Keep();
+        }
+
         foreach (var choice in LanguageOptions.SpellingChoices(code, Texts.Get))
         {
-            var box = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(KeyboardPreferences.Read().SpellingIn(code)) };
-            form.Children.Add(FieldSaying(null, box, choice.Summary));
-            var state = Choosing(box, choice.Fetches, on =>
+            // Autocorrect and Suggestions in one line, as Android's: whether what corrects writes, offers, both or
+            // neither; under them the word list, the suggestions' and Glide typing's, then what corrects.
+            if (choice.Label == Resource.String.spelling_autocorrect)
             {
-                var now = KeyboardPreferences.Read();
-                now.WithSpelling(code, choice.Set(now.SpellingIn(code), on)).Keep();
-            });
+                var both = new StackPanel { Orientation = Orientation.Horizontal };
+                foreach (var (label, on, set) in new (int, bool, Func<LanguageSpelling, bool, LanguageSpelling>)[]
+                {
+                    (Resource.String.spelling_autocorrect, now.Autocorrect, (spelling, turned) => spelling with { Autocorrect = turned }),
+                    (Resource.String.spelling_suggestions, now.Suggestions, (spelling, turned) => spelling with { Suggestions = turned }),
+                })
+                {
+                    var box = new CheckBox { Content = Texts.Get(label), IsChecked = on, Margin = new Thickness(0, 0, FieldGapDp * 2, 0) };
+                    box.Click += (_, _) => Keep(spelling => set(spelling, box.IsChecked == true));
+                    both.Children.Add(box);
+                }
+
+                form.Children.Add(FieldSaying(null, both, Texts.Get(Resource.String.spelling_writes_offers_summary)));
+                form.Children.Add(FetchLine(LanguageOptions.WordListOf(language)));
+                form.Children.Add(ContextModelPart(code, now, Keep, () => ShowPage(LanguagePage(language, from))));
+                continue;
+            }
+
+            var choiceBox = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(now) };
+            form.Children.Add(FieldSaying(null, choiceBox, choice.Summary));
+            var state = Choosing(choiceBox, choice.Fetches, on => Keep(spelling => choice.Set(spelling, on)));
+
+            // While the context model is on it alone corrects: the others faded, kept as they are, a click saying why.
+            if (choice.Corrects && now.Context is not null)
+            {
+                choiceBox.Opacity = OffOpacity;
+                choiceBox.Click += (_, _) =>
+                {
+                    choiceBox.IsChecked = choice.Get(KeyboardPreferences.Read().SpellingIn(code));
+                    Log.Write($"Settings: {Texts.Get(choice.Label)} not turned: {Texts.Get(Resource.String.context_model_in_place)}");
+                    MessageBox.Show(Texts.Get(Resource.String.context_model_in_place), Texts.Get(choice.Label), MessageBoxButton.OK, MessageBoxImage.Information);
+                };
+            }
+
             if (state is not null)
             {
                 form.Children.Add(state);
             }
         }
 
-        // Glide typing, the language's own: its word list, and the model the first time.
-        form.Children.Add(Section(Resource.String.glide));
-        var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = KeyboardPreferences.Read().GlidesIn(code) };
-        form.Children.Add(FieldSaying(null, glide, LanguageOptions.GlideSummary(language, Texts.Get)));
-        form.Children.Add(Choosing(glide, LanguageOptions.GlideOf(language), on => KeyboardPreferences.Read().WithGlide(code, on).Keep())!);
         form.Children.Add(Section(Resource.String.dictionary));
         form.Children.Add(WordsPart(code));
         return form;
@@ -846,114 +880,188 @@ public sealed class SettingsWindow : Window
         form.Children.Add(Field(null, capitals, Resource.String.spelling_capitalize_summary));
         form.Children.Add(Field(null, LanguageLines(choosing: false, SpellingPage), Resource.String.spelling_by_language));
 
-        // What the languages' choices turned on fetched, each once, one after another in one line; with nothing turned on, hidden in its place.
-        var turnedOn = StandardKeys.Languages
-            .SelectMany(language => LanguageOptions.SpellingChoices(language.Code, Texts.Get)
-                .Where(choice => choice.Fetches is not null && choice.Get(preferences.SpellingIn(language.Code)))
-                .Select(choice => choice.Fetches!))
-            .Concat(StandardKeys.Languages.Where(language => preferences.GlidesIn(language.Code)).Select(LanguageOptions.GlideOf))
-            .DistinctBy(fetched => fetched.Named)
-            .ToList();
-        var again = new Button
-        {
-            Content = Texts.Get(Resource.String.spelling_download_again),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Visibility = turnedOn.Count > 0 ? Visibility.Visible : Visibility.Hidden,
-        };
-        var state = new TextBlock { Height = 20 };
-        again.Click += async (_, _) =>
-        {
-            again.IsEnabled = false;
-            foreach (var fetched in turnedOn)
-            {
-                await FetchAsync(fetched, state);
-            }
-
-            again.IsEnabled = true;
-        };
-        form.Children.Add(Field(null, again, Resource.String.spelling_download_again_summary));
-        form.Children.Add(state);
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.spelling_windows_note), TextWrapping = TextWrapping.Wrap }, null));
         return form;
     }
 
     /// <summary>
-    /// A choice's check box made to keep what it is set to (<paramref name="keep"/>);
-    /// where it fetches files, off until turned on and then fetched once (the
-    /// keyboard never carries them), its line under it, returned to be put
-    /// there, of one height: the files here, how much of them while they
-    /// come, or, turned on without them, that they are missing with Download
-    /// beside it, hidden in its place otherwise. Nothing is ever fetched but
-    /// by turning it on or by Download.
+    /// A choice's check box made to keep what it is set to (<paramref name="keep"/>),
+    /// and where it fetches files (the keyboard never carries them) its line
+    /// under it, returned to be put there, of one size whatever it says: where
+    /// the files are (not here yet, how much while they come with a bar under
+    /// it, here) and one button that fetches them, stops them coming, or
+    /// fetches them again, as wide as the widest of its words, so nothing
+    /// moves. The box only turns the choice on or off; nothing is fetched but
+    /// by that button.
     /// </summary>
     private static FrameworkElement? Choosing(CheckBox box, Fetched? fetches, Action<bool> keep)
     {
-        if (fetches is null)
-        {
-            box.Click += (_, _) => keep(box.IsChecked == true);
-            return null;
-        }
-
-        var state = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-        var download = new Button { Content = Texts.Get(Resource.String.download), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
-        void Show()
-        {
-            var missing = box.IsChecked == true && !fetches.Downloaded();
-            state.Text = fetches.Downloaded() ? Texts.Get(fetches.Done) : missing ? Texts.Get(Resource.String.spelling_not_downloaded) : "";
-            download.Visibility = missing ? Visibility.Visible : Visibility.Hidden;
-        }
-
-        async Task Fetch()
-        {
-            box.IsEnabled = false;
-            download.Visibility = Visibility.Hidden;
-            await FetchAsync(fetches, state);
-            box.IsEnabled = true;
-        }
-
-        box.Click += async (_, _) =>
-        {
-            if (box.IsChecked == true && !fetches.Downloaded())
-            {
-                await Fetch();
-                box.IsChecked = fetches.Downloaded();
-            }
-
-            keep(box.IsChecked == true);
-            Show();
-        };
-        download.Click += async (_, _) =>
-        {
-            await Fetch();
-            Show();
-        };
-        Show();
-        var line = new StackPanel { Orientation = Orientation.Horizontal, Height = 26 };
-        line.Children.Add(state);
-        line.Children.Add(download);
-        return line;
+        box.Click += (_, _) => keep(box.IsChecked == true);
+        return fetches is null ? null : FetchLine(fetches);
     }
 
     /// <summary>
-    /// What a choice fetches fetched, how much shown in its line as it goes;
-    /// a failure in a window and the log, the files there before kept until
-    /// new ones are checked. Whether they are on this computer now.
+    /// What a choice fetches, its line of one size whatever it says: where it
+    /// is (not here yet, how much while it comes with a bar under it, here) and
+    /// one button that fetches it, stops it coming, or fetches it again, as wide
+    /// as the widest of its words, so nothing moves.
     /// </summary>
-    private static async Task<bool> FetchAsync(Fetched what, TextBlock state)
+    private static FrameworkElement FetchLine(Fetched fetches)
+    {
+        var state = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
+        var bar = new ProgressBar { Height = ProgressDp, Minimum = 0, Maximum = 1, Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Hidden };
+        int[] words = [Resource.String.download, Resource.String.cancel, Resource.String.spelling_download_again];
+        var labels = words.Select(word => new TextBlock { Text = Texts.Get(word), HorizontalAlignment = HorizontalAlignment.Center }).ToArray();
+        var sized = new Grid();
+        foreach (var label in labels)
+        {
+            sized.Children.Add(label);
+        }
+
+        var button = new Button { Content = sized, Margin = new Thickness(FieldGapDp / 2, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        CancellationTokenSource? coming = null;
+
+        // Every word kept in the button, only one seen: the button as wide as the widest whichever it says.
+        void Say(int word)
+        {
+            for (var i = 0; i < words.Length; i++)
+            {
+                labels[i].Visibility = words[i] == word ? Visibility.Visible : Visibility.Hidden;
+            }
+        }
+
+        void Show()
+        {
+            var here = fetches.Downloaded();
+            bar.Visibility = Visibility.Hidden;
+            state.Text = Texts.Get(here ? fetches.Done : fetches.Missing ?? Resource.String.spelling_not_downloaded);
+            Say(here ? Resource.String.spelling_download_again : Resource.String.download);
+        }
+
+        button.Click += async (_, _) =>
+        {
+            if (coming is { } running)
+            {
+                running.Cancel();
+                return;
+            }
+
+            coming = new CancellationTokenSource();
+            Say(Resource.String.cancel);
+            bar.Value = 0;
+            bar.IsIndeterminate = true;
+            bar.Visibility = Visibility.Visible;
+            await FetchAsync(fetches, state, bar, coming.Token);
+            coming.Dispose();
+            coming = null;
+            Show();
+        };
+        Show();
+        var said = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        said.Children.Add(state);
+        said.Children.Add(bar);
+        var line = new Grid();
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(button, 1);
+        line.Children.Add(said);
+        line.Children.Add(button);
+        return line;
+    }
+
+    /// <summary>A choice that does not apply now, faded so it reads as off, as Android's.</summary>
+    private const double OffOpacity = 0.35;
+
+    /// <summary>
+    /// A language's Context model, as Android's (<see cref="ContextCorrector"/>):
+    /// its box and, under its line, Modelo and the list of the models put in
+    /// %LOCALAPPDATA%\Berpiztu\Keyboard\correctors, the one it reads with
+    /// chosen there; the list there whatever it holds, off while the model is.
+    /// On, it alone corrects the language (<see cref="LanguageSpelling.ContextAlone"/>):
+    /// the others under it are faded, kept as they were for when it is turned off, the page made again
+    /// (<paramref name="again"/>) as it is turned.
+    /// </summary>
+    private static FrameworkElement ContextModelPart(string code, LanguageSpelling now, Action<Func<LanguageSpelling, LanguageSpelling>> keep, Action again)
+    {
+        var names = ContextCorrector.Names(ContextCorrector.Folder).ToList();
+        var box = new CheckBox { Content = Texts.Get(Resource.String.context_model), IsChecked = now.Context is not null };
+        var list = new ComboBox { IsEnabled = now.Context is not null && names.Count > 0, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var name in names.Count > 0 ? names : [Texts.Get(Resource.String.context_model_none)])
+        {
+            list.Items.Add(new ComboBoxItem { Content = name });
+        }
+
+        var kept = now.Context ?? KeyboardPreferences.Read().ContextModelIn(code);
+        list.SelectedIndex = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
+        list.SelectionChanged += (_, _) =>
+        {
+            if (names.Count == 0 || list.SelectedIndex < 0)
+            {
+                return;
+            }
+
+            var name = names[list.SelectedIndex];
+            var preferences = KeyboardPreferences.Read().WithContextModel(code, name);
+            (preferences.SpellingIn(code) is { Context: not null } spelling ? preferences.WithSpelling(code, spelling with { Context = name }) : preferences).Keep();
+            Log.Write($"Corrector: {name} chosen for {code}");
+        };
+        box.Click += (_, _) =>
+        {
+            if (box.IsChecked == true && names.Count == 0)
+            {
+                box.IsChecked = false;
+                var said = Texts.Get(Resource.String.context_model_none_put, ContextCorrector.Folder);
+                Log.Write($"Settings: {Texts.Get(Resource.String.context_model)} not turned on: {said}");
+                MessageBox.Show(said, Texts.Get(Resource.String.context_model), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var model = box.IsChecked == true ? names[Math.Max(0, list.SelectedIndex)] : null;
+            keep(spelling => spelling with { Context = model });
+            list.IsEnabled = model is not null;
+            Log.Write(model is null ? $"Corrector: {code}'s context model off" : $"Corrector: {model} on for {code}");
+            again();
+        };
+        var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+        line.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.context_model_list), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) });
+        line.Children.Add(list);
+        var part = new StackPanel();
+        part.Children.Add(FieldSaying(null, box, Texts.Get(Resource.String.context_model_summary)));
+        part.Children.Add(line);
+        return part;
+    }
+
+    /// <summary>How tall a download's bar is, under the words of its line.</summary>
+    private const double ProgressDp = 4;
+
+    /// <summary>
+    /// What a choice fetches fetched, how much shown in its line and its bar
+    /// as it goes; stopped by its button, said in the log; a failure in a
+    /// window and the log; the files there before kept until new ones are
+    /// checked.
+    /// </summary>
+    private static async Task FetchAsync(Fetched what, TextBlock state, ProgressBar bar, CancellationToken cancel)
     {
         try
         {
             await what.Download(new Progress<(long Done, long Total)>(at =>
-                state.Text = Texts.Get(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)))), CancellationToken.None);
-            state.Text = Texts.Get(what.Done);
-            return true;
+            {
+                state.Text = Texts.Get(what.Downloading, Megabytes(at.Done), Megabytes(Math.Max(at.Total, at.Done)));
+                if (at.Total > 0)
+                {
+                    bar.IsIndeterminate = false;
+                    bar.Value = Math.Min(1, (double)at.Done / at.Total);
+                }
+            }), cancel);
         }
-        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or System.IO.InvalidDataException or TaskCanceledException)
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            Log.Write($"Spelling: the download of {what.Named} was stopped");
+        }
+        catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or UnauthorizedAccessException or System.IO.InvalidDataException or TaskCanceledException)
         {
             Log.Write($"Spelling: {what.Named} could not be downloaded: {failure.Message}");
-            state.Text = what.Downloaded() ? Texts.Get(what.Done) : "";
             MessageBox.Show(Texts.Get(what.Failed, failure.Message), Texts.Get(Resource.String.spelling), MessageBoxButton.OK, MessageBoxImage.Warning);
-            return what.Downloaded();
         }
     }
 
@@ -1196,18 +1304,29 @@ public sealed class SettingsWindow : Window
         return export;
     }
 
-    /// <summary>Glide typing, as Android's: swiping over the letters, its trail and ⌫ deleting a swiped word whole; FUTO Swipe's notice in sight, as its licence asks.</summary>
+    /// <summary>
+    /// Glide typing, as Android's: swiping over the letters, on and off for
+    /// every language, with FUTO Swipe's model's line; its trail and ⌫ deleting
+    /// a swiped word whole; whether each language's word list is here, fetched
+    /// on its page with its Suggestions; FUTO Swipe's notice in sight, as its
+    /// licence asks.
+    /// </summary>
     private FrameworkElement GlidePage()
     {
         var preferences = KeyboardPreferences.Read();
         var form = Form(Resource.String.glide);
-        form.Children.Add(Field(null, LanguageLines(choosing: false, GlidePage), Resource.String.glide_by_language));
+        var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = preferences.GlideTyping };
+        form.Children.Add(Field(null, glide, Resource.String.glide_on_summary));
+        form.Children.Add(Choosing(glide, LanguageOptions.GlideModel, on => (KeyboardPreferences.Read() with { GlideAll = on }).Keep())!);
         var trail = new CheckBox { Content = Texts.Get(Resource.String.glide_trail), IsChecked = preferences.GlideTrail };
         trail.Click += (_, _) => (KeyboardPreferences.Read() with { GlideTrail = trail.IsChecked == true }).Keep();
         form.Children.Add(Field(null, trail, Resource.String.glide_trail_summary));
         var deleteWord = new CheckBox { Content = Texts.Get(Resource.String.glide_delete_word), IsChecked = preferences.GlideDeleteWord };
         deleteWord.Click += (_, _) => (KeyboardPreferences.Read() with { GlideDeleteWord = deleteWord.IsChecked == true }).Keep();
         form.Children.Add(Field(null, deleteWord, Resource.String.glide_delete_word_summary));
+        form.Children.Add(Field(null, LanguageLines(choosing: false, GlidePage,
+            language => Texts.Get(SwipeData.HasWordList(language) ? Resource.String.glide_word_list_here : Resource.String.glide_word_list_missing)),
+            Resource.String.glide_word_lists));
         form.Children.Add(Field(null, new TextBlock { Text = Texts.Get(Resource.String.futo), TextWrapping = TextWrapping.Wrap }, null));
         return form;
     }

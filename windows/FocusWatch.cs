@@ -68,7 +68,14 @@ public sealed class FocusWatch : IDisposable
     private bool disposed;
 
     /// <summary>The focus as UI Automation tells it, for what WinEvents do not (WinUI apps); none where it cannot be had.</summary>
-    private readonly AutomationFocus? automationFocus;
+    private readonly Task<AutomationFocus?> automationStarting;
+
+    /// <summary>
+    /// UI Automation's focus once it follows it; none until then, or where it cannot be had. Never waited for: the
+    /// keyboard's thread waiting on UI Automation while UI Automation asks the keyboard's own windows something waits
+    /// for ever (a keyboard made again in an application's colours hung so).
+    /// </summary>
+    private AutomationFocus? Automation => automationStarting.IsCompletedSuccessfully ? automationStarting.Result : null;
 
     /// <summary>On the watch's thread: what UI Automation told focused last, and when a WinEvent last told a focus.</summary>
     private AutomationFocus.Focused? automationFocused;
@@ -92,6 +99,8 @@ public sealed class FocusWatch : IDisposable
             {
                 UnhookWinEvent(hook);
             }
+
+            Log.Detail("Focus: a watch stopped");
         })
         { IsBackground = true, Name = "Focus watch" };
         thread.SetApartmentState(ApartmentState.STA);
@@ -100,7 +109,7 @@ public sealed class FocusWatch : IDisposable
         watching = made!;
 
         // Off this thread and the watch's, which are single-threaded apartments: UI Automation's clients are best in a multithreaded one.
-        automationFocus = Task.Run(() => AutomationFocus.Start(focused => watching.BeginInvoke(() => SeenByAutomation(focused)))).Result;
+        automationStarting = Task.Run(() => AutomationFocus.Start(focused => watching.BeginInvoke(() => SeenByAutomation(focused))));
     }
 
     /// <summary>On the watch's thread: its timers, then its hooks, whose calls come to the thread that set them.</summary>
@@ -167,7 +176,7 @@ public sealed class FocusWatch : IDisposable
 
     /// <summary>The text before the caret in what has the focus (<see cref="AutomationFocus.ReadField"/>), read on a thread of the pool's, a multithreaded apartment's; none where UI Automation cannot be had.</summary>
     internal Task<AutomationFocus.FieldText?> ReadField(int most) =>
-        automationFocus is { } reader ? Task.Run(() => (AutomationFocus.FieldText?)reader.ReadField(most)) : Task.FromResult<AutomationFocus.FieldText?>(null);
+        Automation is { } reader ? Task.Run(() => (AutomationFocus.FieldText?)reader.ReadField(most)) : Task.FromResult<AutomationFocus.FieldText?>(null);
 
     /// <summary>The focus went somewhere no text is typed.</summary>
     public event Action? TextLeft;
@@ -188,7 +197,7 @@ public sealed class FocusWatch : IDisposable
     public void Dispose()
     {
         disposed = true;
-        automationFocus?.Dispose();
+        automationStarting.ContinueWith(started => started.Result?.Dispose(), TaskContinuationOptions.OnlyOnRanToCompletion);
         watching.BeginInvokeShutdown(DispatcherPriority.Send);
     }
 
@@ -381,7 +390,7 @@ public sealed class FocusWatch : IDisposable
     {
         // Text come to another way than UI Automation told it (a caret, a WinEvent): whether it is a document asked of
         // UI Automation again, for the focus it told last may have been one passing through (VS Code's own document).
-        if (field is null && automationFocus is { } reader)
+        if (field is null && Automation is { } reader)
         {
             _ = Task.Run(() =>
             {
@@ -418,13 +427,14 @@ public sealed class FocusWatch : IDisposable
     /// <summary>
     /// A field by its UI Automation id and class: the settings' boxes by their ids (<see cref="FieldIds"/>); a browser's
     /// address bar a web address's: Chrome's and Edge's (Chromium's OmniboxViewViews), Firefox's (urlbar-input); and a
-    /// terminal's, xterm.js's input (xterm-helper-textarea: VS Code's terminal, and the browser's terminals made with it).
+    /// terminal's, xterm.js's input (xterm-helper-textarea: VS Code's terminal, and the browser's terminals made with it)
+    /// or Windows Terminal's text area (<see cref="AutomationFocus.TerminalClass"/>).
     /// </summary>
     internal static TextField FieldOf(string? automationId, string? className) => new(
         automationId is not null && FieldIds.TryGetValue(automationId, out var kind) ? kind
         : className == "OmniboxViewViews" || automationId == "urlbar-input" ? StandardField.Web
         : StandardField.Text,
-        className == "xterm-helper-textarea");
+        className is "xterm-helper-textarea" or AutomationFocus.TerminalClass);
 
     /// <summary>The settings' boxes' UI Automation ids, each a kind of field.</summary>
     public const string NumberFieldId = "Berpiztu.Field.Number";

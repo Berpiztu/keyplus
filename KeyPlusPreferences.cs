@@ -59,6 +59,10 @@ public static class KeyPlusPreferences
     public const string LongPressKey = "longPressMs";
     public const int LongPressDefault = 300;
     public const string SwipeTypingKey = "swipeTyping";
+
+    /// <summary>Where the context models are (<see cref="ContextCorrector"/>), each in a folder of its name: the app's own files on the device's storage, which adb can write to.</summary>
+    public static string CorrectorsFolder(Android.Content.Context context) =>
+        System.IO.Path.Combine(context.GetExternalFilesDir(null)!.AbsolutePath, "correctors");
     public const string SwipeTrailKey = "swipeTrail";
     public const string SwipeDeleteWordKey = "swipeDeleteWord";
 

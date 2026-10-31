@@ -2847,7 +2847,7 @@ public sealed class KeyPanel
             var fixing = letter || text == "@" ? null : FixWord();
             Type(text);
             OfferWords();
-            if (fixing is { } offered)
+            if (fixing is { } offered && Suggests)
             {
                 OfferFix(offered, text);
             }
@@ -2855,6 +2855,10 @@ public sealed class KeyPanel
             if (text is "." or "?" or "!")
             {
                 CorrectClosed();
+            }
+            else if (text == " ")
+            {
+                CorrectWordByModel();
             }
         },
         Deleted = () =>
@@ -2931,7 +2935,7 @@ public sealed class KeyPanel
     private bool sounds;
     private bool showsTrail = true;
 
-    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed.</summary>
+    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes the word it typed, the space before it kept.</summary>
     private bool deletesSwipedWord = true;
 
     /// <summary>Preferencias' Extra line for suggestions and recent emoji (<see cref="KeyPlusPreferences.EmojiRowKey"/>).</summary>
@@ -4492,7 +4496,7 @@ public sealed class KeyPanel
     /// </summary>
     private void MendSentence(char closing)
     {
-        if (SpellingIn?.Invoke(TypingLanguage).OpenMark == true
+        if (SpellingIn?.Invoke(TypingLanguage).OpenMark == true && Corrects
             && ReplaceBeforeCaret is { } replace && RecentText?.Invoke() is { } before
             && SpanishMarks.Opened(before, closing) is { } mended)
         {
@@ -4501,9 +4505,10 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// ⌫ right after a swiped word, with Delete a swiped word whole on (as
-    /// Gboard's): all the swipe typed deleted, the word and the space it put
-    /// before it, and the swipe's words gone; ⌫ held goes on letter by letter.
+    /// ⌫ right after a swiped word, with Delete a swiped word whole on: the
+    /// word deleted, the space it put before it kept, so what comes next,
+    /// swiped or tapped, starts a word of its own and never sticks to the one
+    /// before; the swipe's words gone; ⌫ held goes on letter by letter.
     /// Whether it was.
     /// </summary>
     private bool DeleteSwiped()
@@ -4513,13 +4518,14 @@ public sealed class KeyPanel
             return false;
         }
 
+        var word = typed.TrimStart(' ');
         if (ReplaceBeforeCaret is { } replace)
         {
-            replace(typed.Length, "");
+            replace(word.Length, "");
         }
         else
         {
-            foreach (var _ in typed)
+            foreach (var _ in word)
             {
                 Send(Keycode.Del, MetaKeyStates.None);
             }
@@ -4559,8 +4565,8 @@ public sealed class KeyPanel
             word = "";
         }
 
-        IReadOnlyList<string> words = word.Length > 0 ? Suggesting!(standard!.Language, word) : [];
-        var learning = word.Length >= 2 && Learnable?.Invoke(standard!.Language, word) == true;
+        IReadOnlyList<string> words = word.Length > 0 && Suggests ? Suggesting!(standard!.Language, word) : [];
+        var learning = word.Length >= 2 && Suggests && Learnable?.Invoke(standard!.Language, word) == true;
         if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
         {
             return;
@@ -4632,14 +4638,26 @@ public sealed class KeyPanel
     /// <summary>Spelling, the keyboard's as Windows': the words a word typed may have meant and whether it is misspelled (the keyboard's SpellingEngine); none, it is left as it is.</summary>
     public Func<StandardLanguage, string, WordFixes?>? Fixing { get; set; }
 
+    /// <summary>Whether the field typed in is surely a document's (a message, a mail, a note): only there does Autocorrect write by itself; elsewhere, or in doubt, what it would write is offered.</summary>
+    public bool InDocument { get; set; }
+
+    /// <summary>Whether Autocorrect writes by itself (a word, a sentence's accents, ¿ and ¡): on, and in a document.</summary>
+    private bool Corrects => SpellingIn?.Invoke(TypingLanguage).Autocorrect == true && InDocument;
+
+    /// <summary>Whether the toolbar offers (the words starting as typed, a correction): the language's Suggestions.</summary>
+    private bool Suggests => SpellingIn?.Invoke(TypingLanguage).Suggestions == true;
+
     /// <summary>A language's Spelling as it applies now: its Autocorrect, its opening marks, its accents.</summary>
     public Func<StandardLanguage, LanguageSpelling>? SpellingIn { get; set; }
 
-    /// <summary>The accent model's sentence for one typed, read away from the main thread; none while it is not loaded.</summary>
-    public Func<string, Task<string?>>? CorrectSentence { get; set; }
+    /// <summary>A language's model's sentence for one typed in it (its context model's, or its accents'), read away from the main thread; none while it is not loaded.</summary>
+    public Func<StandardLanguage, string, Task<string?>>? CorrectSentence { get; set; }
+
+    /// <summary>Whether a sentence closed is read by a model: the accent model, or the language's context model.</summary>
+    private static bool SentenceRead(LanguageSpelling spelling) => spelling.Accents || spelling.Context is not null;
 
     /// <summary>The same at once, for Enter, which cannot wait; none while it is not loaded.</summary>
-    public Func<string, string?>? CorrectSentenceNow { get; set; }
+    public Func<StandardLanguage, string, string?>? CorrectSentenceNow { get; set; }
 
     /// <summary>The text right after the caret, to tell a word being written in the middle of another.</summary>
     public Func<string?>? TextAfterCaret { get; set; }
@@ -4715,7 +4733,7 @@ public sealed class KeyPanel
             return null;
         }
 
-        var applied = SpellingIn?.Invoke(TypingLanguage).Autocorrect == true && fixes.Misspelled;
+        var applied = Corrects && fixes.Misspelled;
         if (applied)
         {
             Replace(word.Length, fixes.Words[0]);
@@ -4815,14 +4833,15 @@ public sealed class KeyPanel
     private async void CorrectClosed()
     {
         var language = TypingLanguage;
-        if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { Accents: true } spelling
+        if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { } spelling || !SentenceRead(spelling)
             || RecentText?.Invoke() is not { } recent || SentenceAt(recent) is not { Length: > 1 } sentence
             || InAddress(recent, 1))
         {
             return;
         }
 
-        if (await CorrectSentence(sentence) is not { } corrected || corrected == sentence
+        if (!spelling.Autocorrect && !spelling.Suggestions
+            || await CorrectSentence(language, sentence) is not { } corrected || corrected == sentence
             || RecentText?.Invoke() is not { } now || now.LastIndexOf(sentence, StringComparison.Ordinal) is var at && at < 0)
         {
             return;
@@ -4835,31 +4854,89 @@ public sealed class KeyPanel
         }
 
         string Changed(string shown, string other) => string.Join(' ', shown.Split(' ').Zip(other.Split(' ')).Where(pair => pair.First != pair.Second).Select(pair => pair.First));
-        if (spelling.Autocorrect)
+        if (spelling.Autocorrect && InDocument)
         {
+            Log.Detail($"Spelling: a sentence closed in {language.Code} written again by its model");
             Replace(sentence.Length + after.Length, corrected + after);
-            correction = new(corrected, sentence, after);
-            ShowOffer(OfferRow([null, Changed(sentence, corrected), null], "↶ ", _ => TakeCorrection(sentence)));
+            if (spelling.Suggestions)
+            {
+                correction = new(corrected, sentence, after);
+                ShowOffer(OfferRow([null, Changed(sentence, corrected), null], "↶ ", _ => TakeCorrection(sentence)));
+            }
+        }
+        else if (spelling.Suggestions)
+        {
+            Log.Detail($"Spelling: a sentence closed in {language.Code} mended by its model offered with ✓ (Autocorrect off or not a document)");
+            correction = new(sentence, sentence, after);
+            ShowOffer(OfferRow([null, Changed(corrected, sentence), null], "✓ ", _ => TakeCorrection(corrected)));
+        }
+    }
+
+    /// <summary>
+    /// A word ended with a space, where the language's context model is on: the
+    /// sentence so far read by it away from the main thread, and the word as it
+    /// writes it (the marks it puts round a sentence's end aside, which it
+    /// writes as the sentence closes), as a word's correction is: with
+    /// Autocorrect, written in its place, ↶ offering it back; else, with
+    /// Suggestions, offered with ✓. Only while the text still ends with the
+    /// word and its space, and where it reads the sentence word for word.
+    /// </summary>
+    private async void CorrectWordByModel()
+    {
+        var language = TypingLanguage;
+        if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { Context: not null } spelling
+            || !(spelling.Autocorrect && InDocument) && !spelling.Suggestions || swipedText is not null
+            || RecentText?.Invoke() is not { } recent || !recent.EndsWith(' ') || SentenceAt(recent).TrimEnd() is not { Length: > 0 } sentence
+            || InAddress(recent, 1))
+        {
+            return;
+        }
+
+        var typed = sentence.Split(' ');
+        if (await CorrectSentence(language, sentence) is not { } corrected
+            || corrected.Split(' ') is not { } written || written.Length != typed.Length)
+        {
+            return;
+        }
+
+        var word = typed[^1];
+        var mended = written[^1].TrimStart('¿', '¡').TrimEnd('.', ',', ';', ':', '?', '!', '…');
+        if (mended.Length == 0 || mended == word || RecentText?.Invoke() is not { } now || !now.EndsWith(word + " ", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (spelling.Autocorrect && InDocument)
+        {
+            Log.Detail($"Spelling: a word in {language.Code} written again by its context model");
+            Replace(word.Length + 1, mended + " ");
+            if (spelling.Suggestions)
+            {
+                correction = new(mended, word, " ");
+                ShowOffer(OfferRow([null, word, null], "↶ ", TakeCorrection));
+            }
         }
         else
         {
-            correction = new(sentence, sentence, after);
-            ShowOffer(OfferRow([null, Changed(corrected, sentence), null], "✓ ", _ => TakeCorrection(corrected)));
+            Log.Detail($"Spelling: a word in {language.Code} mended by its context model offered with ✓");
+            correction = new(word, word, " ");
+            ShowOffer(OfferRow([null, mended, null], "✓ ", TakeCorrection));
         }
     }
 
     /// <summary>Enter closing what is typed, with Autocorrect on: its last word corrected, then its sentence's accents, before the line ends, for after Enter the field may add what it likes; nothing offered after.</summary>
     private void CorrectBeforeEnter()
     {
-        if (SpellingIn?.Invoke(TypingLanguage) is not { Autocorrect: true } spelling)
+        if (SpellingIn?.Invoke(TypingLanguage) is not { Autocorrect: true } spelling || !InDocument)
         {
             return;
         }
 
         FixWord();
-        if (spelling.Accents && CorrectSentenceNow is { } correct && RecentText?.Invoke() is { } recent
-            && SentenceAt(recent) is { Length: > 1 } sentence && correct(sentence) is { } corrected && corrected != sentence)
+        if (SentenceRead(spelling) && CorrectSentenceNow is { } correct && RecentText?.Invoke() is { } recent
+            && SentenceAt(recent) is { Length: > 1 } sentence && correct(TypingLanguage, sentence) is { } corrected && corrected != sentence)
         {
+            Log.Detail($"Spelling: the sentence before Enter in {TypingLanguage.Code} written again by its model");
             Replace(sentence.Length, corrected);
         }
     }
@@ -4889,7 +4966,7 @@ public sealed class KeyPanel
                 turnOn();
                 ShowOffer(null);
             }
-            catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+            catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or TaskCanceledException)
             {
                 Log.Write($"Downloads: {missing} could not be downloaded from the toolbar: {failure.Message}");
                 said.Text = failed(failure);

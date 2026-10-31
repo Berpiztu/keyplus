@@ -91,6 +91,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
             () => LanguageChoices.SpellingIn(this, StandardKeys.Spanish.Code).Wikipedia,
             () => Assets!.Open(CommonErrors.OwnList), message => Log.Write(message));
         spelling.FixesFound += (_, _) => panel?.OfferWords();
+        context = new(() => ContextModelOf(contextLanguage),
+            () => ContextModelOf(contextLanguage) is { } name
+                ? ContextCorrector.Load(System.IO.Path.Combine(KeyPlusPreferences.CorrectorsFolder(this), name))
+                : null,
+            old => old.Dispose());
 
         MenuWatchService.MenuOpened += AvoidMenu;
         MenuWatchService.MenuClosed += MenuGone;
@@ -110,6 +115,15 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     /// <summary>What the keyboard knows of words as they are typed (<see cref="SpellingEngine"/>), shared with Windows: the words offered, whether a word is one, what it may have meant.</summary>
     private SpellingEngine spelling = null!;
+
+    /// <summary>The context model of the language typed in (its Spelling's), loaded as the keyboard opens and again once the language or its model changes; only one in memory.</summary>
+    private Loaded<ContextCorrector> context = null!;
+
+    /// <summary>The language whose context model is loaded: the one typed in, as it was last prepared.</summary>
+    private string? contextLanguage;
+
+    /// <summary>A language's context model as the keyboard applies it: none with Spelling off.</summary>
+    private string? ContextModelOf(string? language) => language is null ? null : LanguageChoices.Applied(this, language).Context;
 
     /// <summary>Swipes read as words; whether a language is swiped in is its own (its Glide typing, <see cref="LanguageChoices.Glides"/>).</summary>
     private Func<KeyPanel.SwipePath, Task<IReadOnlyList<string>>>? SwipeOn() => swipeTyping is { } swiping ? swiping.Words : null;
@@ -178,7 +192,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     private void PrepareLanguage(StandardLanguage language)
     {
         spelling.Prepare(language);
-        if (LanguageChoices.GlidesIn(this, language.Code))
+        contextLanguage = language.Code;
+        _ = context.Async();
+        if (LanguageChoices.GlideOn(this))
         {
             swipeTyping?.Prepare(language);
         }
@@ -222,7 +238,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
         accountField = !secretField && (fieldKind == StandardField.Email
             || (fieldKind == StandardField.Text && System.Text.RegularExpressions.Regex.IsMatch(named, AccountWords, System.Text.RegularExpressions.RegexOptions.IgnoreCase)));
         accountText = "";
+        // A document's, where Autocorrect may write by itself: text of many lines (a message, a mail, a note), as
+        // ordinary text, a long or a short message (a chat's), that asks for suggestions; in doubt, not one.
+        documentField = WordsField && kind == Android.Text.InputTypes.ClassText
+            && (type & (Android.Text.InputTypes.TextFlagMultiLine | Android.Text.InputTypes.TextFlagImeMultiLine)) != 0
+            && (type & Android.Text.InputTypes.TextFlagNoSuggestions) == 0
+            && variation is Android.Text.InputTypes.TextVariationNormal or Android.Text.InputTypes.TextVariationLongMessage
+                or Android.Text.InputTypes.TextVariationShortMessage;
         panel?.FieldIs(fieldKind);
+        if (panel is not null)
+        {
+            panel.InDocument = documentField;
+        }
     }
 
     /// <summary>What names a user's or an account's field, in its hint or its name, in English or Spanish.</summary>
@@ -233,6 +260,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
     private StandardField fieldKind;
     private bool secretField;
+
+    /// <summary>Whether the field is surely a document's (<see cref="TakeField"/>): only there does Autocorrect write by itself.</summary>
+    private bool documentField;
     private bool accountField;
     private string accountText = "";
 
@@ -289,8 +319,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// where the field says a sentence begins, as Gboard's; Android's own
     /// reading of it (after . ? or ! and a space, a new line, the field's
     /// start), only in a field that asks for capitals there (CAP_SENTENCES:
-    /// never an address, a password or a number), and only while Spelling is
-    /// on: off, nothing is corrected, a sentence's capital neither.
+    /// never an address, a password or a number) and is a document's
+    /// (Autocorrect's own rule), and only while Spelling is on: off, nothing
+    /// is corrected, a sentence's capital neither.
     /// </summary>
     private void SentenceShift()
     {
@@ -300,7 +331,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
 
         var on = KeyPlusPreferences.Global(this).GetBoolean(KeyPlusPreferences.CapitalizeSentencesKey, false) && LanguageChoices.SpellingOn(this);
-        panel.SentenceStart(on && CurrentInputConnection?.GetCursorCapsMode((Android.Text.CapitalizationMode)(int)info.InputType) is { } mode && mode != 0);
+        panel.SentenceStart(on && documentField && CurrentInputConnection?.GetCursorCapsMode((Android.Text.CapitalizationMode)(int)info.InputType) is { } mode && mode != 0);
     }
 
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
@@ -692,6 +723,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         // Made again in the same field (Standard and Standard PC swapped, its colours changed): suited to it still.
         panel.FieldIs(fieldKind);
+        panel.InDocument = documentField;
         placed.Landscape = Resources!.Configuration!.Orientation == Android.Content.Res.Orientation.Landscape;
         panel.Scale = placed.Scale;
         if (OnHeadset)
@@ -714,8 +746,16 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.GlidesFor = language => LanguageChoices.Glides(this, language);
             panel.Fixing = (language, word) => WordsField ? spelling.Fix(language, word) : null;
             panel.SpellingIn = language => LanguageChoices.Applied(this, language.Code);
-            panel.CorrectSentence = async sentence => await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
-            panel.CorrectSentenceNow = sentence => spelling.Accents.InUse()?.Restore(sentence);
+            // A language's context model reads its sentences where it is on, the accent model where its accents are:
+            // never both, its settings let only one. A corrector loaded for another language is not used for this one.
+            panel.CorrectSentence = async (language, sentence) =>
+                ContextModelOf(language.Code) is { } name
+                    ? await context.Async() is { } corrector && corrector.Name == name ? await Task.Run(() => corrector.Correct(sentence)) : null
+                    : await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
+            panel.CorrectSentenceNow = (language, sentence) =>
+                ContextModelOf(language.Code) is { } name
+                    ? context.InUse() is { } corrector && corrector.Name == name ? corrector.Correct(sentence) : null
+                    : spelling.Accents.InUse()?.Restore(sentence);
             panel.TextAfterCaret = () => CurrentInputConnection?.GetTextAfterCursor(1, 0)?.ToString();
             panel.SelectionCase = TurnSelectionCase;
 
@@ -921,7 +961,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         SentenceShift();
     }
 
-    /// <summary>The Glide typing tool: the language typed in swiped or not; without its word list or the model, said in the toolbar with Download beside it for that language alone.</summary>
+    /// <summary>The Glide typing tool: Glide typing on or off for every language; without the model or the language typed in's word list, said in the toolbar with Download beside it, for what is missing.</summary>
     private void GlideTapped()
     {
         var language = KeyPlusPreferences.Language(this);
@@ -929,11 +969,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
         {
             Log.Write($"Glide typing: {language.Code}'s word list or the model is not downloaded, so the tool stays off");
             OfferDownload(GetString(Resource.String.glide_not_downloaded, new Java.Lang.String(language.Name)), LanguageOptions.GlideOf(language),
-                () => LanguageChoices.SetGlide(this, language.Code, true));
+                () => LanguageChoices.SetGlideOn(this, true));
             return;
         }
 
-        LanguageChoices.SetGlide(this, language.Code, !LanguageChoices.GlidesIn(this, language.Code));
+        LanguageChoices.SetGlideOn(this, !LanguageChoices.GlideOn(this));
         panel!.GridTiles = GridTiles();
         PrepareLanguage(language);
     }

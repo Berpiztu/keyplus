@@ -219,7 +219,8 @@ a window that does.
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard: drawn in the device's own colours, typed, held, swiped |
-| [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder and each language's word list, downloaded with its Glide typing ([SwipeData.cs](SwipeData.cs)), loaded once, a swipe read as words, accents put back |
+| [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder, downloaded with Glide typing, and each language's word list, with its Suggestions ([SwipeData.cs](SwipeData.cs)), loaded once, a swipe read as words, accents put back |
+| [ContextCorrector.cs](ContextCorrector.cs) | A language's context model, made with Berpiztu/llm-create: the sentence read whole and written again mended, its encoder and decoder on ONNX Runtime, on Android and Windows |
 | [SwipeDecoder.java](SwipeDecoder.java) | FUTO Swipe's Java side over its native library ([native/futo-swipe](native/futo-swipe)), GPL-3.0 |
 | [SwipeTrail.cs](SwipeTrail.cs) | The line a swiping finger draws over the keys, thinning behind it |
 
@@ -256,6 +257,11 @@ a window that does.
   none taken away. On Windows and Android alike.
 - **Spelling by language** (Windows): **Settings › Languages** lists each
   language with **›**, which opens its page: its **Spelling** and its words.
+  At its top, **Autocorrect** and **Suggestions** in one line: whether a
+  correction is written, and whether the toolbar offers anything (both off,
+  nothing is written or offered); under them the language's **word list**,
+  with its own Download (the words offered as you type, and glide typing's);
+  then its **Context model**.
   **Correct words** (Spanish and English), off until turned on, when
   LibreOffice's dictionary of that language is downloaded once (Hunspell,
   0.9 MB Spanish, 0.55 MB English, checked by its SHA-256): a word typed
@@ -277,27 +283,43 @@ a window that does.
   or ! or Enter ends what was typed, it adds the full stops, commas, ¿? and
   capitals it lacks, never taking away a mark typed nor changing a word,
   "Hola, Iosu. ¿Qué tal estás?"); and **Put ¿ and ¡ at the start**.
+  **Context model**, by language, on Windows and Android: a corrector made
+  with Berpiztu/llm-create, put by hand in the keyboard's `correctors` folder
+  (Windows: `%LOCALAPPDATA%\Berpiztu\Keyboard\correctors`; Android: the app's
+  files, `Android/data/ai.berpiztu.keyboard/files/correctors`), a folder each,
+  chosen by name in its list. On, it alone corrects that language: each word
+  as a space ends it, and the whole sentence as . ? ! or Enter closes it,
+  its spelling, accents, punctuation and capitals; the other choices are
+  faded and kept as they were for when it is turned off; the words offered as
+  you type still come from the word list.
   Autocorrect writes by itself only where the field is surely a document
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,
   or in doubt, what it would write is only offered.
+  A choice's switch only turns it on or off; under it, its line says where
+  its files are and has its own button: **Download**, **Cancel** while they
+  come, with a thin bar under the words, or **Download again**, for a file
+  damaged; nothing moves as it changes. On Windows and Android alike.
   **Settings › Spelling** keeps what goes for every language: **Correct as
   I type**, all of it on and off at once, as the toolbar's spellcheck button
-  does (off to write code), and **Download again**, which fetches what the
-  choices turned on downloaded again whole, for a file damaged. Windows
+  does (off to write code). Windows
   tells a keyboard little of the field, so Spelling mends what the keyboard
   typed whole, with no mouse or computer key since it began; where it lost
   it (dictation, a click, the computer's keys), it reads the sentence from
   the field through UI Automation, where the application lets it, and mends
   that.
-- **Settings › Glide typing** on Windows is off until turned on, when it
-  downloads once what it reads with: FUTO Swipe's model (Hugging Face) and
-  the Spanish and English word lists (AOSP LatinIME), 4.7 MB, each file
-  checked by its SHA-256. The word lists also give the words offered as you
-  type and how common a correction is. The installer carries none of it.
+- **Settings › Glide typing**, on Windows and Android, is one switch for
+  every language, off until turned on, with FUTO Swipe's model (Hugging
+  Face) downloaded once by its own button; each language's word list (AOSP
+  LatinIME) is downloaded on its page, under Suggestions, and the Glide
+  typing page says which languages have it; 4.7 MB with both lists, each
+  file checked by its SHA-256. The word lists also give the words offered as
+  you type and how common a correction is. Neither the installer nor the APK
+  carries any of it.
 - **Settings › Glide typing › Delete a swiped word whole** (on):
-  ⌫ right after a swiped word deletes all the swipe typed, the word and the
-  space it put before it; held, ⌫ goes on letter by letter. Off, ⌫ takes
+  ⌫ right after a swiped word deletes the word, the space it put before it
+  kept, so the next word, swiped or tapped, never sticks to the one before;
+  held, ⌫ goes on letter by letter. Off, ⌫ takes
   only the last letter. On Windows and Android alike.
 - **On a headset (Galaxy XR), a third: Standard XR**: a tablet's
   keys, the digits over the letters, Tab, Caps Lock, ⇧ at both ends, ◀ and

@@ -343,7 +343,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Whether a swipe draws its trail over the keys.</summary>
     public bool ShowsTrail { get; set; } = true;
 
-    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes all it typed, as Gboard's.</summary>
+    /// <summary>Glide typing › Delete a swiped word whole: ⌫ right after a swipe takes the word it typed, the space before it kept.</summary>
     public bool DeletesSwipedWord { get; set; } = true;
 
     /// <summary>The words a swipe read as, the one typed among them, for the toolbar; none, the toolbar as it was.</summary>
@@ -383,6 +383,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// is only offered.
     /// </summary>
     private bool Corrects => Spelling.Autocorrect && (InDocument?.Invoke() ?? false);
+
+    /// <summary>Whether a sentence closed is read by a model: the punctuation or the accent model, or the language's context model.</summary>
+    private bool SentenceRead => Spelling.Accents || Spelling.Punctuation || Spelling.Context is not null;
 
     /// <summary>The models' sentence (accents, punctuation), at once, where they are loaded; none, not now. For Enter, which cannot wait for them. With it, whether these keys began the sentence (Enter, or . ? or ! typed).</summary>
     public Func<string, bool, string?>? CorrectNow { get; set; }
@@ -492,7 +495,7 @@ public sealed class KeyboardSurface : FrameworkElement
             var known = SentenceKnown;
             var byKeys = sentenceByKeys;
             BeginSentence(blind: false, byKeys: true);
-            if ((Spelling.Accents || Spelling.Punctuation) && whole.Trim().Length > 1 && !EndsInAddress(whole))
+            if (SentenceRead && whole.Trim().Length > 1 && !EndsInAddress(whole))
             {
                 if (!known)
                 {
@@ -515,7 +518,7 @@ public sealed class KeyboardSurface : FrameworkElement
     private void ReadClosed(string text)
     {
         var closing = text.LastOrDefault(mark => mark is '.' or '?' or '!');
-        if (closing == default || !(Spelling.Accents || Spelling.Punctuation))
+        if (closing == default || !SentenceRead)
         {
             return;
         }
@@ -612,7 +615,7 @@ public sealed class KeyboardSurface : FrameworkElement
     /// </summary>
     private void CorrectBeforeEnter(string ended)
     {
-        if (!Corrects || !(Spelling.Accents || Spelling.Punctuation))
+        if (!Corrects || !SentenceRead)
         {
             return;
         }
@@ -795,6 +798,35 @@ public sealed class KeyboardSurface : FrameworkElement
         return (typed, fixes.Words, applied);
     }
 
+    /// <summary>A word ended with a space where the language's context model is on: the sentence so far, the word, and when its space was typed (<see cref="TakeModelWord"/>).</summary>
+    public event Action<string, string, long>? WordEnded;
+
+    /// <summary>
+    /// A word just ended as the context model writes it (<see cref="WordEnded"/>),
+    /// as a word's correction is: with Autocorrect, in a document, written in
+    /// its place, ↶ offering it back; else offered with ✓. Only while nothing
+    /// has been typed since its space, nor anything else touched the text.
+    /// </summary>
+    public void TakeModelWord(string typed, string mended, long endedAt)
+    {
+        if (boundaryAt != endedAt || typingWord.Length > 0)
+        {
+            Log.Detail("Spelling: the context model's word came after more was typed, so it is left");
+            return;
+        }
+
+        wordFix = new WordFix(typed, typed, " ", endedAt);
+        var applied = Corrects;
+        if (applied)
+        {
+            ReplaceWord(mended, fromToolbar: false);
+            wordFix = new WordFix(mended, typed, " ", boundaryAt);
+            Log.Detail("Spelling: a word written again by the context model");
+        }
+
+        WordFixed?.Invoke(typed, [mended], applied);
+    }
+
     /// <summary>The word checked offered in the toolbar once what ended it is typed: taken back with ↶, or the words it may have meant.</summary>
     private void OfferFix((string Typed, IReadOnlyList<string> Fixes, bool Applied) fixing, string ending)
     {
@@ -806,9 +838,11 @@ public sealed class KeyboardSurface : FrameworkElement
     /// A word of the toolbar taken in place of the last word checked, what
     /// ended it written again after it: the word as typed takes a correction
     /// back, and counts towards learning it; only while nothing but these
-    /// keys touched the window and nothing was typed since.
+    /// keys touched the window and nothing was typed since. The context
+    /// model's word goes the same way (<see cref="TakeModelWord"/>), its own
+    /// line written to the log in place of the toolbar's.
     /// </summary>
-    public void ReplaceWord(string word)
+    public void ReplaceWord(string word, bool fromToolbar = true)
     {
         if (wordFix is not { } fix || (KeyedAt?.Invoke() ?? long.MaxValue) >= fix.From || (PressedAt?.Invoke() ?? long.MaxValue) >= fix.From)
         {
@@ -820,7 +854,10 @@ public sealed class KeyboardSurface : FrameworkElement
         Retype(fix.Written.Length + fix.Ending.Length, word + fix.Ending);
         wordFix = null;
         boundaryAt = Environment.TickCount64;
-        Log.Detail(word == fix.Typed ? "Spelling: a word's correction taken back" : "Spelling: a word corrected from the toolbar");
+        if (fromToolbar)
+        {
+            Log.Detail(word == fix.Typed ? "Spelling: a word's correction taken back" : "Spelling: a word corrected from the toolbar");
+        }
     }
 
     /// <summary>The last characters these keys typed deleted and the text typed in their place, the sentence's record kept with them.</summary>
@@ -2035,11 +2072,19 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else
         {
+            var ended = typingWord;
             ForgetTyping();
             boundaryAt = typed.Length > 0 && !char.IsLetterOrDigit(typed[^1]) ? Environment.TickCount64 : 0;
             if (fixing is { } offered && typed.Length > 0)
             {
                 OfferFix(offered, typed);
+            }
+
+            // A word ended with a space where the language's context model is on: its sentence so far, for the model.
+            if (typed == " " && ended.Length > 0 && Spelling.Context is not null && SentenceKnown && !EndsInAddress(sentence!.ToString())
+                && sentence.ToString().Trim() is { Length: > 0 } sofar && sofar.EndsWith(ended, StringComparison.Ordinal))
+            {
+                WordEnded?.Invoke(sofar, ended, boundaryAt);
             }
         }
     }
@@ -2057,17 +2102,19 @@ public sealed class KeyboardSurface : FrameworkElement
     private void DeleteOnce()
     {
         boundaryAt = 0;
-        // Right after a swipe, with Delete a swiped word whole on: the word and the space it put before it; held, ⌫ goes on letter by letter.
+        // Right after a swipe, with Delete a swiped word whole on: the word, the space it put before it kept, so what comes
+        // next, swiped or tapped, starts a word of its own and never sticks to the one before; held, ⌫ goes on letter by letter.
         if (DeletesSwipedWord && swipedText is { } typed && !Combining && deadKey is null)
         {
-            foreach (var _ in typed)
+            var word = typed.TrimStart(' ');
+            foreach (var _ in word)
             {
                 KeySender.Press(Keycode.Del, KeySender.Held.None);
             }
 
-            SentenceDeleted(typed.Length);
+            SentenceDeleted(word.Length);
             EndSwipe(letter: false);
-            lastTyped = null;
+            lastTyped = word.Length < typed.Length ? ' ' : null;
             return;
         }
 
