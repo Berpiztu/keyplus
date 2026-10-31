@@ -710,6 +710,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The word being typed letter by letter; empty, none.</summary>
     public string TypingWord => typingWord;
 
+    /// <summary>The sentence typed so far, where these keys know it (<see cref="SentenceKnown"/>), for the context model to offer words for; none, not known.</summary>
+    public string? SentenceSoFar => SentenceKnown && !EndsInAddress(sentence!.ToString()) ? sentence.ToString().TrimStart() : null;
+
     /// <summary>When the word being typed began: it is where the keys think only while nothing else touched the window since (<see cref="WordKnown"/>).</summary>
     private long wordFrom;
 

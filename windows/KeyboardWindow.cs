@@ -1127,6 +1127,18 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
+        // A word no list has, which the model offered a word of the lists for as it was typed (the toolbar's centre):
+        // that word, as Gboard takes its centre's ("plat": "plato"), its capital kept. Asked to write the whole
+        // sentence again, the model may leave such a word as it is.
+        var language = keys.KeyLanguage;
+        if (modelOffer is { Word: var offeredFor, Offered: [var first, ..] } && offeredFor == word && !first.Equals(word, StringComparison.OrdinalIgnoreCase)
+            && spellingEngine.Unknown(language, word) && !spellingEngine.Unknown(language, first))
+        {
+            Log.Detail($"Spelling: a word no list has in {language.Code} taken as the context model's first offered");
+            keys.TakeModelWord(word, char.IsUpper(word[0]) ? char.ToUpper(first[0], System.Globalization.CultureInfo.CurrentCulture) + first[1..] : first, endedAt);
+            return;
+        }
+
         var written = (await Task.Run(() => corrector.Correct(sentence))).Split(' ');
         if (written.Length != sentence.Split(' ').Length
             || written[^1].TrimStart('¿', '¡').TrimEnd('.', ',', ';', ':', '?', '!', '…') is not { Length: > 0 } mended || mended == word)
@@ -1135,6 +1147,52 @@ public sealed class KeyboardWindow : Window
         }
 
         keys.TakeModelWord(word, mended, endedAt);
+    }
+
+    /// <summary>The question to the context model for the words being offered, cancelled by the next letter's.</summary>
+    private CancellationTokenSource? modelAsked;
+
+    /// <summary>The last words the context model offered, and the word typed they were for: its first is what a space takes.</summary>
+    private (string Word, IReadOnlyList<string> Offered)? modelOffer;
+
+    /// <summary>
+    /// The context model asked for the words to offer for the word being typed, in its sentence (<see
+    /// cref="ContextCorrector.Suggest"/>), the newest letter only; its words, where that word is still being typed when it
+    /// answers, put first, the word list's after them, three in all. None asked where the language has no model on, or
+    /// the sentence is not known.
+    /// </summary>
+    private async void OfferModelWords(string word, IReadOnlyList<string> listed)
+    {
+        modelAsked?.Cancel();
+        var spelling = preferences.Applied(keys.KeyLanguage.Code);
+        if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
+        {
+            return;
+        }
+
+        var asked = modelAsked = new CancellationTokenSource();
+        if ((await ModelsAsync(spelling)).Context is not { } corrector || asked.IsCancellationRequested)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> offered;
+        try
+        {
+            offered = await Task.Run(() => corrector.Suggest(sentence, asked.Token), asked.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (asked.IsCancellationRequested || offered.Count == 0 || keys.TypingWord != word)
+        {
+            return;
+        }
+
+        modelOffer = (word, offered);
+        ShowSuggestions([.. offered.Concat(listed).Distinct(StringComparer.OrdinalIgnoreCase).Take(ContextCorrector.Offered)], null);
     }
 
     /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
@@ -1347,6 +1405,7 @@ public sealed class KeyboardWindow : Window
     {
         var language = keys.KeyLanguage;
         var typed = keys.TypingWord;
+        OfferModelWords(typed, words);
         if (!preferences.Applied(language.Code).Suggestions)
         {
             ShowSuggestions([], null);
