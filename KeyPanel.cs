@@ -543,9 +543,9 @@ public sealed class KeyPanel
     public Func<StandardLanguage, string, IReadOnlyList<string>>? Suggesting { get; set; }
 
     /// <summary>
-    /// The words the language's context model offers for the sentence typed so far, its last word being typed (<see
-    /// cref="ContextCorrector.Suggest"/>); none where it has no model on. Asked at each letter, the newest only: a
-    /// letter typed before it answers cancels the question before it.
+    /// The words the language's context model offers for the sentence typed so far, its last word being typed (the
+    /// keyboard's ContextCorrector.Suggest, which the popup has not); none where it has no model on. Asked at each
+    /// letter, the newest only: a letter typed before it answers cancels the question before it.
     /// </summary>
     public Func<StandardLanguage, string, CancellationToken, Task<IReadOnlyList<string>>>? ModelSuggesting { get; set; }
 
@@ -4633,7 +4633,7 @@ public sealed class KeyPanel
             var listed = typingWord == word ? typingWords : [];
             modelOffer = (word, offered);
             typingWord = word;
-            typingWords = [.. offered.Concat(listed).Distinct(StringComparer.OrdinalIgnoreCase).Take(ContextCorrector.Offered)];
+            typingWords = [.. offered.Concat(listed).Distinct(StringComparer.OrdinalIgnoreCase).Take(WordSuggestions.Offered)];
             ShowBars();
         });
     }
