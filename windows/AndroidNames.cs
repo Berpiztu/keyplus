@@ -304,6 +304,9 @@ namespace Berpiztu.KeyPlus
             public const int search = 235;
             public const int context_model_not_downloaded = 237;
             public const int context_model_bits = 240;
+            public const int context_model_suggests = 241;
+            public const int context_model_suggests_summary = 242;
+            public const int context_model_suggests_off = 243;
             public const int context_model_gemma_title = 238;
             public const int context_model_gemma_terms = 239;
         }

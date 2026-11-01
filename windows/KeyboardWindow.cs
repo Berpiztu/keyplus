@@ -1204,7 +1204,8 @@ public sealed class KeyboardWindow : Window
         modelAsked?.Cancel();
         var spelling = preferences.Applied(keys.KeyLanguage.Code);
         // The sentence not known to these keys (a click put the caret in it), or no model: the word list's words.
-        if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
+        if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || !preferences.ContextSuggestsIn(keys.KeyLanguage.Code)
+            || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
         {
             modelOffer = null;
             ShowSuggestions(listed, null);
@@ -1457,7 +1458,7 @@ public sealed class KeyboardWindow : Window
         // The context model's words or the word list's, never both: shown one after the other, the centre changed under
         // the finger and a space took a word not seen ("mej": "mejor" from the list, then "mañana" from the model).
         var applied = preferences.Applied(language.Code);
-        if (typed.Length > 0 && applied.Suggestions && applied.Context is not null && !keys.TypingAddress)
+        if (typed.Length > 0 && applied.Suggestions && applied.Context is not null && preferences.ContextSuggestsIn(language.Code) && !keys.TypingAddress)
         {
             OfferModelWords(typed, words);
             return;

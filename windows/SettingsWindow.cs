@@ -379,15 +379,15 @@ public sealed class SettingsWindow : Window
                     both.Children.Add(box);
                 }
 
-                form.Children.Add(FieldSaying(null, both, Texts.Get(Resource.String.spelling_writes_offers_summary)));
-                form.Children.Add(FetchLine(LanguageOptions.WordListOf(language)));
+                form.Children.Add(WithLine(FieldSaying(null, both, Texts.Get(Resource.String.spelling_writes_offers_summary)), FetchLine(LanguageOptions.WordListOf(language))));
                 form.Children.Add(ContextModelPart(code, now, Keep, () => ShowPage(LanguagePage(language, from))));
+                form.Children.Add(ContextSuggestsPart(code, now));
                 continue;
             }
 
             var choiceBox = new CheckBox { Content = Texts.Get(choice.Label), IsChecked = choice.Get(now) };
-            form.Children.Add(FieldSaying(null, choiceBox, choice.Summary));
             var state = Choosing(choiceBox, choice.Fetches, on => Keep(spelling => choice.Set(spelling, on)));
+            form.Children.Add(WithLine(FieldSaying(null, choiceBox, choice.Summary), state));
 
             // While the context model is on it alone corrects: the others faded, kept as they are, a click saying why.
             if (choice.Corrects && now.Context is not null)
@@ -399,11 +399,6 @@ public sealed class SettingsWindow : Window
                     Log.Write($"Settings: {Texts.Get(choice.Label)} not turned: {Texts.Get(Resource.String.context_model_in_place)}");
                     MessageBox.Show(Texts.Get(Resource.String.context_model_in_place), Texts.Get(choice.Label), MessageBoxButton.OK, MessageBoxImage.Information);
                 };
-            }
-
-            if (state is not null)
-            {
-                form.Children.Add(state);
             }
         }
 
@@ -1092,6 +1087,13 @@ public sealed class SettingsWindow : Window
             }
 
             keep(spelling => spelling with { Context = name });
+
+            // Turned on, its words offered as a word is typed too, as the owner wants it each time (Android's too).
+            if (name is not null)
+            {
+                KeyboardPreferences.Read().WithContextSuggests(code, true).Keep();
+            }
+
             Log.Write(name is null ? $"Corrector: {code}'s context model off" : $"Corrector: {name} on for {code}");
             again();
         };
@@ -1115,7 +1117,7 @@ public sealed class SettingsWindow : Window
         }
 
         // One line, as every download's: Modelo, the list of one width whatever it holds, and the chosen one's line beside it.
-        var line = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
+        var line = new DockPanel();
         var named = new TextBlock { Text = Texts.Get(Resource.String.context_model_list), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) };
         list.Margin = new Thickness(0, 0, FieldGapDp / 2, 0);
         DockPanel.SetDock(named, Dock.Left);
@@ -1123,10 +1125,7 @@ public sealed class SettingsWindow : Window
         line.Children.Add(named);
         line.Children.Add(list);
         line.Children.Add(fetching);
-        var part = new StackPanel();
-        part.Children.Add(FieldSaying(null, box, Texts.Get(Resource.String.context_model_summary)));
-        part.Children.Add(line);
-        return part;
+        return WithLine(FieldSaying(null, box, Texts.Get(Resource.String.context_model_summary)), line);
     }
 
     /// <summary>
@@ -1139,6 +1138,35 @@ public sealed class SettingsWindow : Window
             new Typeface(list.FontFamily, list.FontStyle, list.FontWeight, list.FontStretch), list.FontSize, Brushes.Black, 1.0);
         return Math.Ceiling(longest.WidthIncludingTrailingWhitespace) + list.Padding.Left + list.Padding.Right
             + SystemParameters.VerticalScrollBarWidth + list.BorderThickness.Left + list.BorderThickness.Right;
+    }
+
+    /// <summary>
+    /// Under the Context model, as Android's: Use it for suggestions too, the model's words offered as a word is typed,
+    /// the word list's where it offers none; faded while the model is off, a click then saying why.
+    /// </summary>
+    private static FrameworkElement ContextSuggestsPart(string code, LanguageSpelling now)
+    {
+        var box = new CheckBox { Content = Texts.Get(Resource.String.context_model_suggests), IsChecked = KeyboardPreferences.Read().ContextSuggestsIn(code) };
+        if (now.Context is null)
+        {
+            box.Opacity = OffOpacity;
+        }
+
+        box.Click += (_, _) =>
+        {
+            if (KeyboardPreferences.Read().SpellingIn(code).Context is null)
+            {
+                box.IsChecked = KeyboardPreferences.Read().ContextSuggestsIn(code);
+                Log.Write($"Settings: {Texts.Get(Resource.String.context_model_suggests)} not turned: {Texts.Get(Resource.String.context_model_suggests_off)}");
+                MessageBox.Show(Texts.Get(Resource.String.context_model_suggests_off), Texts.Get(Resource.String.context_model_suggests), MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var on = box.IsChecked == true;
+            KeyboardPreferences.Read().WithContextSuggests(code, on).Keep();
+            Log.Write($"Corrector: {code}'s context model {(on ? "gives" : "no longer gives")} the words offered as a word is typed");
+        };
+        return FieldSaying(null, box, Texts.Get(Resource.String.context_model_suggests_summary));
     }
 
     /// <summary>The context models Hugging Face offers, read once while the settings are open (<see cref="CorrectorCatalog"/>).</summary>
@@ -1437,8 +1465,7 @@ public sealed class SettingsWindow : Window
         var preferences = KeyboardPreferences.Read();
         var form = Form(Resource.String.glide);
         var glide = new CheckBox { Content = Texts.Get(Resource.String.glide), IsChecked = preferences.GlideTyping };
-        form.Children.Add(Field(null, glide, Resource.String.glide_on_summary));
-        form.Children.Add(Choosing(glide, LanguageOptions.GlideModel, on => (KeyboardPreferences.Read() with { GlideAll = on }).Keep())!);
+        form.Children.Add(WithLine(Field(null, glide, Resource.String.glide_on_summary), Choosing(glide, LanguageOptions.GlideModel, on => (KeyboardPreferences.Read() with { GlideAll = on }).Keep())));
         var trail = new CheckBox { Content = Texts.Get(Resource.String.glide_trail), IsChecked = preferences.GlideTrail };
         trail.Click += (_, _) => (KeyboardPreferences.Read() with { GlideTrail = trail.IsChecked == true }).Keep();
         form.Children.Add(Field(null, trail, Resource.String.glide_trail_summary));
@@ -1733,6 +1760,21 @@ public sealed class SettingsWindow : Window
         if (hint is { } said)
         {
             field.Children.Add(new TextBlock { Text = said, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) });
+        }
+
+        return field;
+    }
+
+    /// <summary>
+    /// A choice's download line in its field, under its words as they are under its box, and the room between fields
+    /// after it, not between its words and its line.
+    /// </summary>
+    private static FrameworkElement WithLine(FrameworkElement field, FrameworkElement? line)
+    {
+        if (line is not null && field is Panel own)
+        {
+            line.Margin = new Thickness(0, 4, 0, 0);
+            own.Children.Add(line);
         }
 
         return field;

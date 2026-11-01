@@ -64,8 +64,17 @@ public sealed record KeyboardPreferences(
     // Glide typing on and off for every language at once, as Android's: none until it is turned (GlideTyping).
     bool? GlideAll = null,
     // Each language's context model chosen in its list, kept while it is off, so it is the one turned on again.
-    Dictionary<string, string>? ContextModels = null)
+    Dictionary<string, string>? ContextModels = null,
+    // Each language's Use it for suggestions too, as Android's: on until turned off, and turned on with the model.
+    Dictionary<string, bool>? ContextSuggests = null)
 {
+    /// <summary>Whether a language's context model gives the words offered as a word is typed too, the word list's where it offers none; on until turned off.</summary>
+    public bool ContextSuggestsIn(string language) => ContextSuggests?.GetValueOrDefault(language, true) ?? true;
+
+    /// <summary>The preferences with a language's Use it for suggestions too turned.</summary>
+    public KeyboardPreferences WithContextSuggests(string language, bool on) =>
+        this with { ContextSuggests = new Dictionary<string, bool>(ContextSuggests ?? []) { [language] = on } };
+
     /// <summary>A language's context model chosen in its list, on or off; none until one is chosen.</summary>
     public string? ContextModelIn(string language) => ContextModels?.GetValueOrDefault(language);
 
