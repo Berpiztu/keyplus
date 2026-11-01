@@ -205,12 +205,46 @@ public sealed class SpellingEngine
         }
 
         // Found already as it was typed, else looked for now: Hunspell's own limits keep the key waiting little.
-        if (!fixes.TryGetValue(word, out var found))
+        var found = Found(word, checking);
+        return found.Words.Count == 0 ? null : found with { Words = [.. found.Words.Take(WordSuggestions.Offered)] };
+    }
+
+    /// <summary>
+    /// What a word no list nor dictionary has may have meant, as <see cref="Fix"/> finds it, with the context model on
+    /// too (which turns Correct words off): offered in the toolbar's centre where nothing else is ("henorme": enorme), as
+    /// Gboard's. None for a word known, or where the language's dictionary is not downloaded.
+    /// </summary>
+    public IReadOnlyList<string> Meant(StandardLanguage language, string word)
+    {
+        if (Checking(language, word, whateverChosen: true) is not { Known: false } checking)
         {
-            fixes[word] = found = Corrections(word, checking);
+            return [];
         }
 
-        return found.Words.Count == 0 ? null : found with { Words = [.. found.Words.Take(WordSuggestions.Offered)] };
+        return [.. Found(word, checking).Words.Take(WordSuggestions.Offered)];
+    }
+
+    /// <summary>
+    /// A word's corrections, kept once found: asked from the keys' thread (a space) and from another (what a word nothing
+    /// starts as may have meant, which Hunspell took 6 s to find for "corrrecta"), each found by one alone.
+    /// </summary>
+    private WordFixes Found(string word, Check checking)
+    {
+        lock (fixes)
+        {
+            if (fixes.TryGetValue(word, out var kept))
+            {
+                return kept;
+            }
+        }
+
+        var found = Corrections(word, checking);
+        lock (fixes)
+        {
+            fixes[word] = found;
+        }
+
+        return found;
     }
 
     /// <summary>
@@ -254,9 +288,9 @@ public sealed class SpellingEngine
     /// <summary>What a word is checked with, read on the keyboard's thread: Correct words on, the language's dictionary loaded, the common misspellings in Spanish; and whether the word is one (a list's, the accents aside, those being the accent model's; the user's; Hunspell's). None, it is not checked.</summary>
     private sealed record Check(SpellingDictionary Spelling, CommonErrors? Common, WordSuggestions? Listed, IReadOnlyList<string> Personal, bool Known);
 
-    private Check? Checking(StandardLanguage language, string word)
+    private Check? Checking(StandardLanguage language, string word, bool whateverChosen = false)
     {
-        if (!applied(language.Code).Words || word.Length < 2 || DictionaryFor(language)?.InUse() is not { } spelling)
+        if (!(whateverChosen || applied(language.Code).Words) || word.Length < 2 || DictionaryFor(language)?.InUse() is not { } spelling)
         {
             return null;
         }

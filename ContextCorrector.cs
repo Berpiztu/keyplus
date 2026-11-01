@@ -103,7 +103,9 @@ public sealed class ContextCorrector : IDisposable
                 tokenizer = SentencePieceTokenizer.Create(pieces, false, false);
             }
 
-            var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL, IntraOpNumThreads = 2 };
+            // Up to four of the device's cores: with two, the phone took some 0.4 s a letter for the words offered, behind a
+            // hurried thumb (the owner, 2026-11-01).
+            var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL, IntraOpNumThreads = Math.Min(4, Environment.ProcessorCount) };
             var corrector = new ContextCorrector(name, new InferenceSession(Path.Combine(folder, "encoder.onnx"), options),
                 new InferenceSession(Path.Combine(folder, "decoder.onnx"), options), tokenizer, prefix, notText,
                 form.RootElement.TryGetProperty("suggest_tag", out var tag) && tag.GetString() is { Length: > 0 } told ? told : SuggestTag);

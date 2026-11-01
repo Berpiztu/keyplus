@@ -1227,8 +1227,7 @@ public sealed class KeyboardWindow : Window
         if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || !preferences.ContextSuggestsIn(keys.KeyLanguage.Code)
             || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
         {
-            modelOffer = word.Length > 0 && listed.Count > 0 ? (word, listed) : null;
-            ShowSuggestions(listed, null);
+            ShowWords(word, listed);
             return;
         }
 
@@ -1237,8 +1236,7 @@ public sealed class KeyboardWindow : Window
         {
             if (!asked.IsCancellationRequested)
             {
-                modelOffer = listed.Count > 0 ? (word, listed) : null;
-                ShowSuggestions(listed, null);
+                ShowWords(word, listed);
             }
 
             return;
@@ -1261,9 +1259,20 @@ public sealed class KeyboardWindow : Window
         }
 
         // None offered (the sentence too long, the model let go): the word list's, as with no model on.
+        // Nothing of the language from the model nor the list ("henorme"): what it may have meant in the centre, as Gboard's,
+        // found away from the window's thread (Hunspell took 6 s for "corrrecta").
         IReadOnlyList<string> shown = offered.Count > 0 ? [.. offered.Take(ContextCorrector.Offered)] : listed;
-        modelOffer = shown.Count > 0 ? (word, shown) : null;
-        ShowSuggestions(shown, null);
+        if (shown.Count == 0)
+        {
+            var language = keys.KeyLanguage;
+            shown = await Task.Run(() => spellingEngine.Meant(language, word));
+            if (asked.IsCancellationRequested || keys.TypingWord != word)
+            {
+                return;
+            }
+        }
+
+        ShowWords(word, shown);
     }
 
     /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
@@ -1493,8 +1502,35 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
-        // The word list's words, as the model's: their first, the centre, is what a space takes with Autocorrect on. Kept
-        // through a word not begun yet (the space just typed asks again): the space's own correction reads it after.
+        ShowWords(typed, words);
+
+        // Nothing starting so ("henorme"): what it may have meant in the centre, as Gboard's, found away from the window's
+        // thread (Hunspell took 6 s for "corrrecta", the keyboard stopped meanwhile).
+        if (words.Count == 0 && typed.Length > 1)
+        {
+            OfferMeant(typed);
+        }
+    }
+
+    /// <summary>What a word nothing starts as may have meant, found away from the window's thread, shown where that word is still being typed.</summary>
+    private async void OfferMeant(string typed)
+    {
+        var language = keys.KeyLanguage;
+        var meant = await Task.Run(() => spellingEngine.Meant(language, typed));
+        if (meant.Count > 0 && keys.TypingWord == typed)
+        {
+            ShowWords(typed, meant);
+        }
+    }
+
+    /// <summary>
+    /// The words offered for a word being typed, the context model's or the word list's, their first in the centre, what a
+    /// space takes with Autocorrect on (kept through a word not begun yet: the space's own correction reads it after); one
+    /// no list has, with learning on, shown as typed at the left in quotes, as Gboard's, a tap learning it.
+    /// </summary>
+    private void ShowWords(string typed, IReadOnlyList<string> words)
+    {
+        var language = keys.KeyLanguage;
         if (typed.Length > 0)
         {
             modelOffer = words.Count > 0 ? (typed, words) : null;

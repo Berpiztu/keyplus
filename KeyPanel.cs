@@ -561,6 +561,9 @@ public sealed class KeyPanel
     /// <summary>Whether a word is one the language's word lists or the personal dictionary have (the keyboard's SpellingEngine).</summary>
     public Func<StandardLanguage, string, bool>? KnownWord { get; set; }
 
+    /// <summary>What a word no list nor dictionary has may have meant (the keyboard's SpellingEngine.Meant): offered where nothing else is.</summary>
+    public Func<StandardLanguage, string, IReadOnlyList<string>>? Meaning { get; set; }
+
     /// <summary>Whether a word is a word as it is written, its accents too (the keyboard's SpellingEngine.IsWord).</summary>
     public Func<StandardLanguage, string, bool>? IsWord { get; set; }
 
@@ -4817,6 +4820,23 @@ public sealed class KeyPanel
         // The word list's words, as the model's: their first, the centre, is what a space takes with Autocorrect on. Kept
         // through a word not begun yet (the space just typed asks again): the space's own correction reads it after.
         IReadOnlyList<string> words = word.Length > 0 && Suggests ? Suggesting!(standard!.Language, word) : [];
+
+        // Nothing starting so ("henorme"): what it may have meant in the centre, as Gboard's, found away from the keys'
+        // thread (Hunspell took 6 s for "corrrecta", the keyboard stopped meanwhile).
+        if (words.Count == 0 && word.Length > 1 && Suggests && Meaning is { } meaning)
+        {
+            var language = standard!.Language;
+            _ = Task.Run(() => meaning(language, word)).ContinueWith(found => handler.Post(() =>
+            {
+                if (found.Result.Count > 0 && WordBeforeCaret?.Invoke() == word && swipedText is null)
+                {
+                    typingWords = found.Result;
+                    modelOffer = (word, found.Result);
+                    ShowBars();
+                }
+            }), TaskContinuationOptions.OnlyOnRanToCompletion);
+        }
+
         if (word.Length > 0)
         {
             modelOffer = words.Count > 0 ? (word, words) : null;
@@ -4851,9 +4871,17 @@ public sealed class KeyPanel
         var from = before.LastIndexOfAny(['.', '?', '!', '\n']) + 1;
         var sentence = before[from..].TrimStart();
         IReadOnlyList<string> offered;
+        var language = standard.Language;
         try
         {
-            offered = await asking(standard.Language, sentence, asked.Token);
+            offered = await asking(language, sentence, asked.Token);
+
+            // Nothing of the language from the model nor the list ("henorme"): what it may have meant in the centre, as
+            // Gboard's, found away from the keys' thread (Hunspell took 6 s for "corrrecta").
+            if (offered.Count == 0 && (Suggesting?.Invoke(language, word) ?? []).Count == 0 && Meaning is { } meaning)
+            {
+                offered = await Task.Run(() => meaning(language, word), asked.Token);
+            }
         }
         catch (System.OperationCanceledException)
         {
@@ -4868,9 +4896,11 @@ public sealed class KeyPanel
                 return;
             }
 
-            // None offered (the sentence too long, the model let go): the word list's, as with the model's words off.
+            // None offered (the sentence too long, the model let go): the word list's, as with the model's words off. A word
+            // no list has shown as typed at the left in quotes, as with the list's, a tap learning it.
             typingWord = word;
-            typingWords = offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(standard.Language, word) ?? [];
+            typingWords = offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(language, word) ?? [];
+            learnable = word.Length >= 2 && Suggests && Learnable?.Invoke(language, word) == true;
             modelOffer = typingWords.Count > 0 ? (word, typingWords) : null;
             ShowBars();
         });

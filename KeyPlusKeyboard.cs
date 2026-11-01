@@ -789,6 +789,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                     : [];
             panel.KnownWord = (language, word) => !spelling.Unknown(language, word);
             panel.IsWord = spelling.IsWord;
+            panel.Meaning = (language, word) => WordsField ? spelling.Meant(language, word) : [];
             panel.ModelOffers = language => WordsField && ContextModelOf(language.Code) is not null && LanguageChoices.ContextSuggestsIn(this, language.Code);
             panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
             panel.SwipeChosen = (language, read, word) =>
