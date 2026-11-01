@@ -192,7 +192,7 @@ a window that does.
 | [SettingsScreen.cs](SettingsScreen.cs) | The keyboard's settings: a big title, rows in rounded groups, a page beside the list on a wide screen, in the device's colours |
 | [AdbGrant.cs](AdbGrant.cs) | The app turned on over the device's own Wireless debugging: the pairing code taken in a notification, the ADB commands run, no computer |
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
-| [EmojiList.cs](EmojiList.cs) | The emoji list both keyboards offer (Unicode's, by group) and the recent ones' line |
+| [EmojiList.cs](EmojiList.cs) | The emoji list both keyboards offer (Unicode's, by group), the recent ones' line, and the search by their names (`Assets/emoji/emoji-names-<es|en>.txt`, Unicode CLDR's) |
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
 | [VoiceTyping.cs](VoiceTyping.cs) | Voice typing by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
@@ -213,7 +213,7 @@ a window that does.
 | [KeyboardEntry.cs](KeyboardEntry.cs) | A keyboard of the list, on Android and Windows: its id, name, base and design |
 | [StandardGrid.cs](StandardGrid.cs) | The standard keyboard's grid (⊞): pages of buttons, dots; ✏, the buttons dragged between the grid and the toolbar |
 | [Emojis.cs](Emojis.cs) | The emoji offered (Unicode's list in `Assets/emoji`, those the device draws) and those typed lately |
-| [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji in the keys' place, the toolbar over it, as on Windows: ←, the tabs and ⌫, the list by group (emoji 30 dp, 4 apart) |
+| [EmojiPanel.cs](EmojiPanel.cs) | The standard keyboard's emoji in the keys' place, the toolbar over it, as on Windows: ←, Search, the tabs and ⌫, the list by group (emoji 30 dp, 4 apart); Search's bar is `KeyPanel.FillSearchBar` |
 | [StandardDesign.cs](StandardDesign.cs) | A standard keyboard's design, on Android and Windows: its letters' rows as places of the keyboard it was made from, keys added and holes, with their widths |
 | [windows/](windows/) | Berpiztu AI Keyboard for Windows ([windows/AGENTS.md](windows/AGENTS.md) maps it): [KeyboardWindow.cs](windows/KeyboardWindow.cs) the floating card, [KeyboardSurface.cs](windows/KeyboardSurface.cs) the keys and the designer, [Keyboards.cs](windows/Keyboards.cs) the keyboards saved, [KeySender.cs](windows/KeySender.cs) SendInput, [Palette.cs](windows/Palette.cs) Windows' colours, [Icons.cs](windows/Icons.cs) the Android signs, [AndroidNames.cs](windows/AndroidNames.cs) the Android names the shared layouts use |
 | [StandardTools.cs](StandardTools.cs) | Where the standard keyboard's buttons stand, on the toolbar or in the grid, as the user placed them |
@@ -373,7 +373,10 @@ a window that does.
   its buttons show their names as the mouse rests on them.
 - **Emoji**: the comma held, or ⊞'s Emojis, opens them in the keys' place,
   by group with a tab for each, those typed lately first; once one is
-  typed, the latest are in a row over the toolbar.
+  typed, the latest are in a row over the toolbar. **Search** finds them
+  by their names in the keyboard's language, Spanish or English (Unicode
+  CLDR's), accents and capitals aside: the keys come back and type into
+  the search, in the toolbar's place, and a tap on one found types it.
 - **Words as you type**: while a word is typed letter by letter, the
   toolbar offers the commonest words that start so, accents aside ("cafe" offers "café"), the likeliest in the centre; a tap writes it with a
   space after it.
@@ -612,7 +615,7 @@ over the letters is read by FUTO Swipe, built for Windows
 (`native/futo-swipe/windows/build.ps1`), and its words show in the
 toolbar as on Android. The comma held, or ☺ on the toolbar, opens the
 emoji, in colour as Windows draws them (Direct2D), those typed lately
-first; Windows draws no flags, so they are left out. The microphone types what
+first; Windows draws no flags, so they are left out; Search finds them by their names, as on Android. The microphone types what
 ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, only the last three typed again when heard otherwise, and it

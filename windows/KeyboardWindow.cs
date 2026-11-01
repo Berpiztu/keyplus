@@ -175,6 +175,11 @@ public sealed class KeyboardWindow : Window
     private const double SearchBoxDp = 160;
     private const double SearchBoxHeightDp = 30;
     private readonly TextBlock searchText = new() { FontSize = NoticeFontSize, VerticalAlignment = VerticalAlignment.Center };
+
+    /// <summary>The search's caret after what is typed, a line's height, blinking as a field's; Buscar, faint, after it while nothing is typed.</summary>
+    private readonly Border searchCaret = new() { Width = 2, Margin = new Thickness(1, 0, 1, 0), VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock searchHint = new() { FontSize = NoticeFontSize, VerticalAlignment = VerticalAlignment.Center };
+    private readonly DispatcherTimer caretBlink = new() { Interval = TimeSpan.FromMilliseconds(530) };
     private readonly ScrollViewer searchLine = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false, VerticalContentAlignment = VerticalAlignment.Center };
     private readonly EmojiStrip searchFound = new();
     private string searched = "";
@@ -1852,7 +1857,13 @@ public sealed class KeyboardWindow : Window
             ShowEmoji();
         };
         DockPanel.SetDock(back, Dock.Left);
-        searchLine.Content = searchText;
+        searchText.Foreground = new SolidColorBrush(colors.Glyph);
+        searchHint.Foreground = new SolidColorBrush(colors.Outline);
+        searchHint.Text = Texts.Get(Resource.String.search);
+        searchCaret.Background = new SolidColorBrush(colors.Primary);
+        searchCaret.Height = searchText.FontFamily.LineSpacing * NoticeFontSize;
+        caretBlink.Tick += (_, _) => searchCaret.Opacity = 1 - searchCaret.Opacity;
+        searchLine.Content = new StackPanel { Orientation = Orientation.Horizontal, Children = { searchText, searchCaret, searchHint } };
         var box = new Border
         {
             Width = SearchBoxDp,
@@ -1905,15 +1916,19 @@ public sealed class KeyboardWindow : Window
 
         keys.TypingInstead = null;
         keys.DeletingInstead = null;
+        caretBlink.Stop();
         searchBar.Visibility = Visibility.Collapsed;
         bar.Visibility = Visibility.Visible;
     }
 
-    /// <summary>What is typed in the search's box (Buscar, faint, while nothing is), its end in sight, and the emoji it finds in the keyboard's language.</summary>
+    /// <summary>What is typed in the search's box, the caret after it, shown whole again (Buscar, faint, while nothing is), its end in sight, and the emoji it finds in the keyboard's language.</summary>
     private void ShowSearched()
     {
-        searchText.Text = searched.Length > 0 ? searched : Texts.Get(Resource.String.search);
-        searchText.Foreground = new SolidColorBrush(searched.Length > 0 ? colors.Glyph : colors.Outline);
+        searchText.Text = searched;
+        searchHint.Visibility = searched.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+        searchCaret.Opacity = 1;
+        caretBlink.Stop();
+        caretBlink.Start();
         searchLine.ScrollToRightEnd();
         searchFound.Items = EmojiArt.Search(keys.KeyLanguage.Code, searched);
     }

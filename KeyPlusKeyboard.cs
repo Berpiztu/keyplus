@@ -352,6 +352,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.ReadSettings();
             panel.Swiping = SwipeOn();
             panel.ForgetTyping();
+            panel.EndEmojiSearch();
             spelling.Forget();
             PrepareLanguage(KeyPlusPreferences.Language(this));
             TakeEdited();

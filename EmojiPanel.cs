@@ -69,8 +69,8 @@ public sealed class EmojiPanel : LinearLayout
     /// <summary>←: the keys again.</summary>
     public Action? Closed { get; set; }
 
-    /// <summary>A part not made yet (Buscar): what it is, to say so.</summary>
-    public Action<string>? NotMade { get; set; }
+    /// <summary>Buscar: the emoji to be found by their names, typed on the keys.</summary>
+    public Action? SearchAsked { get; set; }
 
     /// <summary>The emoji as they are now, those typed lately first, from the top.</summary>
     public void Fill()
@@ -117,7 +117,7 @@ public sealed class EmojiPanel : LinearLayout
         search.SetGravity(GravityFlags.CenterVertical);
         search.SetPadding(Dp(8), 0, Dp(8), 0);
         var word = context.GetString(Resource.String.search);
-        search.Click += (_, _) => NotMade?.Invoke(word);
+        search.Click += (_, _) => SearchAsked?.Invoke();
         var sign = new ImageView(context) { ImageTintList = ColorStateList.ValueOf(colors.Glyph) };
         sign.SetImageResource(Resource.Drawable.ic_emoji_search);
         search.AddView(sign, new LayoutParams(Dp(TabIconDp), Dp(TabIconDp)));

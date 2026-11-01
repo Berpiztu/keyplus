@@ -5,8 +5,8 @@ namespace Berpiztu.KeyPlus;
 
 /// <summary>
 /// The emoji the Android keyboard offers: <see cref="EmojiList"/>'s, only
-/// those the device draws, read once away from the main thread; and those
-/// typed lately, kept for every screen.
+/// those the device draws, read once away from the main thread; those typed
+/// lately, kept for every screen; and those Buscar finds by their names.
 /// </summary>
 public static class Emojis
 {
@@ -28,6 +28,22 @@ public static class Emojis
         Prepare(context);
         var read = Read.Value.GetAwaiter().GetResult();
         return [.. EmojiList.Kinds.Select(kind => new EmojiGroup(context.GetString(kind.Name), kind.Icon, read.GetValueOrDefault(kind.Unicode) ?? []))];
+    }
+
+    /// <summary>Each language's emoji names, read once it is first searched in.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string[]>> Names = [];
+
+    /// <summary>The emoji offered that a search finds, by their names in a language (<see cref="EmojiList.Search"/>).</summary>
+    public static IReadOnlyList<string> Search(Context context, string language, string typed)
+    {
+        var asset = EmojiList.NamesAsset(language);
+        if (!Names.TryGetValue(asset, out var names))
+        {
+            using var reader = new StreamReader(context.Assets!.Open(asset));
+            Names[asset] = names = EmojiList.ReadNames(reader);
+        }
+
+        return EmojiList.Search(Groups(context).SelectMany(group => group.Items), names, typed);
     }
 
     /// <summary>The emoji typed lately, the latest first.</summary>

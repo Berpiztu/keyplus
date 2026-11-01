@@ -835,7 +835,7 @@ public sealed class KeyPanel
                 Typed = TypeEmoji,
                 Deleted = () => Send(Keycode.Del, MetaKeyStates.None),
                 Closed = Uncover,
-                NotMade = NotMadeYet,
+                SearchAsked = StartEmojiSearch,
             };
             strip.AddView(emojiPanel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0));
             extraKeysView = new ScrollView(context) { Visibility = ViewStates.Gone, VerticalScrollBarEnabled = false };
@@ -1448,6 +1448,12 @@ public sealed class KeyPanel
 
         // The line over the toolbar first: the words offered go there while it shows, and the toolbar keeps its buttons.
         ShowEmojiRow();
+        if (emojiSearch is not null)
+        {
+            FillSearchBar();
+            return;
+        }
+
         if (editingTools)
         {
             FillEditingBar();
@@ -1737,6 +1743,154 @@ public sealed class KeyPanel
         Cover(emojiPanel, settingsButton);
     }
 
+    /// <summary>What the emoji search holds typed, while Buscar is open: the keys type into it, not the field; null, closed.</summary>
+    private string? emojiSearch;
+
+    /// <summary>The search's box, of one size whatever is typed in it: its line scrolls to show the end of what is typed.</summary>
+    private const float SearchBoxDp = 140;
+    private const float SearchBoxHeightDp = 34;
+
+    /// <summary>The search's caret after what is typed, blinking as a field's, shown whole again at each letter.</summary>
+    private const int CaretBlinkMs = 530;
+    private View? searchCaret;
+    private Java.Lang.Runnable? caretBlink;
+
+    /// <summary>Buscar: the keys in sight again, typing into the search, its bar in the toolbar's place, as on Windows.</summary>
+    private void StartEmojiSearch()
+    {
+        emojiSearch = "";
+        Uncover();
+        ShowBars();
+    }
+
+    /// <summary>The search closed: the keys type into the field again, the toolbar back.</summary>
+    public void EndEmojiSearch()
+    {
+        if (emojiSearch is null)
+        {
+            return;
+        }
+
+        emojiSearch = null;
+        if (caretBlink is not null)
+        {
+            handler.RemoveCallbacks(caretBlink);
+            caretBlink = null;
+        }
+
+        searchCaret = null;
+        ShowBars();
+    }
+
+    /// <summary>A letter or a space typed into the search, or its last one deleted: the emoji it finds again.</summary>
+    private void TypeSearch(string? typed)
+    {
+        emojiSearch = typed is null ? emojiSearch![..Math.Max(0, emojiSearch!.Length - 1)] : emojiSearch + typed;
+        FillStandardBar();
+    }
+
+    /// <summary>
+    /// The search's bar in the toolbar's place: ← back to the emoji, the box with what is typed (Buscar, faint, while
+    /// nothing is), and the emoji found in the keyboard's language, across as many as there are, a tap typing one and
+    /// going back to the emoji.
+    /// </summary>
+    private void FillSearchBar()
+    {
+        var colors = standardColors!;
+        standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_back, "Emojis", () =>
+        {
+            EndEmojiSearch();
+            ShowEmojis();
+        }, colors.Function), new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+
+        // What is typed, the caret after it, and Buscar, faint, after it while nothing is.
+        TextView Words(string words, Color color)
+        {
+            var view = new TextView(context) { Text = words, Gravity = GravityFlags.CenterVertical };
+            view.SetSingleLine(true);
+            view.SetTextColor(color);
+            view.SetTextSize(ComplexUnitType.Sp, SuggestionSp);
+            return view;
+        }
+
+        var text = Words(emojiSearch!, colors.Glyph);
+        var caret = new View(context) { Background = new ColorDrawable(colors.Primary) };
+        var typedLine = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        typedLine.SetGravity(GravityFlags.CenterVertical);
+        typedLine.AddView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        typedLine.AddView(caret, new LinearLayout.LayoutParams(Dp(2), text.LineHeight) { LeftMargin = Dp(1), RightMargin = Dp(1) });
+        if (emojiSearch.Length == 0)
+        {
+            typedLine.AddView(Words(context.GetString(Resource.String.search), colors.Outline), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        }
+
+        BlinkCaret(caret);
+        var line = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false };
+        line.AddView(typedLine, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        line.Post(() => line.FullScroll(FocusSearchDirection.Right));
+        var pill = new GradientDrawable();
+        pill.SetColor(colors.High);
+        pill.SetCornerRadius(Dp(SearchBoxHeightDp) / 2f);
+        var box = new FrameLayout(context) { Background = pill };
+        box.SetPadding(Dp(12), 0, Dp(12), 0);
+        box.AddView(line, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+        standardBar.AddView(box, new LinearLayout.LayoutParams(Dp(SearchBoxDp), Dp(SearchBoxHeightDp)) { Gravity = GravityFlags.CenterVertical, RightMargin = Dp(6) });
+
+        var cell = Dp(EmojiRowCellDp);
+        var size = EmojiCellTextSize(cell);
+        var found = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        foreach (var emoji in Emojis.Search(context, standard!.Language.Code, emojiSearch))
+        {
+            found.AddView(EmojiCell(emoji, size, () =>
+            {
+                Emojis.Used(context, emoji);
+                EndEmojiSearch();
+                TypeEmoji(emoji);
+                ShowEmojis();
+            }), new LinearLayout.LayoutParams(cell, ViewGroup.LayoutParams.MatchParent));
+        }
+
+        var across = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false };
+        across.AddView(found, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
+        standardBar.AddView(across, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+    }
+
+    /// <summary>The search's caret shown whole, then blinking until the next letter or the search's end.</summary>
+    private void BlinkCaret(View caret)
+    {
+        if (caretBlink is not null)
+        {
+            handler.RemoveCallbacks(caretBlink);
+        }
+
+        searchCaret = caret;
+        caretBlink = new Java.Lang.Runnable(() =>
+        {
+            if (searchCaret is { } shown)
+            {
+                shown.Visibility = shown.Visibility == ViewStates.Visible ? ViewStates.Invisible : ViewStates.Visible;
+                handler.PostDelayed(caretBlink!, CaretBlinkMs);
+            }
+        });
+        handler.PostDelayed(caretBlink, CaretBlinkMs);
+    }
+
+    /// <summary>An emoji's text size to fill a cell as Gboard's row does, measured by what "😀" draws.</summary>
+    private static float EmojiCellTextSize(int cell)
+    {
+        var measure = new Paint { TextSize = 100 };
+        return 100 * cell * EmojiRowShare / Math.Max(1, measure.MeasureText("😀"));
+    }
+
+    /// <summary>An emoji in its cell, a tap doing what is asked.</summary>
+    private TextView EmojiCell(string emoji, float size, Action tapped)
+    {
+        var item = new TextView(context) { Text = emoji, Gravity = GravityFlags.Center, Clickable = true };
+        item.SetTextSize(ComplexUnitType.Px, size);
+        item.Click += (_, _) => tapped();
+        return item;
+    }
+
     /// <summary>An emoji typed, from the panel or the row of those typed lately.</summary>
     private void TypeEmoji(string emoji)
     {
@@ -1775,20 +1929,16 @@ public sealed class KeyPanel
         var recent = Emojis.Recent(context);
         var width = strip.Width > 0 ? strip.Width : context.Resources!.DisplayMetrics!.WidthPixels;
         var cell = Dp(EmojiRowCellDp);
-        var measure = new Paint { TextSize = 100 };
-        var size = 100 * cell * EmojiRowShare / Math.Max(1, measure.MeasureText("😀"));
+        var size = EmojiCellTextSize(cell);
         foreach (var emoji in recent.Take(Math.Max(1, width / cell)))
         {
-            var item = new TextView(context) { Text = emoji, Gravity = GravityFlags.Center, Clickable = true };
-            item.SetTextSize(ComplexUnitType.Px, size);
-            item.Click += (_, _) =>
+            // Each in its cell from the left, as Gboard's, however few.
+            emojiRowItems.AddView(EmojiCell(emoji, size, () =>
             {
                 Emojis.Used(context, emoji);
                 TypeEmoji(emoji);
                 ShowEmojiRow();
-            };
-            // Each in its cell from the left, as Gboard's, however few.
-            emojiRowItems.AddView(item, new LinearLayout.LayoutParams(cell, ViewGroup.LayoutParams.MatchParent));
+            }), new LinearLayout.LayoutParams(cell, ViewGroup.LayoutParams.MatchParent));
         }
     }
 
@@ -2855,6 +3005,12 @@ public sealed class KeyPanel
         SelectionCase = () => SelectionCase?.Invoke() == true,
         Typed = text =>
         {
+            if (emojiSearch is not null)
+            {
+                TypeSearch(text);
+                return;
+            }
+
             var letter = text.Length == 1 && char.IsLetter(text[0]);
             EndOffer();
             if (EndSwipe(letter))
@@ -2882,6 +3038,12 @@ public sealed class KeyPanel
         },
         Deleted = () =>
         {
+            if (emojiSearch is not null)
+            {
+                TypeSearch(null);
+                return;
+            }
+
             EndOffer();
             if (!DeleteSwiped())
             {
@@ -2893,6 +3055,11 @@ public sealed class KeyPanel
         },
         KeyPressed = (code, meta) =>
         {
+            if (emojiSearch is not null)
+            {
+                return;
+            }
+
             EndOffer();
             EndSwipe(letter: false);
             Send(code, meta);
@@ -2904,6 +3071,11 @@ public sealed class KeyPanel
         EmojisAsked = ShowEmojis,
         Entered = () =>
         {
+            if (emojiSearch is not null)
+            {
+                return;
+            }
+
             EndOffer();
             EndSwipe(letter: false);
             CorrectBeforeEnter();
@@ -2920,7 +3092,14 @@ public sealed class KeyPanel
         Language = KeyPlusPreferences.Language(context),
         NextLanguage = NextLanguage,
         NotMade = NotMadeYet,
-        Swiped = (path, capital, capitals) => ReadSwipe(path, capital, capitals),
+        // A swipe while the emoji are searched types no word: a search is typed letter by letter.
+        Swiped = (path, capital, capitals) =>
+        {
+            if (emojiSearch is null)
+            {
+                ReadSwipe(path, capital, capitals);
+            }
+        },
         GlidesIn = language => Swiping is not null && GlidesFor?.Invoke(language) != false,
         Visibility = ViewStates.Gone,
     };
