@@ -287,12 +287,22 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words)
 
         list.ItemSelected += (_, e) => picked(e.Position);
 
-        // Its width at once, before it is drawn: measured with no limit, a list is as wide as its longest choice, its frame
-        // and arrow too. Set after it was first drawn, the applications' list showed at its own width for half a second
-        // each time the page was made again (De la app turned).
+        // Its width at once, before it is drawn, whichever choice it shows: each choice measured as the list draws it,
+        // the widest, and its frame's padding, its arrow's room in it. The list's own measure took the one it shows, and a
+        // page made again for another choice drew it at another width. Set after it was first drawn, the applications'
+        // list showed at its own width for half a second each time the page was made again (De la app turned).
         var unspecified = View.MeasureSpec.MakeMeasureSpec(0, MeasureSpecMode.Unspecified);
-        list.Measure(unspecified, unspecified);
-        list.LayoutParameters = new LinearLayout.LayoutParams(list.MeasuredWidth, ViewGroup.LayoutParams.WrapContent) { LeftMargin = Dp(context, GapDp) };
+        var widest = 0;
+        for (var i = 0; i < adapter.Count; i++)
+        {
+            var shown = adapter.GetView(i, null, list);
+            shown.Measure(unspecified, unspecified);
+            widest = Math.Max(widest, shown.MeasuredWidth);
+        }
+
+        var frame = new Android.Graphics.Rect();
+        list.Background?.GetPadding(frame);
+        list.LayoutParameters = new LinearLayout.LayoutParams(widest + frame.Left + frame.Right, ViewGroup.LayoutParams.WrapContent) { LeftMargin = Dp(context, GapDp) };
         return list;
     }
 

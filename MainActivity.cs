@@ -833,7 +833,7 @@ public sealed class MainActivity : Activity
                 ]));
                 // The word list, the suggestions' and Glide typing's: fetched here, only said on Glide typing's page.
                 spelling.Add(FetchRow(LanguageOptions.WordListOf(language), Again));
-                spelling.Add(ContextModelRow(code, now, Again));
+                spelling.AddRange(ContextModelRows(code, now, Again));
                 // Under it, the model's words offered as a word is typed too, the word list's where it offers none: faded while it is off.
                 spelling.Add(new(GetString(Resource.String.context_model_suggests), GetString(Resource.String.context_model_suggests_summary),
                     On: LanguageChoices.ContextSuggestsIn(this, code), Enabled: now.Context is not null,
@@ -893,21 +893,38 @@ public sealed class MainActivity : Activity
 
     /// <summary>
     /// A language's Context model (<see cref="ContextCorrector"/>): its switch,
-    /// and under its line the list of the models put on this device, where the
-    /// one it reads with is chosen; the list there whatever it holds, off and
-    /// faded while the model is, as wide as its longest name so a choice moves
-    /// nothing, with its label before it as Tema's (<see cref="SmallWords"/>).
-    /// On, it alone corrects the language and offers in the toolbar
-    /// (<see cref="LanguageSpelling.ContextAlone"/>): the others under it are
-    /// faded, kept as they were for when it is turned off.
+    /// and under its line the list of the models on this device and those
+    /// Berpiztu offers on Hugging Face (<see cref="CorrectorCatalog"/>, read
+    /// once while the app is open, each with its bits), where the one it reads
+    /// with is chosen, as wide as its longest name, with its label before it as
+    /// Tema's (<see cref="SmallWords"/>), and at that line's end that one's
+    /// download button (<see cref="AddFetchButton"/>), its bar under the line,
+    /// nothing said beside it: the button turned off for one put by hand or
+    /// none, and a Gemma one's Terms said and asked first. A model is
+    /// turned on only once here. On, it alone corrects the language and offers
+    /// in the toolbar (<see cref="LanguageSpelling.ContextAlone"/>): the others
+    /// under it are faded, kept as they were for when it is turned off.
     /// </summary>
-    private SettingsRow ContextModelRow(string code, LanguageSpelling now, Func<SettingsPage> page)
+    private IEnumerable<SettingsRow> ContextModelRows(string code, LanguageSpelling now, Func<SettingsPage> page)
     {
         var folder = KeyPlusPreferences.CorrectorsFolder(this);
-        var names = ContextCorrector.Names(folder).ToList();
+        var here = ContextCorrector.Names(folder).ToList();
+        var offered = offeredOnce ?? [];
+        if (offeredOnce is null && !readingOffered)
+        {
+            readingOffered = true;
+            _ = ReadOffered(page);
+        }
+
+        var names = here.Union(offered.Select(model => model.Name)).Order(StringComparer.Ordinal).ToList();
         var kept = now.Context ?? LanguageChoices.ContextModelIn(this, code);
         var shownAt = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
-        var list = SmallWords.List(this, names.Count > 0 ? names : [GetString(Resource.String.context_model_none)!], shownAt, chosen =>
+
+        // One offered says its weights' bits: the same model at 8 and at 32 bits told apart.
+        string Shown(string name) => offered.FirstOrDefault(model => model.Name == name) is { } model
+            ? GetString(Resource.String.context_model_bits, new Java.Lang.String(name), Java.Lang.Integer.ValueOf(model.Bits))!
+            : name;
+        var list = SmallWords.List(this, names.Count > 0 ? [.. names.Select(Shown)] : [GetString(Resource.String.context_model_none)!], shownAt, chosen =>
         {
             // Only a choice made: a list just shown tells the one it shows too.
             if (names.Count == 0 || chosen == shownAt)
@@ -918,33 +935,48 @@ public sealed class MainActivity : Activity
             shownAt = chosen;
             var name = names[chosen];
             LanguageChoices.SetContextModel(this, code, name);
+
+            // On, a model not here yet cannot read: the context model off until it is downloaded and turned on.
             if (LanguageChoices.SpellingIn(this, code) is { Context: not null } spelling)
             {
-                LanguageChoices.SetSpelling(this, code, spelling with { Context = name });
+                var ready = here.Contains(name);
+                LanguageChoices.SetSpelling(this, code, spelling with { Context = ready ? name : null });
+                Log.Write(ready ? $"Corrector: {name} chosen for {code}" : $"Corrector: {name} chosen for {code}, not downloaded yet, so its context model is off");
+            }
+            else
+            {
+                Log.Write($"Corrector: {name} chosen for {code}");
             }
 
-            Log.Write($"Corrector: {name} chosen for {code}");
+            settings!.Refresh(page());
         });
         ((LinearLayout.LayoutParams)list.LayoutParameters!).LeftMargin = 0;
-        ColorsRow.Turned(list, now.Context is not null && names.Count > 0);
+        ColorsRow.Turned(list, names.Count > 0);
+        // Under its words, as other rows' lists: Modelo, the list and, at the line's end, the chosen one's download button.
+        var shownName = names.Count > 0 ? names[shownAt] : null;
+        var offeredModel = offered.FirstOrDefault(model => model.Name == shownName);
         var line = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         line.SetGravity(GravityFlags.CenterVertical);
         line.AddView(SmallWords.Label(this, GetString(Resource.String.context_model_list)!));
         line.AddView(list);
+        line.AddView(new Android.Views.View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        var below = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        below.AddView(line);
+        AddFetchButton(line, below, offeredModel is not null ? Of(offeredModel, folder) : shownName is null ? NoModel : Here, offeredModel is not null, page);
 
-        return new(GetString(Resource.String.context_model), GetString(Resource.String.context_model_summary), On: now.Context is not null,
-            Below: line,
+        yield return new(GetString(Resource.String.context_model), GetString(Resource.String.context_model_summary), On: now.Context is not null,
+            Wide: below,
             Switched: turned =>
             {
-                if (turned && names.Count == 0)
+                var name = names.Count > 0 ? names[shownAt] : null;
+                if (turned && (name is null || !here.Contains(name)))
                 {
-                    Refused(Resource.String.context_model, Said(Resource.String.context_model_none_put, folder));
+                    Refused(Resource.String.context_model, name is null ? Said(Resource.String.context_model_none_put, folder) : Said(Resource.String.context_model_not_downloaded, name));
                     settings!.Refresh(page());
                     return;
                 }
 
-                var model = !turned ? null
-                    : LanguageChoices.ContextModelIn(this, code) is { } chosen && names.Contains(chosen) ? chosen : names[shownAt];
+                var model = turned ? name : null;
                 KeepSpelling(code, spelling => spelling with { Context = model });
                 // Turned on, its words offered as a word is typed too, as the owner wants it each time.
                 if (model is not null)
@@ -955,6 +987,109 @@ public sealed class MainActivity : Activity
                 Log.Write(model is null ? $"Corrector: {code}'s context model off" : $"Corrector: {model} on for {code}");
                 settings!.Refresh(page());
             });
+
+    }
+
+    /// <summary>
+    /// A download's button at a line's end, as a download's row has it (<see cref="FetchRow"/>): Download, Cancel while
+    /// it comes, or Download again, as wide as its widest word so nothing moves; turned off with nothing to fetch; under
+    /// the line its bar, its room kept, how much has come shown in place.
+    /// </summary>
+    private void AddFetchButton(LinearLayout line, LinearLayout under, Fetched fetches, bool fetchable, Func<SettingsPage> page)
+    {
+        string[] sayings = [GetString(Resource.String.download)!, GetString(Resource.String.cancel)!, GetString(Resource.String.spelling_download_again)!];
+        var coming = downloading.TryGetValue(fetches.Named, out var now) ? now : ((SettingsLive Live, CancellationTokenSource Stop)?)null;
+        var button = new Button(this) { Text = coming is not null ? sayings[1] : fetches.Downloaded() ? sayings[2] : sayings[0], Enabled = fetchable };
+        button.SetAllCaps(false);
+        var widest = sayings.Max(saying => button.Paint!.MeasureText(saying));
+        button.SetWidth((int)Math.Ceiling(widest) + button.PaddingLeft + button.PaddingRight);
+        button.Click += async (_, _) =>
+        {
+            if (downloading.TryGetValue(fetches.Named, out var running))
+            {
+                running.Stop.Cancel();
+                return;
+            }
+
+            await FetchAsync(fetches, page);
+        };
+        line.AddView(button);
+
+        var bar = new ProgressBar(this, null, Android.Resource.Attribute.ProgressBarStyleHorizontal) { Max = 1000, Visibility = coming is null ? ViewStates.Invisible : ViewStates.Visible };
+        under.AddView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, (int)(4 * Resources!.DisplayMetrics!.Density)));
+        if (coming is { Live: var live })
+        {
+            void Follow()
+            {
+                if (!bar.IsAttachedToWindow)
+                {
+                    live.Changed -= Follow;
+                    return;
+                }
+
+                bar.Indeterminate = live.Done < 0;
+                bar.Progress = (int)(Math.Clamp(live.Done, 0, 1) * 1000);
+            }
+
+            Follow();
+            live.Changed += Follow;
+        }
+    }
+
+    /// <summary>The context models Hugging Face offers, read once while the app is open (<see cref="CorrectorCatalog"/>).</summary>
+    private static IReadOnlyList<CorrectorCatalog.Offered>? offeredOnce;
+    private bool readingOffered;
+
+    /// <summary>Those offered read, and the language's page made again with them while it is still the one in sight.</summary>
+    private async Task ReadOffered(Func<SettingsPage> page)
+    {
+        var title = page().Title;
+        offeredOnce = await CorrectorCatalog.ReadAsync();
+        readingOffered = false;
+        if (offeredOnce.Count > 0 && settings?.ShownTitle == title)
+        {
+            settings.Refresh(page());
+        }
+    }
+
+    /// <summary>An offered model's download: a Gemma one's Terms said and asked first, its files into a folder of its name.</summary>
+    private Fetched Of(CorrectorCatalog.Offered model, string folder) => new(
+        $"the context model {model.Name}",
+        () => ContextCorrector.Names(folder).Contains(model.Name),
+        async (progress, cancel) =>
+        {
+            if (model.Gemma && !await Asked(Resource.String.context_model_gemma_title, Said(Resource.String.context_model_gemma_terms, model.Name)))
+            {
+                Log.Write($"Corrector: {model.Name} not downloaded, the Gemma Terms of Use not accepted");
+                return;
+            }
+
+            // Away from the main thread: Android stops an app that touches the network there, a connection's close too.
+            await Task.Run(() => Downloads.FilesAsync(Path.Combine(folder, model.Name), model.Files, progress, cancel), cancel);
+            Log.Write($"Corrector: {model.Name} downloaded from Hugging Face");
+        },
+        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
+
+    /// <summary>A model put by hand: nothing to fetch, its row saying it is here, its button turned off.</summary>
+    private static readonly Fetched Here = new("a context model put by hand", () => true, (_, _) => Task.CompletedTask,
+        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
+
+    /// <summary>No model here nor offered: its row saying so, its button turned off.</summary>
+    private static readonly Fetched NoModel = new("no context model", () => false, (_, _) => Task.CompletedTask,
+        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed, Resource.String.context_model_none);
+
+    /// <summary>A question in a window, Download or Cancel: whether to go on.</summary>
+    private Task<bool> Asked(int title, string said)
+    {
+        var answer = new TaskCompletionSource<bool>();
+        new AlertDialog.Builder(this)
+            .SetTitle(title)!
+            .SetMessage(said)!
+            .SetCancelable(false)!
+            .SetPositiveButton(Resource.String.download, (_, _) => answer.TrySetResult(true))!
+            .SetNegativeButton(Resource.String.cancel, (_, _) => answer.TrySetResult(false))!
+            .Show();
+        return answer.Task;
     }
 
     /// <summary>A language's Spelling changed and kept, from what it is now.</summary>

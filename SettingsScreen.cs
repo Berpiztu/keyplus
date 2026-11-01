@@ -31,6 +31,7 @@ public sealed record SettingsRow(
     Action? Edited = null,
     View? Below = null,
     SettingsButton? Button = null,
+    View? Wide = null,
     bool Enabled = true,
     IReadOnlyList<SettingsToggle>? Toggles = null);
 
@@ -207,6 +208,9 @@ public sealed class SettingsScreen
     }
 
     /// <summary>The page shown made again, its rows as they are now (a switch turned, a value chosen).</summary>
+    /// <summary>The title of the page in sight: a page read later (a list from the network) is made again only while it still is.</summary>
+    public string? ShownTitle => opened.TryPeek(out var shown) ? shown.Page.Title : main?.Title;
+
     public void Refresh(SettingsPage page)
     {
         // The same page made again (a download's progress, a few times a second): its list stays where it was
@@ -542,11 +546,30 @@ public sealed class SettingsScreen
             pressing.Measure(0, 0);
             right = pressing.MeasuredWidth + Dp(SignLeftDp) * 2;
         }
-        frame.AddView(texts, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.CenterVertical)
+        var left = row.Icon != 0 || row.Chosen is not null ? Dp(TextLeftDp) : Dp(SignLeftDp);
+        if (row.Wide is { } wide)
         {
-            LeftMargin = row.Icon != 0 || row.Chosen is not null ? Dp(TextLeftDp) : Dp(SignLeftDp),
-            RightMargin = right,
-        });
+            // Under the words, close to them as a row's own view is, and as wide as the row but its side: what stands at
+            // its end (a download's button) stands where a download row's button does, past the switch's room.
+            (wide.Parent as ViewGroup)?.RemoveView(wide);
+            texts.SetPadding(0, texts.PaddingTop, 0, 0);
+            var column = new LinearLayout(context) { Orientation = Orientation.Vertical };
+            column.AddView(texts, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { RightMargin = right - Dp(SignLeftDp) });
+            column.AddView(wide, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent) { BottomMargin = Dp(compact ? 0 : 12) });
+            frame.AddView(column, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.CenterVertical)
+            {
+                LeftMargin = left,
+                RightMargin = Dp(SignLeftDp),
+            });
+        }
+        else
+        {
+            frame.AddView(texts, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent, GravityFlags.CenterVertical)
+            {
+                LeftMargin = left,
+                RightMargin = right,
+            });
+        }
 
         if (row.Chosen is { } chosen)
         {
