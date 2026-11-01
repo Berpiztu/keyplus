@@ -312,9 +312,15 @@ public sealed class KeyboardWindow : Window
         keys.Fixing = (language, word) =>
         {
             var fixes = spellingEngine.Fix(language, word);
-            return fixes is not null && modelOffer is { Word: var offeredFor, Offered: [var centre, ..] } && offeredFor == word && !centre.Equals(word, StringComparison.OrdinalIgnoreCase)
-                ? fixes with { Words = [centre, .. fixes.Words.Where(other => !other.Equals(centre, StringComparison.OrdinalIgnoreCase))] }
-                : fixes;
+            if (fixes is null || fixes.Words is [var only] && only.Equals(word, StringComparison.OrdinalIgnoreCase))
+            {
+                return fixes;
+            }
+
+            // Written by a space only where it is in bold (ShowWords): else only offered, for it is not clear which.
+            return surely is { Word: var sureFor, Sure: var sure } && sureFor == word
+                ? fixes with { Words = [sure, .. fixes.Words.Where(other => !other.Equals(sure, StringComparison.OrdinalIgnoreCase))], Misspelled = true }
+                : fixes with { Misspelled = false };
         };
         keys.WordFixed += ShowWordFix;
         context = new(() => preferences.Applied(keys.KeyLanguage.Code).Context,
@@ -1173,6 +1179,13 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
+        // Written by a space only where the centre is in bold (ShowWords); the sentence's close may still mend the word.
+        if (surely is not { Word: var sureFor } || sureFor != word)
+        {
+            Log.Detail("Spelling: a word left at the space, nothing in bold for it");
+            return;
+        }
+
         // The toolbar's centre, the word the model offered first as it was typed, taken by the space as Gboard takes its
         // centre's ("plat": "plato", "bue": "bueno"), its capital kept: with Autocorrect on, whatever was typed (the owner,
         // 2026-11-01: Autocorrect is for that), as Android's; else only for a word no list has. Asked to write the whole
@@ -1213,6 +1226,9 @@ public sealed class KeyboardWindow : Window
     // the toolbar's centre, is what a space takes (MendWordByModel).
     private (string Word, IReadOnlyList<string> Offered)? modelOffer;
 
+    /// <summary>The word in bold in the toolbar's centre and the word typed it is for: none where it is not clear which (<see cref="SpellingEngine.Sure"/>).</summary>
+    private (string Word, string Sure)? surely;
+
     /// <summary>
     /// The context model asked for the words to offer for the word being typed, in its sentence (<see
     /// cref="ContextCorrector.Suggest"/>), the newest letter only; its words shown where that word is still being typed
@@ -1246,7 +1262,8 @@ public sealed class KeyboardWindow : Window
         try
         {
             // The language's alone, the word typed first where it is one (SpellingEngine.OfLanguage), as Android's.
-            offered = spellingEngine.OfLanguage(keys.KeyLanguage, word, await Task.Run(() => corrector.Suggest(sentence, keys.KeyLanguage.Code, asked.Token), asked.Token));
+            var language = keys.KeyLanguage;
+            offered = await Task.Run(() => spellingEngine.OfLanguage(language, word, corrector.Suggest(sentence, language.Code, asked.Token)), asked.Token);
         }
         catch (OperationCanceledException)
         {
@@ -1442,7 +1459,9 @@ public sealed class KeyboardWindow : Window
     /// <summary>The emoji row's emoji: those typed lately, the last first.</summary>
     private void FillRecentEmoji() => recentEmoji.Items = EmojiArt.Recent();
 
-    private void ShowSuggestions(IReadOnlyList<string> words, string? typed)
+    private void ShowSuggestions(IReadOnlyList<string> words, string? typed) => ShowSuggestions(words, typed, boldCentre: true);
+
+    private void ShowSuggestions(IReadOnlyList<string> words, string? typed, bool boldCentre)
     {
         suggestions.Children.Clear();
         suggestions.ColumnDefinitions.Clear();
@@ -1467,7 +1486,7 @@ public sealed class KeyboardWindow : Window
 
             var centre = i == 1;
             Action? taken = typing ? () => keys.TakeSuggestion(word) : centre ? null : () => keys.ReplaceSwiped(word);
-            var place = SuggestionPlace(word, bold: centre, taken, ends: false);
+            var place = SuggestionPlace(word, bold: centre && boldCentre, taken, ends: false);
             Grid.SetColumn(place, i);
             suggestions.Children.Add(place);
         }
@@ -1524,6 +1543,18 @@ public sealed class KeyboardWindow : Window
     }
 
     /// <summary>
+    /// What the toolbar shows for a word, the centre first, in brackets where it is in bold, in the log of a Debug build alone, for Berpiztu/llm-create's
+    /// correct/test to read back what was really offered; the log of a Release build never names what is typed.
+    /// </summary>
+    [System.Diagnostics.Conditional("DEBUG")]
+    private static void LogOffered(string typed, IReadOnlyList<string> words, bool learning, bool bold)
+    {
+        var shown = learning ? [.. words.Where(word => !word.Equals(typed, StringComparison.OrdinalIgnoreCase)).Take(2)] : words;
+        var parts = shown.Select((word, at) => at == 0 && bold ? $"[{word}]" : word);
+        Log.Write($"Offered \"{typed}\": {string.Join(' ', learning ? parts.Prepend($"\"{typed}\"") : parts)}");
+    }
+
+    /// <summary>
     /// The words offered for a word being typed, the context model's or the word list's, their first in the centre, what a
     /// space takes with Autocorrect on (kept through a word not begun yet: the space's own correction reads it after); one
     /// no list has, with learning on, shown as typed at the left in quotes, as Gboard's, a tap learning it.
@@ -1531,17 +1562,23 @@ public sealed class KeyboardWindow : Window
     private void ShowWords(string typed, IReadOnlyList<string> words)
     {
         var language = keys.KeyLanguage;
+        var sure = typed.Length > 0 && !keys.TypingAddress ? spellingEngine.Sure(language, typed, words) : null;
+        words = sure is null ? words : WordSuggestions.Surely(words, sure);
         if (typed.Length > 0)
         {
             modelOffer = words.Count > 0 ? (typed, words) : null;
+            surely = sure is null ? null : (typed, sure);
         }
 
-        if (typed.Length < 2 || keys.TypingAddress || !personal.LearnTyped || !Learns(language) || !spellingEngine.Unknown(language, typed))
+        var learnable = personal.LearnTyped && Learns(language) && spellingEngine.Unknown(language, typed);
+        if (typed.Length < 2 || keys.TypingAddress || !(learnable || spellingEngine.OnlyInHunspell(language, typed)))
         {
-            ShowSuggestions(words, null);
+            LogOffered(typed, words, learning: false, bold: sure is not null);
+            ShowSuggestions(words, null, boldCentre: sure is not null);
             return;
         }
 
+        LogOffered(typed, words, learning: true, bold: sure is not null);
         suggestions.Children.Clear();
         suggestions.ColumnDefinitions.Clear();
         suggestions.Visibility = Visibility.Visible;
@@ -1559,10 +1596,13 @@ public sealed class KeyboardWindow : Window
                 ? SuggestionPlace($"\"{word}\"", bold: false, () =>
                 {
                     keys.TakeSuggestion(word);
-                    personal.Learn(language.Code, word);
-                    Log.Detail($"Dictionary: a word learnt in {language.Code}, from the toolbar");
+                    if (learnable)
+                    {
+                        personal.Learn(language.Code, word);
+                        Log.Detail($"Dictionary: a word learnt in {language.Code}, from the toolbar");
+                    }
                 }, ends: false)
-                : SuggestionPlace(word, bold: i == 1, () => keys.TakeSuggestion(word), ends: false);
+                : SuggestionPlace(word, bold: i == 1 && sure is not null, () => keys.TakeSuggestion(word), ends: false);
             Grid.SetColumn(place, i);
             suggestions.Children.Add(place);
         }

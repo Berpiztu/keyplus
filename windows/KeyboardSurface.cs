@@ -2091,6 +2091,13 @@ public sealed class KeyboardSurface : FrameworkElement
         lastTyped = typed.Length > 0 ? typed[^1] : lastTyped;
         if (letters)
         {
+            // A press or a key of the computer's since the word began may have put the caret anywhere: these letters begin
+            // another, or those of two fields read as one word ("h", a click in another box, "v": "hv"; the owner, 2026-11-01).
+            if (typingWord.Length > 0 && ((KeyedAt?.Invoke() ?? 0) >= wordFrom || (PressedAt?.Invoke() ?? 0) >= wordFrom))
+            {
+                typingWord = "";
+            }
+
             if (typingWord.Length == 0)
             {
                 wordFrom = Environment.TickCount64;

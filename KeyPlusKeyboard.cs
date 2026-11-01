@@ -785,7 +785,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // no model on, or the field is not words'.
             panel.ModelSuggesting = async (language, sentence, cancel) =>
                 WordsField && ContextModelOf(language.Code) is { } named && await context.Async() is { } suggester && suggester.Name == named
-                    ? spelling.OfLanguage(language, sentence[(sentence.LastIndexOf(' ') + 1)..], await Task.Run(() => suggester.Suggest(sentence, language.Code, cancel), cancel))
+                    ? await Task.Run(() => spelling.OfLanguage(language, sentence[(sentence.LastIndexOf(' ') + 1)..], suggester.Suggest(sentence, language.Code, cancel)), cancel)
                     : [];
             panel.KnownWord = (language, word) => !spelling.Unknown(language, word);
             panel.IsWord = spelling.IsWord;

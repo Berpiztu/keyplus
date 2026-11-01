@@ -140,9 +140,11 @@ public sealed class SpellingEngine
     /// <summary>
     /// The words offered for a word being typed: the word itself first where
     /// it is a word (what a space writes, in the centre, whatever is commoner:
-    /// "hola" before "holandés"); then the user's words starting so, which
-    /// keep their place as what the word may have meant comes in after them,
-    /// once found; the word list's starting so only where room is left.
+    /// "hola" before "holandés"); then the user's words starting so at most a
+    /// letter longer than typed, which keep their place as what the word may
+    /// have meant comes in after them, once found; then the word list's first,
+    /// its centre (<see cref="WordSuggestions.For"/>); the user's longer ones,
+    /// "hi" not writing "Iosu" with a space; the list's others where room is left.
     /// </summary>
     public IReadOnlyList<string> Suggest(StandardLanguage language, string typed)
     {
@@ -153,8 +155,9 @@ public sealed class SpellingEngine
             fixes.TryGetValue(typed, out found);
         }
 
-        IReadOnlyList<string> itself = IsWord(language, typed) ? [Kept(language, typed) ?? typed] : [];
-        return [.. itself.Concat(personal.Starting(language, typed)).Concat(found?.Words ?? []).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
+        IReadOnlyList<string> itself = Listed(language, typed) ? [Kept(language, typed) ?? typed] : [];
+        var own = personal.Starting(language, typed);
+        return [.. itself.Concat(own.Where(word => word.Length <= typed.Length + 1)).Concat(found?.Words ?? []).Concat(listed.Take(1)).Concat(own).Concat(listed).Distinct().Take(WordSuggestions.Offered)];
     }
 
     /// <summary>Whether a word is a word as it is written, its accents too: the language's word list's, the user's dictionary's or its spelling dictionary's (Hunspell's).</summary>
@@ -162,6 +165,52 @@ public sealed class SpellingEngine
         WordListOf(language).InUse()?.HasSpelled(word) == true
         || personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase)
         || DictionaryFor(language)?.InUse()?.Knows(word) == true;
+
+    /// <summary>Whether a word is in the centre as typed: the word list's as it is written, the user's; with no list, Hunspell's. One only Hunspell knows ("qu", "man") goes at the left, the words it may have meant in the centre (the owner, 2026-11-01).</summary>
+    private bool Listed(StandardLanguage language, string word) =>
+        WordListOf(language).InUse() is { } ready
+            ? ready.HasSpelled(word) || personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase)
+            : IsWord(language, word);
+
+    /// <summary>Whether only Hunspell knows the word, no list nor dictionary of the user's: shown as typed at the left, not to be learnt.</summary>
+    public bool OnlyInHunspell(StandardLanguage language, string word) =>
+        word.Length >= 2 && WordListOf(language).InUse() is not null && !Listed(language, word) && DictionaryFor(language)?.InUse()?.Knows(word) == true;
+
+    /// <summary>
+    /// The word it is sure the one typed meant, in bold in the toolbar's centre and written by a space (the owner, 2026-11-01,
+    /// as Gboard): the only word of the user's dictionary starting so, where no word of the list does ("ios": iosu); else
+    /// the only one the list says it can mean (<see cref="WordSuggestions.OnlyMeant"/>); else, where nothing starts so, the
+    /// only one of those offered near it for Hunspell ("nosotos": nosotros). None where it is not clear.
+    /// </summary>
+    public string? Sure(StandardLanguage language, string typed, IReadOnlyList<string> offered)
+    {
+        if (typed.Length < 2 || WordListOf(language).InUse() is not { } list || personal.Words(language.Code).Contains(typed, StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (list.NothingStarts(typed) && SwipeWords.Letters(typed, language.SwipeLetters) is { } start)
+        {
+            var own = personal.Starting(language, typed).Where(word => SwipeWords.Letters(word, language.SwipeLetters)?.StartsWith(start, StringComparison.Ordinal) == true).ToList();
+            if (own.Count == 1)
+            {
+                return own[0];
+            }
+        }
+
+        if (list.OnlyMeant(typed) is { } only)
+        {
+            return only;
+        }
+
+        if (!list.NothingStarts(typed) || IsWord(language, typed) || DictionaryFor(language)?.InUse() is not { } spelling)
+        {
+            return null;
+        }
+
+        var close = offered.Where(word => spelling.Close(typed, word)).ToList();
+        return close.Count == 1 ? close[0] : null;
+    }
 
     /// <summary>Whether the language's word list has the word, accents aside; while the list is being read, taken as known, so nothing is offered by mistake; without one downloaded, not known by it.</summary>
     public bool Knows(StandardLanguage language, string word) =>
@@ -171,7 +220,8 @@ public sealed class SpellingEngine
     /// The words a context model offers for the word being typed, kept to the keyboard's language: only those its word
     /// list (accents aside), the user's dictionary or its Hunspell knows, the word typed first where it is one. The model
     /// is one for Spanish and English and offered English for a Spanish "h", and words of its own ("he'dn't"); the owner,
-    /// 2026-11-01. As offered where the language has no word list to tell by.
+    /// 2026-11-01. As offered where the language has no word list to tell by. Hunspell may be asked: called away from the
+    /// keys' thread.
     /// </summary>
     public IReadOnlyList<string> OfLanguage(StandardLanguage language, string typed, IReadOnlyList<string> offered)
     {
@@ -180,8 +230,24 @@ public sealed class SpellingEngine
             return offered;
         }
 
-        IEnumerable<string> itself = typed.Length > 0 && IsWord(language, typed) ? [typed] : [];
-        return [.. itself.Concat(offered.Where(word => !Unknown(language, word))).Distinct(StringComparer.OrdinalIgnoreCase).Take(WordSuggestions.Offered)];
+        // The centre as long as what was typed, a letter more at most (the owner, 2026-11-01: three letters typed are not
+        // a word of five, a thumb may have missed one): the model's of that length where it offers one; else the word
+        // list's starting so ("h": "ha", not "hablar"); else, where nothing starts so, what it may have meant ("quw":
+        // "que"). The model was taught words cut short, so it offers longer ones; those go to the sides.
+        var kept = offered.Where(word => !Unknown(language, word)).ToList();
+        bool Near(string word) => word.Length <= typed.Length + 1;
+        var near = kept.Where(Near).ToList();
+        if (near.Count == 0 && typed.Length > 0)
+        {
+            near = [.. Suggest(language, typed).Where(Near).Take(1)];
+            if (near.Count == 0 && !IsWord(language, typed))
+            {
+                near = [.. Meant(language, typed).Where(Near).Take(1)];
+            }
+        }
+
+        IEnumerable<string> itself = typed.Length > 0 && Listed(language, typed) ? [typed] : [];
+        return [.. itself.Concat(near).Concat(kept).Distinct(StringComparer.OrdinalIgnoreCase).Take(WordSuggestions.Offered)];
     }
 
     /// <summary>Whether no word list, no dictionary of the user's and no Hunspell of the language has the word; while the list is read, known, so nothing is offered to learn by mistake.</summary>

@@ -194,7 +194,7 @@ a window that does.
 | [AdbShell.java](AdbShell.java) | The ADB client it runs them with (libadb-android): the pairing port found, paired, connected, the commands run as the shell user |
 | [EmojiList.cs](EmojiList.cs) | The emoji list both keyboards offer (Unicode's, by group), the recent ones' line, and the search by their names (`Assets/emoji/emoji-names-<es|en>.txt`, Unicode CLDR's) |
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
-| [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows: those starting as typed, accents aside, the commonest first |
+| [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows, found without the sentence: those starting as typed, accents aside, those that sound so in Spanish ("hiva": iba), and those with a key beside one typed ("quw": que); in the centre one at most a letter longer than typed |
 | [VoiceTyping.cs](VoiceTyping.cs) | Voice typing by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
 | [PersonalWords.cs](PersonalWords.cs) | The personal dictionary and the words chosen for swipes, on Android and Windows: kept by language in `personal-words.json`, the e-mail addresses every language's, a word no list has learnt with a tap, a swipe's choice put first |
 | [SpanishMarks.cs](SpanishMarks.cs) | Spelling's opening marks, on Android and Windows: a sentence closed with ? or ! given its "¿" or "¡" at its start |
@@ -242,7 +242,8 @@ a window that does.
   screen. On Windows and Android alike.
 - **Settings › Dictionary**, the personal dictionary, kept on the device and
   sent nowhere: your words, which swiping reads with the language's word
-  list and the words offered as you type show first (a web domain, a name);
+  list and the words offered as you type show too (a web domain, a name),
+  first once at most a letter longer than typed;
   each with ✏ to write it again and a red ✕ to delete it, a word added by
   hand. **Offer new words to learn** (on): a word no word list has shows as
   typed at the toolbar's left, in quotes; a tap writes it and
@@ -291,13 +292,18 @@ a window that does.
   as a space ends it, and the whole sentence as . ? ! or Enter closes it,
   its spelling, accents, punctuation and capitals; the other choices are
   faded and kept as they were for when it is turned off. Under it, **Use it
-  for suggestions too** (on by default, turned on with the model; on
-  Windows, always on for now): the words offered as you type are the
-  model's, its three likeliest for the sentence so far, never mixed with the
-  word list's, which come only where it offers none, so the centre never
-  changes under the finger; and a word no list has, ended with a space,
-  becomes the word it offered in the centre ("plat": "plato"). Off, they are
-  the word list's.
+  for suggestions too** (on by default, turned on with the model): the words
+  offered as you type are the model's, its three likeliest for the sentence
+  so far, never mixed with the word list's, which come only where it offers
+  none, so the centre never changes under the finger; and a word no list has,
+  ended with a space, becomes the word it offered in the centre ("plat":
+  "plato"). Off, they are the word list's, found without the sentence: those
+  starting as typed, those that sound so in Spanish ("hiva": "iba"), and
+  those with a key beside one typed ("quw": "que"); in the centre, the
+  commonest at most a letter longer than typed. On Windows the centre is in
+  bold only where it is sure which word was meant ("aora": "ahora"), and a
+  space writes only a word in bold; not clear, nothing is in bold and what was
+  typed stays.
   Autocorrect writes by itself only where the field is surely a document
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,
