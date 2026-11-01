@@ -302,6 +302,10 @@
   <string name="spelling_writes_offers_summary">Autocorregir escribe la corrección en el texto; Sugerencias la ofrece en la barra, con las palabras que empiezan como lo escrito. Las dos salen de lo elegido abajo: el modelo de contexto o las opciones de debajo. Apagadas las dos, no se escribe ni se ofrece nada</string>
   <string name="context_model_none">Ninguno en este dispositivo</string>
   <string name="context_model_none_put">No hay ningún modelo de contexto en este dispositivo. Se ponen en %1$s, uno por carpeta.</string>
+  <string name="context_model_not_downloaded">%1$s aún no está en este dispositivo: descárgalo primero.</string>
+  <string name="context_model_bits">%1$s · %2$d bits</string>
+  <string name="context_model_gemma_title">Términos de uso de Gemma</string>
+  <string name="context_model_gemma_terms">%1$s es un modelo derivado de Gemma, modificado por Berpiztu. Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms. No debe usarse para los usos restringidos de la Gemma Prohibited Use Policy (ai.google.dev/gemma/prohibited_use_policy). Los Términos, esa política y este aviso se guardan en su carpeta. ¿Descargarlo?</string>
   <string name="context_model_in_place">El modelo de contexto corrige él solo este idioma: apágalo para usar esto.</string>
   <string name="spelling_capitalize">Mayúscula al empezar una frase</string>
   <string name="spelling_capitalize_summary">La primera letra de cada frase en mayúscula, tras . ? o ! y un espacio y en una línea nueva, con la ortografía activada; desactivado hasta que lo actives, y sin necesitar ninguna descarga</string>

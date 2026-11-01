@@ -36,6 +36,12 @@ public sealed class SettingsWindow : Window
     private const double TitleSize = 14;
     private static readonly Thickness ButtonPadding = new(12, 0, 12, 0);
 
+    /// <summary>
+    /// A drop-down's padding: the buttons' on its left, none on its right, as Fluent's own (12,5,0,7), for its template
+    /// keeps a column of 38 for the arrow beside the text, which a right padding only widened.
+    /// </summary>
+    private static readonly Thickness ComboPadding = new(12, 0, 0, 0);
+
     /// <summary>The height of every control, the owner's (2026-10-25): buttons, boxes to type in, drop-downs, the menu's lines, check boxes and radio buttons alike; Fluent's 32 to 40 were out of proportion to a type of 12.</summary>
     private const double ControlHeight = 24;
 
@@ -183,7 +189,7 @@ public sealed class SettingsWindow : Window
         Resources["ControlContentThemeFontSize"] = TextSize;
         Uniform(typeof(Button), ButtonPadding);
         Uniform(typeof(TextBox), ButtonPadding);
-        Uniform(typeof(ComboBox), ButtonPadding);
+        Uniform(typeof(ComboBox), ComboPadding);
         Uniform(typeof(ListBoxItem), ButtonPadding);
         Uniform(typeof(CheckBox), null);
         Uniform(typeof(RadioButton), null);
@@ -904,12 +910,13 @@ public sealed class SettingsWindow : Window
     /// What a choice fetches, its line of one size whatever it says: where it
     /// is (not here yet, how much while it comes with a bar under it, here) and
     /// one button that fetches it, stops it coming, or fetches it again, as wide
-    /// as the widest of its words, so nothing moves.
+    /// as the widest of its words, so nothing moves; with nothing to fetch, the
+    /// button there all the same, turned off.
     /// </summary>
-    private static FrameworkElement FetchLine(Fetched fetches)
+    private static FrameworkElement FetchLine(Fetched fetches, bool fetchable = true)
     {
-        var state = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
-        var bar = new ProgressBar { Height = ProgressDp, Minimum = 0, Maximum = 1, Margin = new Thickness(0, 2, 0, 0), Visibility = Visibility.Hidden };
+        var state = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        var bar = new ProgressBar { Height = ProgressDp, Minimum = 0, Maximum = 1, VerticalAlignment = VerticalAlignment.Bottom, Visibility = Visibility.Hidden };
         int[] words = [Resource.String.download, Resource.String.cancel, Resource.String.spelling_download_again];
         var labels = words.Select(word => new TextBlock { Text = Texts.Get(word), HorizontalAlignment = HorizontalAlignment.Center }).ToArray();
         var sized = new Grid();
@@ -918,7 +925,7 @@ public sealed class SettingsWindow : Window
             sized.Children.Add(label);
         }
 
-        var button = new Button { Content = sized, Margin = new Thickness(FieldGapDp / 2, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var button = new Button { Content = sized, Margin = new Thickness(FieldGapDp / 2, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, IsEnabled = fetchable };
         CancellationTokenSource? coming = null;
 
         // Every word kept in the button, only one seen: the button as wide as the widest whichever it says.
@@ -957,7 +964,8 @@ public sealed class SettingsWindow : Window
             Show();
         };
         Show();
-        var said = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        // The words in the line's middle, level with the button's, the bar along its foot: it takes no room from them.
+        var said = new Grid();
         said.Children.Add(state);
         said.Children.Add(bar);
         var line = new Grid();
@@ -974,62 +982,175 @@ public sealed class SettingsWindow : Window
 
     /// <summary>
     /// A language's Context model, as Android's (<see cref="ContextCorrector"/>):
-    /// its box and, under its line, Modelo and the list of the models put in
-    /// %LOCALAPPDATA%\Berpiztu\Keyboard\correctors, the one it reads with
-    /// chosen there; the list there whatever it holds, off while the model is.
+    /// its box and, under its line, Modelo and the list of the models on this
+    /// computer (%LOCALAPPDATA%\Berpiztu\Keyboard\correctors) and those
+    /// Berpiztu offers on Hugging Face (<see cref="CorrectorCatalog"/>, read
+    /// as the page opens; one not here says how much it downloads), the one it
+    /// reads with chosen there, and under it that one's line: Download, the
+    /// files coming, or Download again (<see cref="FetchLine"/>); a Gemma one
+    /// says its Terms first. A model is turned on only once it is here.
     /// On, it alone corrects the language (<see cref="LanguageSpelling.ContextAlone"/>):
     /// the others under it are faded, kept as they were for when it is turned off, the page made again
     /// (<paramref name="again"/>) as it is turned.
     /// </summary>
     private static FrameworkElement ContextModelPart(string code, LanguageSpelling now, Action<Func<LanguageSpelling, LanguageSpelling>> keep, Action again)
     {
-        var names = ContextCorrector.Names(ContextCorrector.Folder).ToList();
+        List<string> here = [];
+        List<CorrectorCatalog.Offered> offered = [.. offeredOnce ?? []];
+        List<string> names = [];
+        var kept = now.Context ?? KeyboardPreferences.Read().ContextModelIn(code);
         var box = new CheckBox { Content = Texts.Get(Resource.String.context_model), IsChecked = now.Context is not null };
-        var list = new ComboBox { IsEnabled = now.Context is not null && names.Count > 0, VerticalAlignment = VerticalAlignment.Center };
-        foreach (var name in names.Count > 0 ? names : [Texts.Get(Resource.String.context_model_none)])
+        var list = new ComboBox { VerticalAlignment = VerticalAlignment.Center };
+        list.Width = ModelListWidth(list);
+        var fetching = new ContentControl();
+        var filling = false;
+
+        // The chosen model's line, always there: Download for one offered; for one put by hand, or none, its button turned off.
+        void ShowFetch()
         {
-            list.Items.Add(new ComboBoxItem { Content = name });
+            var name = list.SelectedIndex >= 0 && list.SelectedIndex < names.Count ? names[list.SelectedIndex] : null;
+            var model = offered.FirstOrDefault(each => each.Name == name);
+            fetching.Content = FetchLine(model is not null ? Of(model) : name is not null ? Here : NoModel, fetchable: model is not null);
         }
 
-        var kept = now.Context ?? KeyboardPreferences.Read().ContextModelIn(code);
-        list.SelectedIndex = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
+        // The models here and those offered that are not, by their names; the one kept chosen.
+        void Fill()
+        {
+            here = [.. ContextCorrector.Names(ContextCorrector.Folder)];
+            names = [.. here.Union(offered.Select(model => model.Name)).Order(StringComparer.Ordinal)];
+            filling = true;
+            list.Items.Clear();
+            foreach (var name in names)
+            {
+                // One offered says its weights' bits, as the repository lists them: the same model at 8 and at 32 bits told apart.
+                list.Items.Add(new ComboBoxItem { Content = offered.FirstOrDefault(model => model.Name == name) is { } model ? Texts.Get(Resource.String.context_model_bits, name, model.Bits) : name });
+            }
+
+            if (names.Count == 0)
+            {
+                list.Items.Add(new ComboBoxItem { Content = Texts.Get(Resource.String.context_model_none) });
+            }
+
+            list.IsEnabled = names.Count > 0;
+            list.SelectedIndex = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
+            filling = false;
+            ShowFetch();
+        }
+
+        // An offered model's download: a Gemma one's Terms said first, its files into a folder of its name, the list made again.
+        Fetched Of(CorrectorCatalog.Offered model) => new(
+            $"the context model {model.Name}",
+            () => ContextCorrector.Names(ContextCorrector.Folder).Contains(model.Name),
+            async (progress, cancel) =>
+            {
+                if (model.Gemma && MessageBox.Show(Texts.Get(Resource.String.context_model_gemma_terms, model.Name), Texts.Get(Resource.String.context_model_gemma_title),
+                    MessageBoxButton.YesNo, MessageBoxImage.Information) != MessageBoxResult.Yes)
+                {
+                    Log.Write($"Corrector: {model.Name} not downloaded, the Gemma Terms of Use not accepted");
+                    return;
+                }
+
+                await Downloads.FilesAsync(System.IO.Path.Combine(ContextCorrector.Folder, model.Name), model.Files, progress, cancel);
+                Log.Write($"Corrector: {model.Name} downloaded from Hugging Face");
+                Fill();
+            },
+            Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
+
         list.SelectionChanged += (_, _) =>
         {
-            if (names.Count == 0 || list.SelectedIndex < 0)
+            if (filling || names.Count == 0 || list.SelectedIndex < 0)
             {
                 return;
             }
 
-            var name = names[list.SelectedIndex];
+            var name = kept = names[list.SelectedIndex];
             var preferences = KeyboardPreferences.Read().WithContextModel(code, name);
-            (preferences.SpellingIn(code) is { Context: not null } spelling ? preferences.WithSpelling(code, spelling with { Context = name }) : preferences).Keep();
-            Log.Write($"Corrector: {name} chosen for {code}");
+            if (preferences.SpellingIn(code) is not { Context: not null } spelling)
+            {
+                preferences.Keep();
+                Log.Write($"Corrector: {name} chosen for {code}");
+                ShowFetch();
+                return;
+            }
+
+            // On, a model not here yet cannot read: the context model off until it is downloaded and turned on.
+            var ready = here.Contains(name);
+            preferences.WithSpelling(code, spelling with { Context = ready ? name : null }).Keep();
+            Log.Write(ready ? $"Corrector: {name} chosen for {code}" : $"Corrector: {name} chosen for {code}, not downloaded yet, so its context model is off");
+            again();
         };
         box.Click += (_, _) =>
         {
-            if (box.IsChecked == true && names.Count == 0)
+            var name = box.IsChecked == true && names.Count > 0 ? names[Math.Max(0, list.SelectedIndex)] : null;
+            if (box.IsChecked == true && (name is null || !here.Contains(name)))
             {
                 box.IsChecked = false;
-                var said = Texts.Get(Resource.String.context_model_none_put, ContextCorrector.Folder);
+                var said = name is null ? Texts.Get(Resource.String.context_model_none_put, ContextCorrector.Folder) : Texts.Get(Resource.String.context_model_not_downloaded, name);
                 Log.Write($"Settings: {Texts.Get(Resource.String.context_model)} not turned on: {said}");
                 MessageBox.Show(said, Texts.Get(Resource.String.context_model), MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            var model = box.IsChecked == true ? names[Math.Max(0, list.SelectedIndex)] : null;
-            keep(spelling => spelling with { Context = model });
-            list.IsEnabled = model is not null;
-            Log.Write(model is null ? $"Corrector: {code}'s context model off" : $"Corrector: {model} on for {code}");
+            keep(spelling => spelling with { Context = name });
+            Log.Write(name is null ? $"Corrector: {code}'s context model off" : $"Corrector: {name} on for {code}");
             again();
         };
-        var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
-        line.Children.Add(new TextBlock { Text = Texts.Get(Resource.String.context_model_list), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) });
+
+        Fill();
+        if (offeredOnce is null)
+        {
+            _ = Offer();
+        }
+
+        // Those offered on Hugging Face, read once while the settings are open and added to the list: the page made again
+        // (the box turned) shows them at once, the model chosen and its line as they were.
+        async Task Offer()
+        {
+            offeredOnce = await CorrectorCatalog.ReadAsync();
+            offered = [.. offeredOnce];
+            if (offered.Count > 0)
+            {
+                Fill();
+            }
+        }
+
+        // One line, as every download's: Modelo, the list of one width whatever it holds, and the chosen one's line beside it.
+        var line = new DockPanel { Margin = new Thickness(0, 2, 0, 0) };
+        var named = new TextBlock { Text = Texts.Get(Resource.String.context_model_list), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, FieldGapDp / 2, 0) };
+        list.Margin = new Thickness(0, 0, FieldGapDp / 2, 0);
+        DockPanel.SetDock(named, Dock.Left);
+        DockPanel.SetDock(list, Dock.Left);
+        line.Children.Add(named);
         line.Children.Add(list);
+        line.Children.Add(fetching);
         var part = new StackPanel();
         part.Children.Add(FieldSaying(null, box, Texts.Get(Resource.String.context_model_summary)));
         part.Children.Add(line);
         return part;
     }
+
+    /// <summary>
+    /// The context models' list's width, whatever it holds: the longest name llm-create gives a corrector
+    /// (gemma-wiki-glide-32) at the list's font, its padding, its arrow (a scroll bar's width) and its border.
+    /// </summary>
+    private static double ModelListWidth(Control list)
+    {
+        var longest = new FormattedText("gemma-wiki-glide-32", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            new Typeface(list.FontFamily, list.FontStyle, list.FontWeight, list.FontStretch), list.FontSize, Brushes.Black, 1.0);
+        return Math.Ceiling(longest.WidthIncludingTrailingWhitespace) + list.Padding.Left + list.Padding.Right
+            + SystemParameters.VerticalScrollBarWidth + list.BorderThickness.Left + list.BorderThickness.Right;
+    }
+
+    /// <summary>The context models Hugging Face offers, read once while the settings are open (<see cref="CorrectorCatalog"/>).</summary>
+    private static IReadOnlyList<CorrectorCatalog.Offered>? offeredOnce;
+
+    /// <summary>No model here nor offered: nothing to fetch, its line saying so, its button there, turned off.</summary>
+    private static readonly Fetched NoModel = new("no context model", () => false, (_, _) => Task.CompletedTask,
+        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed, Resource.String.context_model_none);
+
+    /// <summary>A model put by hand: nothing to fetch, its line saying it is here.</summary>
+    private static readonly Fetched Here = new("a context model put by hand", () => true, (_, _) => Task.CompletedTask,
+        Resource.String.spelling_downloading, Resource.String.spelling_downloaded, Resource.String.spelling_download_failed);
 
     /// <summary>How tall a download's bar is, under the words of its line.</summary>
     private const double ProgressDp = 4;

@@ -302,6 +302,10 @@ namespace Berpiztu.KeyPlus
             public const int spelling_suggestions = 233;
             public const int spelling_writes_offers_summary = 234;
             public const int search = 235;
+            public const int context_model_not_downloaded = 237;
+            public const int context_model_bits = 240;
+            public const int context_model_gemma_title = 238;
+            public const int context_model_gemma_terms = 239;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

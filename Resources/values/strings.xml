@@ -308,6 +308,10 @@
   <string name="spelling_writes_offers_summary">Autocorrect writes the correction in the text; Suggestions offers it in the toolbar, and the words starting as typed. Both come from what is chosen below: the context model, or the choices under it. Both off, nothing is written or offered</string>
   <string name="context_model_none">None on this device</string>
   <string name="context_model_none_put">There is no context model on this device. They are put in %1$s, one to a folder.</string>
+  <string name="context_model_not_downloaded">%1$s is not on this device yet: download it first.</string>
+  <string name="context_model_bits">%1$s · %2$d bits</string>
+  <string name="context_model_gemma_title">Gemma Terms of Use</string>
+  <string name="context_model_gemma_terms">%1$s is a Model Derivative of Gemma, modified by Berpiztu. Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms. It must not be used for the restricted uses in the Gemma Prohibited Use Policy (ai.google.dev/gemma/prohibited_use_policy). The Terms, the Policy and this notice are saved in its folder. Download it?</string>
   <string name="context_model_in_place">The context model alone corrects this language: turn it off to use this.</string>
   <string name="spelling_capitalize">Capital at the start of a sentence</string>
   <string name="spelling_capitalize_summary">The first letter of a sentence a capital, after . ? or ! and a space and on a new line, while Spelling is on; off until turned on, and on whatever is downloaded</string>
