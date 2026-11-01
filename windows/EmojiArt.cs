@@ -13,7 +13,8 @@ namespace Berpiztu.KeyPlus;
 /// each is drawn as Windows draws it, by DirectWrite's colour fonts through
 /// Direct2D into a bitmap, once for each size, and kept. The list offered is
 /// <see cref="EmojiList"/>'s, Flags left out (Windows draws no flags, only
-/// their letters), and those typed lately are kept in the app's folder.
+/// their letters), and those typed lately are kept in the app's folder; Buscar
+/// finds them by their names in the keyboard's language.
 /// </summary>
 public static class EmojiArt
 {
@@ -35,6 +36,22 @@ public static class EmojiArt
 
     /// <summary>The groups, in Unicode's order, each with its emoji.</summary>
     public static IReadOnlyList<EmojiGroup> Groups => Read.Value;
+
+    /// <summary>Each language's emoji names, read once it is first searched in.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string[]>> Names = [];
+
+    /// <summary>The emoji offered that a search finds, by their names in a language (<see cref="EmojiList.Search"/>).</summary>
+    public static IReadOnlyList<string> Search(string language, string typed)
+    {
+        var asset = EmojiList.NamesAsset(language);
+        if (!Names.TryGetValue(asset, out var names))
+        {
+            using var reader = new StreamReader(Path.Combine(AppContext.BaseDirectory, asset));
+            Names[asset] = names = EmojiList.ReadNames(reader);
+        }
+
+        return EmojiList.Search(Groups.SelectMany(group => group.Items), names, typed);
+    }
 
     public static IReadOnlyList<string> Recent() =>
         EmojiList.Recent(File.Exists(RecentFile) ? File.ReadAllText(RecentFile) : null);

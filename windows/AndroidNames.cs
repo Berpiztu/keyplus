@@ -75,6 +75,7 @@ namespace Berpiztu.KeyPlus
             public const int ic_tool_resize = 27;
             public const int ic_tool_spellcheck = 28;
             public const int ic_settings_gesture = 29;
+            public const int ic_emoji_search = 30;
         }
 
         public static class String
@@ -300,6 +301,7 @@ namespace Berpiztu.KeyPlus
             public const int context_model_list = 232;
             public const int spelling_suggestions = 233;
             public const int spelling_writes_offers_summary = 234;
+            public const int search = 235;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

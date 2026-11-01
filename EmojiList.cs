@@ -50,6 +50,77 @@ public static class EmojiList
         return groups;
     }
 
+    /// <summary>A language's emoji names (Unicode CLDR's), for the search: es or en, English for any other.</summary>
+    public static string NamesAsset(string language) => $"emoji/emoji-names-{(language == "es" ? "es" : "en")}.txt";
+
+    /// <summary>Each emoji's words as the search compares them (<see cref="Fold"/>): its name's first, then its other words'.</summary>
+    public static Dictionary<string, string[]> ReadNames(TextReader reader)
+    {
+        var names = new Dictionary<string, string[]>();
+        while (reader.ReadLine() is { } line)
+        {
+            if (line.StartsWith('#') || line.Split('\t') is not [var emoji, var name, .. var others])
+            {
+                continue;
+            }
+
+            names[emoji] = [Fold(name), .. others.Select(Fold)];
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// The emoji a search finds, in the list's order: each word typed begins a word of the emoji's name or of its other
+    /// words, accents and capitals left out ("cora roj" finds ❤️); those whose name begins as typed first, then those whose
+    /// name has every word typed, then those found by their other words.
+    /// </summary>
+    public static IReadOnlyList<string> Search(IEnumerable<string> emoji, IReadOnlyDictionary<string, string[]> names, string typed)
+    {
+        var query = Fold(typed).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (query.Length == 0)
+        {
+            return [];
+        }
+
+        var whole = string.Join(' ', query);
+        static bool Begins(IEnumerable<string> texts, string word) => texts.SelectMany(text => text.Split(' ')).Any(part => part.StartsWith(word, StringComparison.Ordinal));
+        var found = new List<(string Emoji, int Rank)>();
+        foreach (var item in emoji)
+        {
+            if (!names.TryGetValue(item, out var words))
+            {
+                continue;
+            }
+
+            var rank = words[0].StartsWith(whole, StringComparison.Ordinal) ? 0
+                : query.All(word => Begins([words[0]], word)) ? 1
+                : query.All(word => Begins(words, word)) ? 2
+                : -1;
+            if (rank >= 0)
+            {
+                found.Add((item, rank));
+            }
+        }
+
+        return [.. found.OrderBy(match => match.Rank).Select(match => match.Emoji)];
+    }
+
+    /// <summary>A text as the search compares it: small letters, without accents ("Corazón" is "corazon").</summary>
+    public static string Fold(string text)
+    {
+        var plain = new System.Text.StringBuilder();
+        foreach (var letter in text.Normalize(System.Text.NormalizationForm.FormD))
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(letter) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                plain.Append(char.ToLowerInvariant(letter));
+            }
+        }
+
+        return plain.ToString();
+    }
+
     /// <summary>The emoji typed lately, from the line they are kept as.</summary>
     public static IReadOnlyList<string> Recent(string? kept) => kept?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
 

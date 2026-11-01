@@ -168,6 +168,17 @@ public sealed class KeyboardWindow : Window
     private readonly Grid emojiRow = new() { Height = EmojiRowDp, Background = Brushes.Transparent };
     private readonly EmojiStrip recentEmoji = new();
 
+    /// <summary>The emoji searched (the emoji panel's Buscar), in the toolbar's place, the keys under it: ←, what is typed, what it finds.</summary>
+    private readonly DockPanel searchBar = new() { Height = BarDp, Background = Brushes.Transparent, Visibility = Visibility.Collapsed };
+
+    /// <summary>The search's box, of one size whatever is typed in it: its line scrolls to show the end of what is typed.</summary>
+    private const double SearchBoxDp = 160;
+    private const double SearchBoxHeightDp = 30;
+    private readonly TextBlock searchText = new() { FontSize = NoticeFontSize, VerticalAlignment = VerticalAlignment.Center };
+    private readonly ScrollViewer searchLine = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false, VerticalContentAlignment = VerticalAlignment.Center };
+    private readonly EmojiStrip searchFound = new();
+    private string searched = "";
+
     /// <summary>The toolbar's buttons that make room for the words offered in its middle, without the emoji row: all but the first and the last.</summary>
     private UIElement[] between = [];
 
@@ -392,6 +403,15 @@ public sealed class KeyboardWindow : Window
         emojiRow.Children.Add(recentEmoji);
         emoji.Deleted += keys.DeleteBack;
         emoji.Closed += HideEmoji;
+        emoji.SearchAsked += StartSearch;
+        searchFound.Chosen += found =>
+        {
+            EmojiArt.Used(found);
+            EndSearch();
+            keys.TypeText(found);
+            FillRecentEmoji();
+            ShowEmoji();
+        };
 
         switcher = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp };
         keys.RowsChanged += () => FitKeys(keys.RowScale);
@@ -575,6 +595,7 @@ public sealed class KeyboardWindow : Window
         var top = new Grid();
         top.Children.Add(bar);
         top.Children.Add(designer.Bar);
+        top.Children.Add(SearchBar());
         var card = new DockPanel();
         DockPanel.SetDock(emojiRow, Dock.Top);
         DockPanel.SetDock(top, Dock.Top);
@@ -1816,8 +1837,85 @@ public sealed class KeyboardWindow : Window
 
     private void HideEmoji()
     {
+        EndSearch();
         emoji.Visibility = Visibility.Collapsed;
         keys.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>The search's bar: ← back to the emoji, the box with what is typed, and the emoji it finds, a click typing one.</summary>
+    private DockPanel SearchBar()
+    {
+        var back = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_back };
+        back.Clicked += () =>
+        {
+            EndSearch();
+            ShowEmoji();
+        };
+        DockPanel.SetDock(back, Dock.Left);
+        searchLine.Content = searchText;
+        var box = new Border
+        {
+            Width = SearchBoxDp,
+            Height = SearchBoxHeightDp,
+            CornerRadius = new CornerRadius(SearchBoxHeightDp / 2),
+            Background = new SolidColorBrush(colors.Function),
+            Padding = new Thickness(12, 0, 12, 0),
+            Margin = new Thickness(0, 0, 6, 0),
+            Child = searchLine,
+        };
+        DockPanel.SetDock(box, Dock.Left);
+        searchBar.Children.Add(back);
+        searchBar.Children.Add(box);
+        searchBar.Children.Add(searchFound);
+        return searchBar;
+    }
+
+    /// <summary>Buscar: the keys in sight again, typing into the search, not the field, its bar in the toolbar's place.</summary>
+    private void StartSearch()
+    {
+        searched = "";
+        ShowSearched();
+        emoji.Visibility = Visibility.Collapsed;
+        keys.Visibility = Visibility.Visible;
+        bar.Visibility = Visibility.Collapsed;
+        searchBar.Visibility = Visibility.Visible;
+        keys.TypingInstead = typed =>
+        {
+            searched += typed;
+            ShowSearched();
+        };
+        keys.DeletingInstead = () =>
+        {
+            if (searched.Length > 0)
+            {
+                searched = searched[..^1];
+                ShowSearched();
+            }
+        };
+        Log.Detail("Keyboard: emoji search opened");
+    }
+
+    /// <summary>The search ended: the keys type into the field again, the toolbar back.</summary>
+    private void EndSearch()
+    {
+        if (keys.TypingInstead is null)
+        {
+            return;
+        }
+
+        keys.TypingInstead = null;
+        keys.DeletingInstead = null;
+        searchBar.Visibility = Visibility.Collapsed;
+        bar.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>What is typed in the search's box (Buscar, faint, while nothing is), its end in sight, and the emoji it finds in the keyboard's language.</summary>
+    private void ShowSearched()
+    {
+        searchText.Text = searched.Length > 0 ? searched : Texts.Get(Resource.String.search);
+        searchText.Foreground = new SolidColorBrush(searched.Length > 0 ? colors.Glyph : colors.Outline);
+        searchLine.ScrollToRightEnd();
+        searchFound.Items = EmojiArt.Search(keys.KeyLanguage.Code, searched);
     }
 
     /// <summary>

@@ -8,8 +8,8 @@ using System.Windows.Threading;
 namespace Berpiztu.KeyPlus;
 
 /// <summary>
-/// The emoji on Windows, in the keys' place, the toolbar over it: a bar with ← in a grey circle, a tab for each group,
-/// the one in sight marked, and ⌫ at its right; the emoji under each group's grey name, those typed lately first,
+/// The emoji on Windows, in the keys' place, the toolbar over it: a bar with ← in a grey circle, Buscar, a tab for each
+/// group, the one in sight marked, and ⌫ at its right; the emoji under each group's grey name, those typed lately first,
 /// scrolling. No bar under them, as Gboard's ABC, ☺ and ⌫: ← is ABC and the toolbar has ☺, and that bar's height kept
 /// a keyboard of a window's height from showing a row of emoji whole. Sizes are the Android panel's, one dp a WPF unit;
 /// colours <see cref="Palette"/>'s.
@@ -21,6 +21,9 @@ public sealed class EmojiPanel : DockPanel
     private const double BackDp = 70 / PixelsPerDp;
     private const double TabDp = 72 / PixelsPerDp;
     private const double TabIconDp = 35.0 / (800.0 / 960) / PixelsPerDp;
+    private const double SearchWidthDp = 158 / PixelsPerDp;
+    private const double SearchHeightDp = 74 / PixelsPerDp;
+    private const double SmallSize = 20 / 0.711 / PixelsPerDp;
 
     private readonly Palette colors;
     private readonly EmojiSheet sheet;
@@ -48,6 +51,10 @@ public sealed class EmojiPanel : DockPanel
         delete.Margin = new Thickness(6, 0, 8, 0);
         DockPanel.SetDock(delete, Dock.Right);
         top.Children.Add(delete);
+        var search = Search();
+        search.Margin = new Thickness(0, 0, 6, 0);
+        DockPanel.SetDock(search, Dock.Left);
+        top.Children.Add(search);
         top.Children.Add(new ScrollViewer { Content = tabs, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalContentAlignment = VerticalAlignment.Center, Focusable = false });
         SetDock(top, Dock.Top);
         Children.Add(top);
@@ -66,6 +73,9 @@ public sealed class EmojiPanel : DockPanel
 
     /// <summary>←: the keys again.</summary>
     public event Action? Closed;
+
+    /// <summary>Buscar: the emoji to be found by their names, typed on the keys.</summary>
+    public event Action? SearchAsked;
 
     /// <summary>The emoji as they are now, those typed lately first, from the top.</summary>
     public void Fill()
@@ -105,6 +115,30 @@ public sealed class EmojiPanel : DockPanel
         };
         round.MouseLeftButtonDown += (_, e) => e.Handled = true;
         return round;
+    }
+
+    /// <summary>Buscar: a grey pill with its sign and its word, cut short where it does not fit, as Android's.</summary>
+    private Border Search()
+    {
+        var sign = new SignCircle { Sign = Resource.Drawable.ic_emoji_search, Ground = Colors.Transparent, Glyph = colors.Glyph, SignSize = TabIconDp, Width = TabIconDp, Height = TabIconDp };
+        var word = new TextBlock { Text = Texts.Get(Resource.String.search), FontSize = SmallSize, Foreground = new SolidColorBrush(colors.Glyph), TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+        DockPanel.SetDock(sign, Dock.Left);
+        var search = new Border
+        {
+            Width = SearchWidthDp,
+            Height = SearchHeightDp,
+            CornerRadius = new CornerRadius(SearchHeightDp / 2),
+            Background = new SolidColorBrush(colors.Function),
+            Padding = new Thickness(8, 0, 8, 0),
+            Child = new DockPanel { Children = { sign, word } },
+        };
+        search.MouseLeftButtonDown += (_, e) => e.Handled = true;
+        search.MouseLeftButtonUp += (_, e) =>
+        {
+            SearchAsked?.Invoke();
+            e.Handled = true;
+        };
+        return search;
     }
 
     /// <summary>⌫ as ←, a circle of its size: held, it deletes again and again.</summary>

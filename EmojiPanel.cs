@@ -17,7 +17,7 @@ namespace Berpiztu.KeyPlus;
 /// in a grey circle, Buscar and a tab for each group, the one in sight in a
 /// blue circle, scrolling across, and ⌫ at its right; the emoji under a grey
 /// name for each group, those typed lately first, in rows that scroll, a tap
-/// typing one. No bar under them, as Gboard's ABC, ☺, GIF, stickers, :-) and
+/// typing one. No bar under them, as Gboard's ABC, ☺, stickers, :-) and
 /// ⌫: ← is ABC, the toolbar has ☺, and that bar's height kept a keyboard from
 /// showing rows of emoji. The bar's sizes are Gboard's on the Fold, pixels
 /// measured there over 2.25; its colours the device's (<see cref="StandardColors"/>).

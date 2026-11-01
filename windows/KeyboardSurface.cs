@@ -1817,6 +1817,12 @@ public sealed class KeyboardSurface : FrameworkElement
         keyActedAt = Environment.TickCount64;
         KeyPressed?.Invoke();
 
+        // While the emoji are searched only letters, spaces and ⌫ act: nothing reaches the field.
+        if (TypingInstead is not null && key.Action is StandardAction.Enter or StandardAction.Key)
+        {
+            return;
+        }
+
         // Gboard's: on ?123 or =\<, a space or Enter after a symbol typed there goes back to the letters.
         var backToLetters = symbolTyped && !Combining && key.Action is StandardAction.Space or StandardAction.Enter;
 
@@ -1931,6 +1937,13 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The swipe made FUTO Swipe's: the points and the letters' centres from 0 to 1 over the room the letters take.</summary>
     private void ReadSwipe(Pressed now)
     {
+        // A swipe while the emoji are searched types no word: a search is typed letter by letter.
+        if (TypingInstead is not null)
+        {
+            EndSwipe(letter: false);
+            return;
+        }
+
         var letters = laid.Where(laidKey => laidKey.Key.Text is { Length: 1 } letter && language.SwipeLetters.Contains(letter)).ToList();
         if (letters.Count == 0)
         {
@@ -2035,9 +2048,22 @@ public sealed class KeyboardSurface : FrameworkElement
         return closed[(closed.LastIndexOfAny([' ', '\n', '\t']) + 1)..].IndexOfAny(['@', '.', '/', ':']) >= 0;
     }
 
+    /// <summary>While the emoji are searched: where the keys' letters and spaces go, not to the field; null, the field.</summary>
+    public Action<string>? TypingInstead { get; set; }
+
+    /// <summary>While the emoji are searched: ⌫ deletes the search's last letter, not the field's.</summary>
+    public Action? DeletingInstead { get; set; }
+
     /// <summary>Text typed, a dead key's accent on it where it has one with it (´ then a: á), or before it; a space types the accent alone.</summary>
     private void Type(string typed)
     {
+        if (TypingInstead is { } search)
+        {
+            deadKey = null;
+            search(typed);
+            return;
+        }
+
         symbolTyped |= OnSymbols && typed != " ";
         if (deadKey is { } accent)
         {
@@ -2104,6 +2130,12 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void DeleteOnce()
     {
+        if (DeletingInstead is { } search)
+        {
+            search();
+            return;
+        }
+
         boundaryAt = 0;
         // Right after a swipe, with Delete a swiped word whole on: the word, the space it put before it kept, so what comes
         // next, swiped or tapped, starts a word of its own and never sticks to the one before; held, ⌫ goes on letter by letter.
@@ -2147,6 +2179,11 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void Press(Keycode code)
     {
+        if (TypingInstead is not null)
+        {
+            return;
+        }
+
         // An arrow, Home or a page moves the caret: the word being typed is no longer the one before it.
         ForgetTyping();
         sentence = null;
@@ -2158,6 +2195,11 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>A character's key with Ctrl, Alt or ⊞: its key code where it has one, else the key of the language's layout that types it (Spanish's ç); false when neither.</summary>
     private bool PressShortcut(string? text)
     {
+        if (TypingInstead is not null)
+        {
+            return true;
+        }
+
         if (CodeOf(text) is { } code)
         {
             Press(code);

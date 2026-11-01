@@ -30,6 +30,7 @@ public and the library is a separate artifact in the build
 | NAudio.WinMM 2.2.1, with NAudio.Core, in the Windows app: the microphone for 🎤 | MIT | https://github.com/naudio/NAudio |
 | Vortice.Direct2D1 3.8.3 (Direct2D, DirectWrite and WIC for .NET), with Vortice.DXGI and SharpGen.Runtime, in the Windows app: emoji drawn in colour | MIT | https://github.com/amerkoleci/Vortice.Windows |
 | Unicode's emoji list, emoji-test.txt 15.1, its fully-qualified emoji by group (`Assets/emoji/emoji-15.1.txt`) | Unicode License v3 (terms of use) | https://unicode.org/Public/emoji/15.1/ |
+| Unicode CLDR 49.0.0's emoji annotations, Spanish and English (cldr-json's cldr-annotations-full and cldr-annotations-derived-full), each emoji's name and words for the emoji search (`Assets/emoji/emoji-names-es.txt`, `emoji-names-en.txt`) | Unicode License v3 | https://github.com/unicode-org/cldr-json/tree/49.0.0 |
 | AOSP LatinIME's Spanish and English (US) word lists (`es_wordlist.combined.gz`, `en_US_wordlist.combined.gz`); downloaded by the Android and Windows apps from LatinIME at commit `127336e9f29d69607eab55982324b210279ae8c5`, each file checked by its SHA-256, when Glide typing is turned on | Apache-2.0 (LatinIME's NOTICE) | https://android.googlesource.com/platform/packages/inputmethods/LatinIME |
 
 ## Spelling (Berpiztu AI Keyboard)
