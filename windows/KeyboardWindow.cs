@@ -307,7 +307,15 @@ public sealed class KeyboardWindow : Window
             }
         };
         keys.SpellingIn = language => preferences.Applied(language.Code);
-        keys.Fixing = (language, word) => spellingEngine.Fix(language, word);
+        // The toolbar's centre as the word was typed (the word list's, or the model's), where it was another, first: what
+        // the space writes, as Gboard's and Android's; else the likeliest word it may have meant.
+        keys.Fixing = (language, word) =>
+        {
+            var fixes = spellingEngine.Fix(language, word);
+            return fixes is not null && modelOffer is { Word: var offeredFor, Offered: [var centre, ..] } && offeredFor == word && !centre.Equals(word, StringComparison.OrdinalIgnoreCase)
+                ? fixes with { Words = [centre, .. fixes.Words.Where(other => !other.Equals(centre, StringComparison.OrdinalIgnoreCase))] }
+                : fixes;
+        };
         keys.WordFixed += ShowWordFix;
         context = new(() => preferences.Applied(keys.KeyLanguage.Code).Context,
             () => preferences.Applied(keys.KeyLanguage.Code).Context is { } name ? ContextCorrector.Load(System.IO.Path.Combine(ContextCorrector.Folder, name)) : null,
@@ -1165,14 +1173,18 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
-        // A word no list has, which the model offered a word of the lists for as it was typed (the toolbar's centre):
-        // that word, as Gboard takes its centre's ("plat": "plato"), its capital kept. Asked to write the whole
+        // The toolbar's centre, the word the model offered first as it was typed, taken by the space as Gboard takes its
+        // centre's ("plat": "plato", "bue": "bueno"), its capital kept: with Autocorrect on, whatever was typed (the owner,
+        // 2026-11-01: Autocorrect is for that), as Android's; else only for a word no list has. Asked to write the whole
         // sentence again, the model may leave such a word as it is.
         var language = keys.KeyLanguage;
+        var correcting = spelling.Autocorrect && focus.Document;
+        // A word right as typed changed only in its accents (como, cómo): left till the sentence closes, which tells a question.
+        bool Waits(string mended) => WordSuggestions.OnlyMarks(word, mended) && (spellingEngine.IsWord(language, word) || word.Equals(mended, StringComparison.OrdinalIgnoreCase));
         if (modelOffer is { Word: var offeredFor, Offered: [var first, ..] } && offeredFor == word && !first.Equals(word, StringComparison.OrdinalIgnoreCase)
-            && spellingEngine.Unknown(language, word) && !spellingEngine.Unknown(language, first))
+            && !spellingEngine.Unknown(language, first) && (correcting || spellingEngine.Unknown(language, word)) && !Waits(first))
         {
-            Log.Detail($"Spelling: a word no list has in {language.Code} taken as the context model's first offered");
+            Log.Detail($"Spelling: the word typed in {language.Code} taken as the context model's first offered{(correcting ? ", Autocorrect on" : ", no list having it")}");
             keys.TakeModelWord(word, char.IsUpper(word[0]) ? char.ToUpper(first[0], System.Globalization.CultureInfo.CurrentCulture) + first[1..] : first, endedAt);
             return;
         }
@@ -1184,6 +1196,12 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
+        if (Waits(mended))
+        {
+            Log.Detail($"Spelling: «{word}» kept at the space, right as typed, its accents left to the sentence's close");
+            return;
+        }
+
         keys.TakeModelWord(word, mended, endedAt);
     }
 
@@ -1191,6 +1209,8 @@ public sealed class KeyboardWindow : Window
     private CancellationTokenSource? modelAsked;
 
     /// <summary>The last words the context model offered, and the word typed they were for: its first is what a space takes.</summary>
+    // The last words offered, the context model's or the word list's, and the word typed they were for: their first,
+    // the toolbar's centre, is what a space takes (MendWordByModel).
     private (string Word, IReadOnlyList<string> Offered)? modelOffer;
 
     /// <summary>
@@ -1207,7 +1227,7 @@ public sealed class KeyboardWindow : Window
         if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || !preferences.ContextSuggestsIn(keys.KeyLanguage.Code)
             || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
         {
-            modelOffer = null;
+            modelOffer = word.Length > 0 && listed.Count > 0 ? (word, listed) : null;
             ShowSuggestions(listed, null);
             return;
         }
@@ -1217,7 +1237,7 @@ public sealed class KeyboardWindow : Window
         {
             if (!asked.IsCancellationRequested)
             {
-                modelOffer = null;
+                modelOffer = listed.Count > 0 ? (word, listed) : null;
                 ShowSuggestions(listed, null);
             }
 
@@ -1227,7 +1247,8 @@ public sealed class KeyboardWindow : Window
         IReadOnlyList<string> offered;
         try
         {
-            offered = await Task.Run(() => corrector.Suggest(sentence, asked.Token), asked.Token);
+            // The language's alone, the word typed first where it is one (SpellingEngine.OfLanguage), as Android's.
+            offered = spellingEngine.OfLanguage(keys.KeyLanguage, word, await Task.Run(() => corrector.Suggest(sentence, keys.KeyLanguage.Code, asked.Token), asked.Token));
         }
         catch (OperationCanceledException)
         {
@@ -1240,8 +1261,9 @@ public sealed class KeyboardWindow : Window
         }
 
         // None offered (the sentence too long, the model let go): the word list's, as with no model on.
-        modelOffer = offered.Count > 0 ? (word, offered) : null;
-        ShowSuggestions(offered.Count > 0 ? [.. offered.Take(ContextCorrector.Offered)] : listed, null);
+        IReadOnlyList<string> shown = offered.Count > 0 ? [.. offered.Take(ContextCorrector.Offered)] : listed;
+        modelOffer = shown.Count > 0 ? (word, shown) : null;
+        ShowSuggestions(shown, null);
     }
 
     /// <summary>Whether Spanish's Spelling uses the Wikipedia's common misspellings, whose list is Spanish.</summary>
@@ -1466,8 +1488,16 @@ public sealed class KeyboardWindow : Window
 
         if (!preferences.Applied(language.Code).Suggestions)
         {
+            modelOffer = null;
             ShowSuggestions([], null);
             return;
+        }
+
+        // The word list's words, as the model's: their first, the centre, is what a space takes with Autocorrect on. Kept
+        // through a word not begun yet (the space just typed asks again): the space's own correction reads it after.
+        if (typed.Length > 0)
+        {
+            modelOffer = words.Count > 0 ? (typed, words) : null;
         }
 
         if (typed.Length < 2 || keys.TypingAddress || !personal.LearnTyped || !Learns(language) || !spellingEngine.Unknown(language, typed))

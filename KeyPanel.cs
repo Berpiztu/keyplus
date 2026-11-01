@@ -552,7 +552,7 @@ public sealed class KeyPanel
     /// <summary>The question to the context model for the words being offered, cancelled by the next letter's.</summary>
     private CancellationTokenSource? modelAsked;
 
-    /// <summary>The last words the context model offered, and the word typed they were for: its first is what a space takes.</summary>
+    /// <summary>The last words offered, the context model's or the word list's, and the word typed they were for: their first, the toolbar's centre, is what a space takes.</summary>
     private (string Word, IReadOnlyList<string> Offered)? modelOffer;
 
     /// <summary>Whether the language's context model gives the words offered as a word is typed, the word list's then never shown.</summary>
@@ -560,6 +560,9 @@ public sealed class KeyPanel
 
     /// <summary>Whether a word is one the language's word lists or the personal dictionary have (the keyboard's SpellingEngine).</summary>
     public Func<StandardLanguage, string, bool>? KnownWord { get; set; }
+
+    /// <summary>Whether a word is a word as it is written, its accents too (the keyboard's SpellingEngine.IsWord).</summary>
+    public Func<StandardLanguage, string, bool>? IsWord { get; set; }
 
     /// <summary>The letters right before the caret, the word being typed; none or empty where there is none.</summary>
     public Func<string?>? WordBeforeCaret { get; set; }
@@ -4810,9 +4813,14 @@ public sealed class KeyPanel
         }
 
         modelAsked?.Cancel();
-        modelOffer = null;
 
+        // The word list's words, as the model's: their first, the centre, is what a space takes with Autocorrect on. Kept
+        // through a word not begun yet (the space just typed asks again): the space's own correction reads it after.
         IReadOnlyList<string> words = word.Length > 0 && Suggests ? Suggesting!(standard!.Language, word) : [];
+        if (word.Length > 0)
+        {
+            modelOffer = words.Count > 0 ? (word, words) : null;
+        }
         var learning = word.Length >= 2 && Suggests && Learnable?.Invoke(standard!.Language, word) == true;
         if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
         {
@@ -4861,9 +4869,9 @@ public sealed class KeyPanel
             }
 
             // None offered (the sentence too long, the model let go): the word list's, as with the model's words off.
-            modelOffer = offered.Count > 0 ? (word, offered) : null;
             typingWord = word;
             typingWords = offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(standard.Language, word) ?? [];
+            modelOffer = typingWords.Count > 0 ? (word, typingWords) : null;
             ShowBars();
         });
     }
@@ -5021,6 +5029,13 @@ public sealed class KeyPanel
             || Fixing(TypingLanguage, word) is not { Words.Count: > 0 } fixes)
         {
             return null;
+        }
+
+        // The toolbar's centre as the word was typed (the word list's, or the model's), where it was another: what the
+        // space writes, as Gboard's; else the likeliest word it may have meant.
+        if (modelOffer is { Word: var offeredFor, Offered: [var centre, ..] } && offeredFor == word && !centre.Equals(word, StringComparison.OrdinalIgnoreCase))
+        {
+            fixes = fixes with { Words = [centre, .. fixes.Words.Where(other => !other.Equals(centre, StringComparison.OrdinalIgnoreCase))] };
         }
 
         var applied = Corrects && fixes.Misspelled;
@@ -5185,14 +5200,16 @@ public sealed class KeyPanel
         var typed = sentence.Split(' ');
         var word = typed[^1];
         string mended;
-        // A word no list has, which the model offered a word of the lists for as it was typed (the centre of the
-        // toolbar): that word, as Gboard takes its centre's ("plat": "plato"), its capital kept. Asked to write the
-        // whole sentence again, the model may leave such a word as it is.
+        // The toolbar's centre, the word the model offered first as it was typed, taken by the space as Gboard takes its
+        // centre's ("plat": "plato", "bue": "bueno"), its capital kept: with Autocorrect on, whatever was typed (the
+        // owner, 2026-11-01: Autocorrect is for that); else only for a word no list has. Asked to write the whole
+        // sentence again, the model may leave such a word as it is.
+        var correcting = spelling.Autocorrect && InDocument;
         if (modelOffer is { Word: var offeredFor, Offered: [var first, ..] } && offeredFor == word && KnownWord is { } known
-            && !first.Equals(word, StringComparison.OrdinalIgnoreCase) && !known(language, word) && known(language, first))
+            && !first.Equals(word, StringComparison.OrdinalIgnoreCase) && known(language, first) && (correcting || !known(language, word)))
         {
             mended = char.IsUpper(word[0]) ? char.ToUpper(first[0], CultureInfo.CurrentCulture) + first[1..] : first;
-            Log.Detail($"Spelling: a word no list has in {language.Code} taken as the context model's first offered");
+            Log.Detail($"Spelling: the word typed in {language.Code} taken as the context model's first offered{(correcting ? ", Autocorrect on" : ", no list having it")}");
         }
         else if (await CorrectSentence(language, sentence) is not { } corrected
                  || corrected.Split(' ') is not { } written || written.Length != typed.Length)
@@ -5206,6 +5223,13 @@ public sealed class KeyPanel
 
         if (mended.Length == 0 || mended == word || RecentText?.Invoke() is not { } now || !now.EndsWith(word + " ", StringComparison.Ordinal))
         {
+            return;
+        }
+
+        // A word right as typed changed only in its accents (como, cómo): left till the sentence closes, which tells a question.
+        if (WordSuggestions.OnlyMarks(word, mended) && (IsWord?.Invoke(language, word) == true || word.Equals(mended, StringComparison.OrdinalIgnoreCase)))
+        {
+            Log.Detail($"Spelling: «{word}» kept at the space, right as typed, its accents left to the sentence's close");
             return;
         }
 

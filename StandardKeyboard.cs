@@ -246,11 +246,14 @@ public sealed class StandardKeyboard : View
     /// <summary>?123, ABC and =\&lt;: their ink 34 px tall over Roboto's cap height.</summary>
     private const float WordShare = 34 / CapHeight / 124;
 
-    /// <summary>The language on the space bar: "EN • ES" 24 px tall.</summary>
-    private const float SpaceLabelShare = 24 / CapHeight / 124;
+    /// <summary>
+    /// The language on the space bar, as tall as ?123 and ABC: Gboard's "EN • ES" is 24 px of capitals, and our language's
+    /// name, in small letters but its first ("Español"), hardly showed at that size (the owner, 2026-11-01).
+    /// </summary>
+    private const float SpaceLabelShare = WordShare;
 
-    /// <summary>1234's two lines.</summary>
-    private const float PadLabelShare = SpaceLabelShare;
+    /// <summary>1234's two lines: Gboard's 24 px.</summary>
+    private const float PadLabelShare = 24 / CapHeight / 124;
 
     /// <summary>Each sign's box, its drawn part as tall or wide as Gboard's (px over the part of its 960 box it fills).</summary>
     private const float ShiftShare = 55f / (760f / 960) / 124;

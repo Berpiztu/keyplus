@@ -1650,7 +1650,8 @@ public sealed class MainActivity : Activity
     {
         (int Hint, Android.Text.InputTypes Kind)[] kinds =
         [
-            (Resource.String.try_keys, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagCapSentences),
+            // Asking for corrections as an app's text field may (its auto-correct flag), so Autocorrect is tried here as there.
+            (Resource.String.try_keys, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextFlagCapSentences | Android.Text.InputTypes.TextFlagAutoCorrect),
             (Resource.String.try_number, Android.Text.InputTypes.ClassNumber),
             (Resource.String.try_email, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationEmailAddress),
             (Resource.String.try_web, Android.Text.InputTypes.ClassText | Android.Text.InputTypes.TextVariationUri),

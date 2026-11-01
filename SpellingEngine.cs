@@ -167,6 +167,23 @@ public sealed class SpellingEngine
     public bool Knows(StandardLanguage language, string word) =>
         WordListOf(language).InUse() is { } ready ? ready.Knows(word) : SwipeData.HasWordList(language);
 
+    /// <summary>
+    /// The words a context model offers for the word being typed, kept to the keyboard's language: only those its word
+    /// list (accents aside), the user's dictionary or its Hunspell knows, the word typed first where it is one. The model
+    /// is one for Spanish and English and offered English for a Spanish "h", and words of its own ("he'dn't"); the owner,
+    /// 2026-11-01. As offered where the language has no word list to tell by.
+    /// </summary>
+    public IReadOnlyList<string> OfLanguage(StandardLanguage language, string typed, IReadOnlyList<string> offered)
+    {
+        if (!SwipeData.HasWordList(language))
+        {
+            return offered;
+        }
+
+        IEnumerable<string> itself = typed.Length > 0 && IsWord(language, typed) ? [typed] : [];
+        return [.. itself.Concat(offered.Where(word => !Unknown(language, word))).Distinct(StringComparer.OrdinalIgnoreCase).Take(WordSuggestions.Offered)];
+    }
+
     /// <summary>Whether no word list, no dictionary of the user's and no Hunspell of the language has the word; while the list is read, known, so nothing is offered to learn by mistake.</summary>
     public bool Unknown(StandardLanguage language, string word) =>
         !Knows(language, word) && !personal.Words(language.Code).Contains(word, StringComparer.OrdinalIgnoreCase) && DictionaryFor(language)?.InUse()?.Knows(word) != true;

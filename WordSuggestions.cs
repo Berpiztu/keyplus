@@ -16,6 +16,24 @@ public sealed class WordSuggestions
     /// <summary>How many words are offered: the toolbar's centre and one on each side, as Gboard's.</summary>
     public const int Offered = 3;
 
+    /// <summary>
+    /// Whether a word mended differs from the word typed only in its accents (como, cómo; el, él): a space leaves a word
+    /// right as typed so, the sentence's close telling whether it is a question (the owner, 2026-11-01).
+    /// </summary>
+    public static bool OnlyMarks(string typed, string mended)
+    {
+        // Its capitals alone changed ("pue", "Pue": the model wrote the word after a comma it put): never taken at a space,
+        // a sentence's capital being Spelling's own.
+        if (!typed.Equals(mended, StringComparison.Ordinal) && typed.Equals(mended, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        static string Plain(string word) => new string([.. word.Normalize(NormalizationForm.FormD)
+            .Where(letter => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(letter) != System.Globalization.UnicodeCategory.NonSpacingMark)]).ToLowerInvariant();
+        return !typed.Equals(mended, StringComparison.Ordinal) && Plain(typed) == Plain(mended);
+    }
+
     private readonly StandardLanguage language;
 
     /// <summary>Each word by its letters alone, in order, with its commonest frequency and its spellings, the commonest first.</summary>

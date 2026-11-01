@@ -238,13 +238,17 @@ public sealed class KeyPlusKeyboard : InputMethodService
         accountField = !secretField && (fieldKind == StandardField.Email
             || (fieldKind == StandardField.Text && System.Text.RegularExpressions.Regex.IsMatch(named, AccountWords, System.Text.RegularExpressions.RegexOptions.IgnoreCase)));
         accountText = "";
-        // A document's, where Autocorrect may write by itself: text of many lines (a message, a mail, a note), as
-        // ordinary text, a long or a short message (a chat's), that asks for suggestions; in doubt, not one.
-        documentField = WordsField && kind == Android.Text.InputTypes.ClassText
-            && (type & (Android.Text.InputTypes.TextFlagMultiLine | Android.Text.InputTypes.TextFlagImeMultiLine)) != 0
-            && (type & Android.Text.InputTypes.TextFlagNoSuggestions) == 0
-            && variation is Android.Text.InputTypes.TextVariationNormal or Android.Text.InputTypes.TextVariationLongMessage
-                or Android.Text.InputTypes.TextVariationShortMessage;
+        // Where Autocorrect may write by itself, as Gboard's base, AOSP's LatinIME (InputAttributes, at the revision the
+        // word lists are taken from), decides it (the owner, 2026-11-01: "as Gboard"): text with suggestions shown (no
+        // password, e-mail, web address, filter, no-suggestions or auto-complete field), the app asking for corrections
+        // (its auto-correct flag) or the field of many lines, a web page's field only with that flag.
+        var autoCorrectFlag = (type & Android.Text.InputTypes.TextFlagAutoCorrect) != 0;
+        documentField = WordsField && kind == Android.Text.InputTypes.ClassText && !secretField
+            && variation is not (Android.Text.InputTypes.TextVariationEmailAddress or Android.Text.InputTypes.TextVariationWebEmailAddress
+                or Android.Text.InputTypes.TextVariationUri or Android.Text.InputTypes.TextVariationFilter)
+            && (type & (Android.Text.InputTypes.TextFlagNoSuggestions | Android.Text.InputTypes.TextFlagAutoComplete)) == 0
+            && !(variation == Android.Text.InputTypes.TextVariationWebEditText && !autoCorrectFlag)
+            && (autoCorrectFlag || (type & Android.Text.InputTypes.TextFlagMultiLine) != 0);
         panel?.FieldIs(fieldKind);
         if (panel is not null)
         {
@@ -777,12 +781,14 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Suggesting = (language, typed) => accountField ? [.. Addresses(typed).Take(WordSuggestions.Offered)]
                 : WordsField ? personal.WithAddresses(spelling.Suggest(language, typed), typed, WordSuggestions.Offered) : [];
             // While a word is typed, the words the language's context model offers for its sentence (llm-create taught
-            // them), never mixed with the word list's; none where it has no model on, or the field is not words'.
+            // them), the language's alone (SpellingEngine.OfLanguage), never mixed with the word list's; none where it has
+            // no model on, or the field is not words'.
             panel.ModelSuggesting = async (language, sentence, cancel) =>
                 WordsField && ContextModelOf(language.Code) is { } named && await context.Async() is { } suggester && suggester.Name == named
-                    ? await Task.Run(() => suggester.Suggest(sentence, cancel), cancel)
+                    ? spelling.OfLanguage(language, sentence[(sentence.LastIndexOf(' ') + 1)..], await Task.Run(() => suggester.Suggest(sentence, language.Code, cancel), cancel))
                     : [];
             panel.KnownWord = (language, word) => !spelling.Unknown(language, word);
+            panel.IsWord = spelling.IsWord;
             panel.ModelOffers = language => WordsField && ContextModelOf(language.Code) is not null && LanguageChoices.ContextSuggestsIn(this, language.Code);
             panel.OrderSwiped = (language, read) => personal.Ordered(language.Code, read);
             panel.SwipeChosen = (language, read, word) =>

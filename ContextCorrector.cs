@@ -32,6 +32,9 @@ public sealed class ContextCorrector : IDisposable
     private readonly SentencePieceTokenizer tokenizer;
     private readonly long[] prefix;
     private readonly HashSet<long> notText;
+
+    /// <summary>How a suggestion is asked for: "sugerir: ", or, for a model taught so (its format.json's suggest_tag), "sugerir {lang}: ", the keyboard's language put in.</summary>
+    private readonly string suggestTag;
     private readonly Lock running = new();
     private bool disposed;
 
@@ -43,9 +46,10 @@ public sealed class ContextCorrector : IDisposable
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Berpiztu", "Keyboard", "correctors");
 #endif
 
-    private ContextCorrector(string name, InferenceSession encoder, InferenceSession decoder, SentencePieceTokenizer tokenizer, long[] prefix, HashSet<long> notText)
+    private ContextCorrector(string name, InferenceSession encoder, InferenceSession decoder, SentencePieceTokenizer tokenizer, long[] prefix, HashSet<long> notText, string suggestTag)
     {
         Name = name;
+        this.suggestTag = suggestTag;
         this.encoder = encoder;
         this.decoder = decoder;
         this.tokenizer = tokenizer;
@@ -101,7 +105,8 @@ public sealed class ContextCorrector : IDisposable
 
             var options = new SessionOptions { GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL, IntraOpNumThreads = 2 };
             var corrector = new ContextCorrector(name, new InferenceSession(Path.Combine(folder, "encoder.onnx"), options),
-                new InferenceSession(Path.Combine(folder, "decoder.onnx"), options), tokenizer, prefix, notText);
+                new InferenceSession(Path.Combine(folder, "decoder.onnx"), options), tokenizer, prefix, notText,
+                form.RootElement.TryGetProperty("suggest_tag", out var tag) && tag.GetString() is { Length: > 0 } told ? told : SuggestTag);
             Log.Write($"Corrector: {name} loaded in {started.ElapsedMilliseconds} ms, the app's memory {before} MB before and {MemoryMegabytes()} MB after");
             return corrector;
         }
@@ -189,8 +194,9 @@ public sealed class ContextCorrector : IDisposable
     /// likeliest first, as llm-create taught and measures it: a beam search of <see cref="Beams"/>, each hypothesis
     /// scored by its log-probability over its length, the <see cref="Offered"/> best of those ended. None where the
     /// sentence is empty or too long, the corrector was let go, or <paramref name="cancel"/> asked to stop (a newer letter).
+    /// A model taught with the language in it is asked in the keyboard's (<paramref name="language"/>, es or en).
     /// </summary>
-    public IReadOnlyList<string> Suggest(string typed, CancellationToken cancel = default)
+    public IReadOnlyList<string> Suggest(string typed, string language, CancellationToken cancel = default)
     {
         var text = typed.TrimStart();
         if (text.Length == 0)
@@ -199,7 +205,7 @@ public sealed class ContextCorrector : IDisposable
         }
 
         var started = Stopwatch.StartNew();
-        long[] read = [.. prefix, .. tokenizer.EncodeToIds(SuggestTag + text).Select(id => (long)id), Eos];
+        long[] read = [.. prefix, .. tokenizer.EncodeToIds(suggestTag.Replace("{lang}", language) + text).Select(id => (long)id), Eos];
         if (read.Length > MostTokens)
         {
             return [];
@@ -218,6 +224,29 @@ public sealed class ContextCorrector : IDisposable
             using var encoded = encoder.Run([NamedOnnxValue.CreateFromTensor("input_ids", ids), NamedOnnxValue.CreateFromTensor("attention_mask", mask)]);
             var hidden = encoded.First().AsTensor<float>();
             var (length, width) = (hidden.Dimensions[1], hidden.Dimensions[2]);
+            var sentence = hidden.ToArray();
+
+            // The sentence read and its mask, once for each beam, made once for each number of beams and copied whole:
+            // copied a number at a time through the tensor's indexer for every step, the phone took most of a second.
+            var heardFor = new Dictionary<int, (DenseTensor<float> Heard, DenseTensor<long> Masks)>();
+            (DenseTensor<float> Heard, DenseTensor<long> Masks) Read(int rows)
+            {
+                if (!heardFor.TryGetValue(rows, out var made))
+                {
+                    var heard = new DenseTensor<float>([rows, length, width]);
+                    var masks = new DenseTensor<long>([rows, read.Length]);
+                    for (var row = 0; row < rows; row++)
+                    {
+                        sentence.AsSpan().CopyTo(heard.Buffer.Span.Slice(row * sentence.Length, sentence.Length));
+                    }
+
+                    masks.Buffer.Span.Fill(1);
+                    heardFor[rows] = made = (heard, masks);
+                }
+
+                return made;
+            }
+
             var start = prefix.Length > 0 ? prefix[0] : Pad;
             var beams = new List<(List<long> Tokens, double LogProbability)> { ([start], 0) };
             for (var step = 0; step < WordTokens && beams.Count > 0 && !cancel.IsCancellationRequested; step++)
@@ -225,50 +254,37 @@ public sealed class ContextCorrector : IDisposable
                 // Every beam in one run: the sentence read, and its mask, once for each.
                 var rows = beams.Count;
                 var written = new DenseTensor<long>([rows, beams[0].Tokens.Count]);
-                var heard = new DenseTensor<float>([rows, length, width]);
-                var masks = new DenseTensor<long>([rows, read.Length]);
                 for (var row = 0; row < rows; row++)
                 {
-                    for (var at = 0; at < beams[row].Tokens.Count; at++)
-                    {
-                        written[row, at] = beams[row].Tokens[at];
-                    }
-
-                    for (var at = 0; at < length; at++)
-                    {
-                        for (var unit = 0; unit < width; unit++)
-                        {
-                            heard[row, at, unit] = hidden[0, at, unit];
-                        }
-                    }
-
-                    for (var at = 0; at < read.Length; at++)
-                    {
-                        masks[row, at] = 1;
-                    }
+                    beams[row].Tokens.ToArray().CopyTo(written.Buffer.Span.Slice(row * beams[row].Tokens.Count));
                 }
+
+                var (heard, masks) = Read(rows);
 
                 using var next = decoder.Run([
                     NamedOnnxValue.CreateFromTensor("decoder_input_ids", written),
                     NamedOnnxValue.CreateFromTensor("encoder_hidden_states", heard),
                     NamedOnnxValue.CreateFromTensor("encoder_attention_mask", masks),
                 ]);
-                var logits = next.First().AsTensor<float>();
-                var vocabulary = logits.Dimensions[^1];
+                var output = next.First().AsTensor<float>();
+                var vocabulary = output.Dimensions[^1];
+                // Each row's numbers read in place, not through the tensor's indexer, which reckons each one's place anew.
+                var logits = output is DenseTensor<float> dense ? dense.Buffer : output.ToArray().AsMemory();
                 var grown = new List<(List<long> Tokens, double LogProbability)>();
                 for (var row = 0; row < rows; row++)
                 {
                     // Each beam's log-probabilities (a log-softmax of its row), its best few grown.
+                    var scores = logits.Span.Slice(row * vocabulary, vocabulary);
                     var most = float.MinValue;
-                    for (var token = 0; token < vocabulary; token++)
+                    foreach (var score in scores)
                     {
-                        most = Math.Max(most, logits[row, token]);
+                        most = Math.Max(most, score);
                     }
 
                     var sum = 0.0;
-                    for (var token = 0; token < vocabulary; token++)
+                    foreach (var score in scores)
                     {
-                        sum += Math.Exp(logits[row, token] - most);
+                        sum += Math.Exp(score - most);
                     }
 
                     var logSum = most + Math.Log(sum);
@@ -276,7 +292,7 @@ public sealed class ContextCorrector : IDisposable
                     var best = new PriorityQueue<int, float>();
                     for (var token = 0; token < vocabulary; token++)
                     {
-                        var score = logits[row, token];
+                        var score = scores[token];
                         if (best.Count < Beams * 2)
                         {
                             best.Enqueue(token, score);

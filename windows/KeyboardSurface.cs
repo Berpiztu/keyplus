@@ -38,7 +38,10 @@ public sealed class KeyboardSurface : FrameworkElement
     private const double HintTopShare = 9.0 / 82;
     private const double HintRightShare = 8.0 / 82;
     private const double WordShare = 34 / CapHeight / 124;
-    private const double SpaceLabelShare = 24 / CapHeight / 124;
+    // The language on the space bar as tall as ?123 and ABC, Android's too: Gboard's 24 px of capitals ("EN • ES") left
+    // our language's name, in small letters but its first, hardly seen (the owner, 2026-11-01). 1234's two lines keep 24 px.
+    private const double SpaceLabelShare = WordShare;
+    private const double PadLabelShare = 24 / CapHeight / 124;
     private const double ShiftShare = 55.0 / (760.0 / 960) / 124;
     private const double DeleteShare = 65.0 / (720.0 / 960) / 124;
     private const double LanguageShare = 52.0 / (800.0 / 960) / 124;
@@ -1440,8 +1443,8 @@ public sealed class KeyboardSurface : FrameworkElement
                 DrawText(context, language.Name, centre, h * SpaceLabelShare, glyph, Regular);
                 return;
             case StandardAction.Numbers:
-                DrawText(context, "12", new Point(centre.X, centre.Y - (h * SpaceLabelShare * 0.45)), h * SpaceLabelShare, glyph, Regular);
-                DrawText(context, "34", new Point(centre.X, centre.Y + (h * SpaceLabelShare * 0.45)), h * SpaceLabelShare, glyph, Regular);
+                DrawText(context, "12", new Point(centre.X, centre.Y - (h * PadLabelShare * 0.45)), h * PadLabelShare, glyph, Regular);
+                DrawText(context, "34", new Point(centre.X, centre.Y + (h * PadLabelShare * 0.45)), h * PadLabelShare, glyph, Regular);
                 return;
             case StandardAction.Type:
                 break;
