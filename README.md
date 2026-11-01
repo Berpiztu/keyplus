@@ -300,7 +300,7 @@ a window that does.
   "plato"). Off, they are the word list's, found without the sentence: those
   starting as typed, those that sound so in Spanish ("hiva": "iba"), and
   those with a key beside one typed ("quw": "que"); in the centre, the
-  commonest at most a letter longer than typed. On Windows the centre is in
+  commonest at most a letter longer than typed. The centre is in
   bold only where it is sure which word was meant ("aora": "ahora"), and a
   space writes only a word in bold; not clear, nothing is in bold and what was
   typed stays.

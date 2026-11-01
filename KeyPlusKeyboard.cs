@@ -766,6 +766,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
             // Nothing learnt by itself, nor while Autocorrect or Spelling is off (writing code): a word no list has offered to learn with a tap.
             panel.Learnable = (language, word) => WordsField && personal.LearnTyped && Learns(language) && spelling.Unknown(language, word);
+            panel.OnlyInHunspell = (language, word) => WordsField && spelling.OnlyInHunspell(language, word);
+            panel.Sure = (language, word, offered) => WordsField ? spelling.Sure(language, word, offered) : null;
             panel.Learn = (language, word) =>
             {
                 personal.Learn(language.Code, word);

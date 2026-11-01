@@ -534,10 +534,22 @@ public sealed class KeyPanel
     private string typingWord = "";
 
     /// <summary>Whether the toolbar's middle shows words: a swipe's, or those offered for the word being typed.</summary>
-    private bool OffersWords => swipeWords.Count > 0 || typingWords.Count > 0 || learnable;
+    private bool OffersWords => swipeWords.Count > 0 || typingWords.Count > 0 || learnable || inHunspellAlone;
 
     /// <summary>Whether the word being typed is one no list has, offered as typed at the toolbar's left to be learnt with a tap (<see cref="Learnable"/>).</summary>
     private bool learnable;
+
+    /// <summary>Whether only Hunspell knows the word being typed: offered as typed at the toolbar's left too, not to be learnt (<see cref="OnlyInHunspell"/>).</summary>
+    private bool inHunspellAlone;
+
+    /// <summary>Whether only Hunspell knows a word, no list nor the personal dictionary (the keyboard's SpellingEngine.OnlyInHunspell).</summary>
+    public Func<StandardLanguage, string, bool>? OnlyInHunspell { get; set; }
+
+    /// <summary>The word the one typed surely meant, of those offered (the keyboard's SpellingEngine.Sure); none where it is not clear.</summary>
+    public Func<StandardLanguage, string, IReadOnlyList<string>, string?>? Sure { get; set; }
+
+    /// <summary>The word it is sure the one typed meant: in bold in the toolbar's centre and what a space writes, as Gboard's (the owner, 2026-11-01); none, nothing in bold and nothing written.</summary>
+    private (string Word, string Sure)? surely;
 
     /// <summary>The words to offer for a word being typed in a language, the likeliest first (<see cref="WordSuggestions"/>); none, nothing is offered as letters are typed.</summary>
     public Func<StandardLanguage, string, IReadOnlyList<string>>? Suggesting { get; set; }
@@ -1248,8 +1260,10 @@ public sealed class KeyPanel
         var words = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         words.SetGravity(GravityFlags.CenterVertical);
 
-        // A word no list has, as typed at the left in quotes, as Gboard's: a tap writes it and learns it; the others after it.
-        var learning = typing && learnable;
+        // A word no list has, as typed at the left in quotes, as Gboard's: a tap writes it and, where only Hunspell does not
+        // know it either, learns it; the others after it.
+        var learning = typing && (learnable || inHunspellAlone);
+        var learns = learnable;
         var rest = typingWords.Where(word => !learning || !word.Equals(typingWord, StringComparison.OrdinalIgnoreCase)).ToList();
         string?[] shown = learning ? [typingWord, rest.ElementAtOrDefault(0), rest.ElementAtOrDefault(1)]
             : typing ? [typingWords.ElementAtOrDefault(1), typingWords.ElementAtOrDefault(0), typingWords.ElementAtOrDefault(2)]
@@ -1270,7 +1284,10 @@ public sealed class KeyPanel
                 {
                     var language = TypingLanguage;
                     TakeSuggestion(word);
-                    Learn?.Invoke(language, word);
+                    if (learns)
+                    {
+                        Learn?.Invoke(language, word);
+                    }
                 }
                 else if (word is not null && typing)
                 {
@@ -1292,7 +1309,8 @@ public sealed class KeyPanel
             }
 
             button.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(address ? sp * PersonalWords.AddressTypeShare : sp), 1, (int)ComplexUnitType.Sp);
-            if (i == 1)
+            // A swipe's word, written; a word typed, only where it is sure which was meant.
+            if (i == 1 && (!typing || surely?.Word == typingWord))
             {
                 button.SetTypeface(null, TypefaceStyle.Bold);
             }
@@ -4830,8 +4848,7 @@ public sealed class KeyPanel
             {
                 if (found.Result.Count > 0 && WordBeforeCaret?.Invoke() == word && swipedText is null)
                 {
-                    typingWords = found.Result;
-                    modelOffer = (word, found.Result);
+                    typingWords = TakenOffered(language, word, found.Result);
                     ShowBars();
                 }
             }), TaskContinuationOptions.OnlyOnRanToCompletion);
@@ -4839,10 +4856,12 @@ public sealed class KeyPanel
 
         if (word.Length > 0)
         {
-            modelOffer = words.Count > 0 ? (word, words) : null;
+            words = TakenOffered(standard!.Language, word, words);
         }
+
         var learning = word.Length >= 2 && Suggests && Learnable?.Invoke(standard!.Language, word) == true;
-        if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable)
+        var alone = word.Length >= 2 && Suggests && OnlyInHunspell?.Invoke(standard!.Language, word) == true;
+        if (words.Count == 0 && typingWords.Count == 0 && !learning && !learnable && !alone && !inHunspellAlone)
         {
             return;
         }
@@ -4850,7 +4869,18 @@ public sealed class KeyPanel
         typingWords = words;
         typingWord = word;
         learnable = learning;
+        inHunspellAlone = alone;
         ShowBars();
+    }
+
+    /// <summary>The words offered for a word being typed as the toolbar and a space take them: the one it is sure was meant first, kept in <see cref="surely"/>.</summary>
+    private IReadOnlyList<string> TakenOffered(StandardLanguage language, string word, IReadOnlyList<string> words)
+    {
+        var sure = Sure?.Invoke(language, word, words);
+        var offered = sure is null ? words : WordSuggestions.Surely(words, sure);
+        surely = sure is null ? null : (word, sure);
+        modelOffer = offered.Count > 0 ? (word, offered) : null;
+        return offered;
     }
 
     /// <summary>
@@ -4899,9 +4929,9 @@ public sealed class KeyPanel
             // None offered (the sentence too long, the model let go): the word list's, as with the model's words off. A word
             // no list has shown as typed at the left in quotes, as with the list's, a tap learning it.
             typingWord = word;
-            typingWords = offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(language, word) ?? [];
+            typingWords = TakenOffered(language, word, offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(language, word) ?? []);
             learnable = word.Length >= 2 && Suggests && Learnable?.Invoke(language, word) == true;
-            modelOffer = typingWords.Count > 0 ? (word, typingWords) : null;
+            inHunspellAlone = word.Length >= 2 && Suggests && OnlyInHunspell?.Invoke(language, word) == true;
             ShowBars();
         });
     }
@@ -4939,13 +4969,14 @@ public sealed class KeyPanel
     public void ForgetTyping()
     {
         typingWord = "";
-        if (typingWords.Count == 0 && !learnable)
+        if (typingWords.Count == 0 && !learnable && !inHunspellAlone)
         {
             return;
         }
 
         typingWords = [];
         learnable = false;
+        inHunspellAlone = false;
         ShowBars();
     }
 
@@ -5066,6 +5097,15 @@ public sealed class KeyPanel
         if (modelOffer is { Word: var offeredFor, Offered: [var centre, ..] } && offeredFor == word && !centre.Equals(word, StringComparison.OrdinalIgnoreCase))
         {
             fixes = fixes with { Words = [centre, .. fixes.Words.Where(other => !other.Equals(centre, StringComparison.OrdinalIgnoreCase))] };
+        }
+
+        // Written by a space only where the centre is in bold: else only offered, for it is not clear which (the owner,
+        // 2026-11-01, as Gboard). A word's capital alone stays as it was.
+        if (fixes.Words is not [var only] || !only.Equals(word, StringComparison.OrdinalIgnoreCase))
+        {
+            fixes = surely is { Word: var sureFor, Sure: var sure } && sureFor == word
+                ? fixes with { Words = [sure, .. fixes.Words.Where(other => !other.Equals(sure, StringComparison.OrdinalIgnoreCase))], Misspelled = true }
+                : fixes with { Misspelled = false };
         }
 
         var applied = Corrects && fixes.Misspelled;
@@ -5229,6 +5269,14 @@ public sealed class KeyPanel
 
         var typed = sentence.Split(' ');
         var word = typed[^1];
+
+        // Written by a space only where the centre is in bold; the sentence's close may still mend the word.
+        if (surely is not { Word: var sureFor } || sureFor != word)
+        {
+            Log.Detail("Spelling: a word left at the space, nothing in bold for it");
+            return;
+        }
+
         string mended;
         // The toolbar's centre, the word the model offered first as it was typed, taken by the space as Gboard takes its
         // centre's ("plat": "plato", "bue": "bueno"), its capital kept: with Autocorrect on, whatever was typed (the
