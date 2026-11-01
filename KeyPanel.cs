@@ -3134,7 +3134,14 @@ public sealed class KeyPanel
         Visibility = ViewStates.Gone,
     };
 
-    /// <summary>The app's settings the standard keyboard follows, read again as it opens: they may have changed meanwhile.</summary>
+    /// <summary>The preferences <see cref="ReadSettings"/> reads: one changed is taken at once, the keyboard in sight.</summary>
+    public static readonly string[] SettingKeys =
+    [
+        KeyPlusPreferences.VibrateKey, KeyPlusPreferences.SoundKey, KeyPlusPreferences.SwipeTrailKey,
+        KeyPlusPreferences.SwipeDeleteWordKey, KeyPlusPreferences.EmojiRowKey, KeyPlusPreferences.LongPressKey,
+    ];
+
+    /// <summary>The app's settings the standard keyboard follows, read again as it opens and as one of them changes.</summary>
     public void ReadSettings()
     {
         var kept = KeyPlusPreferences.Global(context);

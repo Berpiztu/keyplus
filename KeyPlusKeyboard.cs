@@ -1637,6 +1637,14 @@ public sealed class KeyPlusKeyboard : InputMethodService
         if (reset || popupChanged || keyboardChanged)
         {
             panel?.Root.Post(() => SetInputView(OnCreateInputView()));
+            return;
+        }
+
+        // A preference the keys follow (Preferencias' extra line, a touch felt or heard): taken at once, as a docked
+        // keyboard stays in sight while it is chosen and the same field taken again starts nothing.
+        if (key is not null && KeyPanel.SettingKeys.Contains(key) && panel is { } shown)
+        {
+            shown.Root.Post(shown.ReadSettings);
         }
     }
 
