@@ -1737,11 +1737,18 @@ public sealed class KeyPanel
             return;
         }
 
-        // In the keys' place, the toolbar and the row of those typed lately kept over it, as on Windows: the keyboard
-        // keeps its height.
+        // Over the row of those typed lately, the toolbar and the keys, from the top of the first in sight, as on Windows:
+        // as tall as the three together, so the keyboard keeps its height.
+        var above = (emojiRow.Visibility == ViewStates.Visible ? emojiRow.LayoutParameters!.Height : 0)
+            + (standardBar.Visibility == ViewStates.Visible ? standardBar.LayoutParameters!.Height : 0);
         emojiPanel.Fill();
         Cover(emojiPanel, settingsButton);
+        emojiPanel.LayoutParameters!.Height += above;
+        emojiPanel.RequestLayout();
     }
+
+    /// <summary>Whether the emoji panel is in sight, over the row of those typed lately and the toolbar, which are then out of sight.</summary>
+    private bool EmojisCover => emojiPanel is not null && covered?.Cover == emojiPanel;
 
     /// <summary>What the emoji search holds typed, while Buscar is open: the keys type into it, not the field; null, closed.</summary>
     private string? emojiSearch;
@@ -1790,14 +1797,25 @@ public sealed class KeyPanel
     }
 
     /// <summary>
-    /// The search's bar in the toolbar's place: ← back to the emoji, the box with what is typed (Buscar, faint, while
-    /// nothing is), and the emoji found in the keyboard's language, across as many as there are, a tap typing one and
-    /// going back to the emoji.
+    /// The search in the toolbar's place: the emoji found in the keyboard's language, across as many as there are, a tap
+    /// typing one and going back to the emoji; where the row over the toolbar shows, ← and the box are there
+    /// (<see cref="ShowEmojiRow"/>), else here before them, the box of its own width.
     /// </summary>
     private void FillSearchBar()
     {
+        if (!EmojiRowShown)
+        {
+            AddSearchField(standardBar, wide: false);
+        }
+
+        standardBar.AddView(SearchFound(), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+    }
+
+    /// <summary>← back to the emoji, and the box with what is typed, the caret after it (Buscar, faint, while nothing is): as wide as the room left, or of its own width.</summary>
+    private void AddSearchField(LinearLayout into, bool wide)
+    {
         var colors = standardColors!;
-        standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_back, "Emojis", () =>
+        into.AddView(StandardTool(Resource.Drawable.ic_tool_back, "Emojis", () =>
         {
             EndEmojiSearch();
             ShowEmojis();
@@ -1813,13 +1831,14 @@ public sealed class KeyPanel
             return view;
         }
 
-        var text = Words(emojiSearch!, colors.Glyph);
+        var typed = emojiSearch ?? "";
+        var text = Words(typed, colors.Glyph);
         var caret = new View(context) { Background = new ColorDrawable(colors.Primary) };
         var typedLine = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         typedLine.SetGravity(GravityFlags.CenterVertical);
         typedLine.AddView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         typedLine.AddView(caret, new LinearLayout.LayoutParams(Dp(2), text.LineHeight) { LeftMargin = Dp(1), RightMargin = Dp(1) });
-        if (emojiSearch.Length == 0)
+        if (typed.Length == 0)
         {
             typedLine.AddView(Words(context.GetString(Resource.String.search), colors.Outline), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
         }
@@ -1834,12 +1853,16 @@ public sealed class KeyPanel
         var box = new FrameLayout(context) { Background = pill };
         box.SetPadding(Dp(12), 0, Dp(12), 0);
         box.AddView(line, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        standardBar.AddView(box, new LinearLayout.LayoutParams(Dp(SearchBoxDp), Dp(SearchBoxHeightDp)) { Gravity = GravityFlags.CenterVertical, RightMargin = Dp(6) });
+        into.AddView(box, new LinearLayout.LayoutParams(wide ? 0 : Dp(SearchBoxDp), Dp(SearchBoxHeightDp), wide ? 1f : 0f) { Gravity = GravityFlags.CenterVertical, RightMargin = Dp(6) });
+    }
 
+    /// <summary>The emoji the search finds, across, a tap typing one and going back to the emoji.</summary>
+    private HorizontalScrollView SearchFound()
+    {
         var cell = Dp(EmojiRowCellDp);
         var size = EmojiCellTextSize(cell);
         var found = new LinearLayout(context) { Orientation = Orientation.Horizontal };
-        foreach (var emoji in Emojis.Search(context, standard!.Language.Code, emojiSearch))
+        foreach (var emoji in Emojis.Search(context, standard!.Language.Code, emojiSearch!))
         {
             found.AddView(EmojiCell(emoji, size, () =>
             {
@@ -1852,7 +1875,7 @@ public sealed class KeyPanel
 
         var across = new HorizontalScrollView(context) { HorizontalScrollBarEnabled = false };
         across.AddView(found, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent));
-        standardBar.AddView(across, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        return across;
     }
 
     /// <summary>The search's caret shown whole, then blinking until the next letter or the search's end.</summary>
@@ -1911,6 +1934,13 @@ public sealed class KeyPanel
         emojiRowItems.RemoveAllViews();
         if (!shown)
         {
+            return;
+        }
+
+        // The emoji searched: ← and the box here, the window's width; the emoji found in the toolbar under them.
+        if (emojiSearch is not null)
+        {
+            AddSearchField(emojiRowItems, wide: true);
             return;
         }
 
@@ -2416,7 +2446,7 @@ public sealed class KeyPanel
             var standardShown = covered?.Keys == standard || standard is { Visibility: ViewStates.Visible };
             menuBar.Visibility = asking is null && !small && covered is not null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
             toolbar.Visibility = asking is null && !small && covered is null && !standardShown ? ViewStates.Visible : ViewStates.Gone;
-            standardBar.Visibility = asking is null && standardShown ? ViewStates.Visible : ViewStates.Gone;
+            standardBar.Visibility = asking is null && standardShown && !EmojisCover ? ViewStates.Visible : ViewStates.Gone;
             ShowEmojiRow();
             if (toolbar.Visibility == ViewStates.Visible)
             {

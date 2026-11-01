@@ -371,12 +371,15 @@ a window that does.
   is dragged between them, its name in sight; the toolbar holds as many
   round buttons as fit between ⊞ and 🎤, side by side all but touching;
   its buttons show their names as the mouse rests on them.
-- **Emoji**: the comma held, or ⊞'s Emojis, opens them in the keys' place,
-  by group with a tab for each, those typed lately first; once one is
-  typed, the latest are in a row over the toolbar. **Search** finds them
+- **Emoji**: the comma held, or ⊞'s Emojis, opens them over the row of
+  those typed lately, the toolbar and the keys, the keyboard keeping its
+  height, by group with a tab for each, those typed lately first; once one
+  is typed, the latest are in a row over the toolbar. **Search** finds them
   by their names in the keyboard's language, Spanish or English (Unicode
   CLDR's), accents and capitals aside: the keys come back and type into
-  the search, in the toolbar's place, and a tap on one found types it.
+  the search, its box in the row's place and the emoji found under it in
+  the toolbar's (without the row, both in the toolbar's), and a tap on one
+  found types it.
 - **Words as you type**: while a word is typed letter by letter, the
   toolbar offers the commonest words that start so, accents aside ("cafe" offers "café"), the likeliest in the centre; a tap writes it with a
   space after it.

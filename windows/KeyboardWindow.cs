@@ -168,7 +168,7 @@ public sealed class KeyboardWindow : Window
     private readonly Grid emojiRow = new() { Height = EmojiRowDp, Background = Brushes.Transparent };
     private readonly EmojiStrip recentEmoji = new();
 
-    /// <summary>The emoji searched (the emoji panel's Buscar), in the toolbar's place, the keys under it: ←, what is typed, what it finds.</summary>
+    /// <summary>The emoji searched (the emoji panel's Buscar), the keys under it: ← and what is typed, in the emoji row's place where it shows, and what it finds, in the toolbar's.</summary>
     private readonly DockPanel searchBar = new() { Height = BarDp, Background = Brushes.Transparent, Visibility = Visibility.Collapsed };
 
     /// <summary>The search's box, of one size whatever is typed in it: its line scrolls to show the end of what is typed.</summary>
@@ -182,6 +182,15 @@ public sealed class KeyboardWindow : Window
     private readonly DispatcherTimer caretBlink = new() { Interval = TimeSpan.FromMilliseconds(530) };
     private readonly ScrollViewer searchLine = new() { HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled, Focusable = false, VerticalContentAlignment = VerticalAlignment.Center };
     private readonly EmojiStrip searchFound = new();
+
+    /// <summary>
+    /// ← and the search's box, and the emoji found, each on the window's ground: where the emoji row shows, the box first
+    /// in its place, as wide as the window, and the emoji found under it in the toolbar's; else both in the toolbar's
+    /// place, the box of its own width.
+    /// </summary>
+    private readonly DockPanel searchField = new();
+    private readonly Border searchFoundGround = new();
+    private readonly Border searchBox = new();
     private string searched = "";
 
     /// <summary>The toolbar's buttons that make room for the words offered in its middle, without the emoji row: all but the first and the last.</summary>
@@ -602,17 +611,20 @@ public sealed class KeyboardWindow : Window
         top.Children.Add(designer.Bar);
         top.Children.Add(SearchBar());
         var card = new DockPanel();
+        DockPanel.SetDock(handleBand, Dock.Bottom);
+        card.Children.Add(handleBand);
+        var rows = new DockPanel();
         DockPanel.SetDock(emojiRow, Dock.Top);
         DockPanel.SetDock(top, Dock.Top);
-        DockPanel.SetDock(handleBand, Dock.Bottom);
-        card.Children.Add(emojiRow);
-        card.Children.Add(top);
-        card.Children.Add(handleBand);
+        rows.Children.Add(emojiRow);
+        rows.Children.Add(top);
         var middleKeys = new Grid();
         middleKeys.Children.Add(keys);
-        middleKeys.Children.Add(emoji);
         middleKeys.Children.Add(designer.ExtraKeys);
-        card.Children.Add(middleKeys);
+        rows.Children.Add(middleKeys);
+
+        // The emoji over the emoji row, the toolbar and the keys, from the top of the first in sight: the window keeps its size.
+        card.Children.Add(new Grid { Children = { rows, emoji } });
 
         Content = frame = new Border
         {
@@ -1834,7 +1846,6 @@ public sealed class KeyboardWindow : Window
     /// <summary>The emoji in the keys' place, as tall, those typed lately first.</summary>
     private void ShowEmoji()
     {
-        emoji.Height = keys.ActualHeight;
         emoji.Fill();
         keys.Visibility = Visibility.Hidden;
         emoji.Visibility = Visibility.Visible;
@@ -1864,26 +1875,31 @@ public sealed class KeyboardWindow : Window
         searchCaret.Height = searchText.FontFamily.LineSpacing * NoticeFontSize;
         caretBlink.Tick += (_, _) => searchCaret.Opacity = 1 - searchCaret.Opacity;
         searchLine.Content = new StackPanel { Orientation = Orientation.Horizontal, Children = { searchText, searchCaret, searchHint } };
-        var box = new Border
-        {
-            Width = SearchBoxDp,
-            Height = SearchBoxHeightDp,
-            CornerRadius = new CornerRadius(SearchBoxHeightDp / 2),
-            Background = new SolidColorBrush(colors.Function),
-            Padding = new Thickness(12, 0, 12, 0),
-            Margin = new Thickness(0, 0, 6, 0),
-            Child = searchLine,
-        };
-        DockPanel.SetDock(box, Dock.Left);
-        searchBar.Children.Add(back);
-        searchBar.Children.Add(box);
-        searchBar.Children.Add(searchFound);
+        searchBox.Height = SearchBoxHeightDp;
+        searchBox.CornerRadius = new CornerRadius(SearchBoxHeightDp / 2);
+        searchBox.Background = new SolidColorBrush(colors.Function);
+        searchBox.Padding = new Thickness(12, 0, 12, 0);
+        searchBox.Margin = new Thickness(0, 0, 6, 0);
+        searchBox.Child = searchLine;
+        DockPanel.SetDock(searchBox, Dock.Left);
+        searchFoundGround.Background = new SolidColorBrush(colors.Ground);
+        searchFoundGround.Child = searchFound;
+        searchField.Background = new SolidColorBrush(colors.Ground);
+        searchField.Children.Add(back);
+        searchField.Children.Add(searchBox);
+        DockPanel.SetDock(searchField, Dock.Left);
         return searchBar;
     }
 
     /// <summary>Buscar: the keys in sight again, typing into the search, not the field, its bar in the toolbar's place.</summary>
     private void StartSearch()
     {
+        // With the emoji row the box takes its place, the window's width, and the emoji found the toolbar's under it;
+        // without it, both in the toolbar's place, the emoji found after the box.
+        var inRow = emojiRow.Visibility == Visibility.Visible;
+        searchBox.Width = inRow ? double.NaN : SearchBoxDp;
+        (inRow ? emojiRow.Children : searchBar.Children).Add(searchField);
+        searchBar.Children.Add(searchFoundGround);
         searched = "";
         ShowSearched();
         emoji.Visibility = Visibility.Collapsed;
@@ -1917,6 +1933,8 @@ public sealed class KeyboardWindow : Window
         keys.TypingInstead = null;
         keys.DeletingInstead = null;
         caretBlink.Stop();
+        (searchField.Parent as Panel)?.Children.Remove(searchField);
+        (searchFoundGround.Parent as Panel)?.Children.Remove(searchFoundGround);
         searchBar.Visibility = Visibility.Collapsed;
         bar.Visibility = Visibility.Visible;
     }
