@@ -2,7 +2,7 @@
 
 The owner's request, 2026-11-01. To do, not done yet.
 
-- [ ] The README's very first line is the use of the Virtus Framework: a heading such as "Uses the Virtus Framework".
+- [x] The README's very first line is the use of the Virtus Framework, linking to its repository.
 - [ ] Right under it: the benefits of having used Virtus when training the keyboard's model. Only what was measured,
       taken from llm-create (`correct/docs/start-here.md`, `correct/docs/model-a-vs-b.md`, `docs/memoria/state.md`),
       saying against what and with how many sentences; nothing written from memory.

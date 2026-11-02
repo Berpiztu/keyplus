@@ -1,3 +1,7 @@
+**Uses the [Virtus](https://github.com/Berpiztu/virtus) framework.** This keyboard's context models, which correct your
+sentences and suggest words, were created using Virtus, an AI alignment framework by Berpiztu that builds in character
+and values, not constraints alone: natively, in the weights, not as an external limiter.
+
 # KeyPlus
 
 **A keyboard made for productivity, that uses AI to do more, privately**: for working
