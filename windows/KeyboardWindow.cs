@@ -1302,7 +1302,7 @@ public sealed class KeyboardWindow : Window
         {
             if (!asked.IsCancellationRequested)
             {
-                ShowModelWindow(ContextCorrector.Said(spelling.Context, null, word, [], KeyboardPreferences.Read().BoldPercentIn(keys.KeyLanguage.Code)));
+                ShowModelWindow(ContextCorrector.Said(spelling.Context, null, word, [], KeyboardPreferences.Read().BoldPercentIn(keys.KeyLanguage.Code), KeyboardPreferences.Read().Beams));
                 ShowWords(word, listed);
             }
 
@@ -1316,9 +1316,10 @@ public sealed class KeyboardWindow : Window
         {
             // The model's alone, no list asked (WordSuggestions.OfModel), as Android's.
             var language = keys.KeyLanguage;
-            var scored = await Task.Run(() => corrector.SuggestScored(sentence, language.Code, asked.Token), asked.Token);
+            var beams = KeyboardPreferences.Read().Beams;
+            var scored = await Task.Run(() => corrector.SuggestScored(sentence, language.Code, asked.Token, beams), asked.Token);
             lastScored = scored;
-            ShowModelWindow(ContextCorrector.Said(spelling.Context, corrector.Name, sentence, scored, KeyboardPreferences.Read().BoldPercentIn(language.Code)));
+            ShowModelWindow(ContextCorrector.Said(spelling.Context, corrector.Name, sentence, scored, KeyboardPreferences.Read().BoldPercentIn(language.Code), beams));
             offered = WordSuggestions.OfModel(word, [.. scored.Select(one => one.Word)]);
         }
         catch (OperationCanceledException)

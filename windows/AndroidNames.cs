@@ -311,6 +311,8 @@ namespace Berpiztu.KeyPlus
             public const int context_model_window = 244;
             public const int context_model_bold = 245;
             public const int context_model_bold_summary = 246;
+            public const int troubleshooting_beams = 247;
+            public const int troubleshooting_beams_summary = 248;
             public const int context_model_gemma_title = 238;
             public const int context_model_gemma_terms = 239;
         }

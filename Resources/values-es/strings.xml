@@ -338,6 +338,8 @@
   <string name="spelling_download_again">Volver a descargar</string>
   <string name="spelling_undo_enter">Deshacer tras Intro</string>
   <string name="spelling_undo_enter_summary">Una frase corregida al pulsar Intro también ofrece ↶ en la barra, que pide al programa deshacer (Ctrl+Z): cuánto deshace lo decide el programa</string>
+  <string name="troubleshooting_beams">Haces de búsqueda</string>
+  <string name="troubleshooting_beams_summary">Cuántas respuestas sigue a la vez el modelo de contexto para las palabras que ofrece: de 3 a 10, 5 por defecto. Menos es más rápido y puede dar peores palabras</string>
   <string name="troubleshooting_detailed_log">Registro detallado</string>
   <string name="troubleshooting_detailed_log_summary">Escribe además lo que sigue el teclado, para buscar un fallo: los nombres de las ventanas, campos y menús con el foco, y por qué Ortografía corrigió o no. Desactivado, el log solo guarda errores, avisos y lo importante, nunca lo que hay en pantalla</string>
   <string name="troubleshooting_log_view">Lo que guarda el log</string>

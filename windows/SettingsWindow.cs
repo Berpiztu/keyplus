@@ -981,7 +981,7 @@ public sealed class SettingsWindow : Window
     /// its box and, under its line, Modelo and the list of the models on this
     /// computer (%LOCALAPPDATA%\Berpiztu\Keyboard\correctors) and those
     /// Berpiztu offers on Hugging Face (<see cref="CorrectorCatalog"/>, read
-    /// as the page opens; one not here says how much it downloads), the one it
+    /// as the page opens, only those of the language; one not here says how much it downloads), the one it
     /// reads with chosen there, and under it that one's line: Download, the
     /// files coming, or Download again (<see cref="FetchLine"/>); a Gemma one
     /// says its Terms first. A model is turned on only once it is here.
@@ -992,7 +992,7 @@ public sealed class SettingsWindow : Window
     private static FrameworkElement ContextModelPart(string code, LanguageSpelling now, Action<Func<LanguageSpelling, LanguageSpelling>> keep, Action again)
     {
         List<string> here = [];
-        List<CorrectorCatalog.Offered> offered = [.. offeredOnce ?? []];
+        List<CorrectorCatalog.Offered> offered = [.. CorrectorCatalog.In(offeredOnce ?? [], code)];
         List<string> names = [];
         var kept = now.Context ?? KeyboardPreferences.Read().ContextModelIn(code);
         var box = new CheckBox { Content = Texts.Get(Resource.String.context_model), IsChecked = now.Context is not null };
@@ -1012,7 +1012,7 @@ public sealed class SettingsWindow : Window
         // The models here and those offered that are not, by their names; the one kept chosen.
         void Fill()
         {
-            here = [.. ContextCorrector.Names(ContextCorrector.Folder)];
+            here = [.. CorrectorCatalog.HereIn(ContextCorrector.Names(ContextCorrector.Folder), offeredOnce ?? [], code)];
             names = [.. here.Union(offered.Select(model => model.Name)).Order(StringComparer.Ordinal)];
             filling = true;
             list.Items.Clear();
@@ -1117,7 +1117,7 @@ public sealed class SettingsWindow : Window
         async Task Offer()
         {
             offeredOnce = await CorrectorCatalog.ReadAsync();
-            offered = [.. offeredOnce];
+            offered = [.. CorrectorCatalog.In(offeredOnce, code)];
             if (offered.Count > 0)
             {
                 Fill();
@@ -1501,6 +1501,25 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
+    /// <summary>Search beams, for every language: a whole number from 3 to 10, kept as soon as it is one; left empty or out of range, written back as allowed.</summary>
+    private static FrameworkElement BeamsPart()
+    {
+        var field = new TextBox { Width = 60, HorizontalAlignment = HorizontalAlignment.Left, Text = KeyboardPreferences.Read().Beams.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+        field.TextChanged += (_, _) =>
+        {
+            if (int.TryParse(field.Text, out var written) && written is >= ContextCorrector.BeamsFewest and <= ContextCorrector.BeamsMost)
+            {
+                (KeyboardPreferences.Read() with { Beams = written }).Keep();
+            }
+        };
+        field.LostFocus += (_, _) =>
+        {
+            var beams = int.TryParse(field.Text, out var written) ? Math.Clamp(written, ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost) : ContextCorrector.BeamsUsual;
+            field.Text = beams.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        };
+        return FieldSaying(Resource.String.troubleshooting_beams, field, Texts.Get(Resource.String.troubleshooting_beams_summary));
+    }
+
     /// <summary>Solución de problemas, as Android's: what an app or Windows needs for the keyboard to work with it, and where the keyboard's log is.</summary>
     private static FrameworkElement TroubleshootingPage()
     {
@@ -1528,6 +1547,7 @@ public sealed class SettingsWindow : Window
         asAdministrator.Click += (_, _) => (KeyboardPreferences.Read() with { AsAdministrator = asAdministrator.IsChecked == true }).Keep();
         admin.Children.Add(asAdministrator);
         form.Children.Add(Field(Resource.String.troubleshooting_admin, admin, Resource.String.troubleshooting_admin_start_summary));
+        form.Children.Add(BeamsPart());
         form.Children.Add(Field(Resource.String.troubleshooting_log, new TextBox { Text = Log.File, IsReadOnly = true }, Resource.String.troubleshooting_log_summary));
         var detailed = new CheckBox { Content = Texts.Get(Resource.String.troubleshooting_detailed_log), IsChecked = KeyboardPreferences.Read().DetailedLog };
         detailed.Click += (_, _) =>

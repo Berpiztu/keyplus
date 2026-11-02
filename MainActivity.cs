@@ -900,7 +900,8 @@ public sealed class MainActivity : Activity
     /// A language's Context model (<see cref="ContextCorrector"/>): its switch,
     /// and under its line the list of the models on this device and those
     /// Berpiztu offers on Hugging Face (<see cref="CorrectorCatalog"/>, read
-    /// once while the app is open, each with its bits), where the one it reads
+    /// once while the app is open, each with its bits, only those of the
+    /// language), where the one it reads
     /// with is chosen, as wide as its longest name, with its label before it as
     /// Tema's (<see cref="SmallWords"/>), and at that line's end that one's
     /// download button (<see cref="AddFetchButton"/>), its bar under the line,
@@ -913,8 +914,8 @@ public sealed class MainActivity : Activity
     private IEnumerable<SettingsRow> ContextModelRows(string code, LanguageSpelling now, Func<SettingsPage> page)
     {
         var folder = KeyPlusPreferences.CorrectorsFolder(this);
-        var here = ContextCorrector.Names(folder).ToList();
-        var offered = offeredOnce ?? [];
+        var here = CorrectorCatalog.HereIn(ContextCorrector.Names(folder), offeredOnce ?? [], code).ToList();
+        var offered = CorrectorCatalog.In(offeredOnce ?? [], code);
         if (offeredOnce is null && !readingOffered)
         {
             readingOffered = true;
@@ -999,6 +1000,24 @@ public sealed class MainActivity : Activity
                 settings!.Refresh(page());
             });
 
+    }
+
+    /// <summary>Troubleshooting's Search beams asked: a whole number from 3 to 10; empty, the usual 5.</summary>
+    private void AskBeams()
+    {
+        var field = new EditText(this) { Text = LanguageChoices.ModelBeams(this).ToString(System.Globalization.CultureInfo.InvariantCulture), InputType = Android.Text.InputTypes.ClassNumber };
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.troubleshooting_beams)!
+            .SetView(field)!
+            .SetPositiveButton(Android.Resource.String.Ok, (_, _) =>
+            {
+                var beams = int.TryParse(field.Text, out var written) ? Math.Clamp(written, ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost) : ContextCorrector.BeamsUsual;
+                LanguageChoices.SetModelBeams(this, beams);
+                Log.Write($"Corrector: search beams {beams}");
+                settings!.Refresh(TroubleshootingPage());
+            })!
+            .SetNegativeButton(Android.Resource.String.Cancel, (_, _) => { })!
+            .Show();
     }
 
     /// <summary>A language's Percentage for bold asked: a whole number from 1 to 100, or empty for none by percentage.</summary>
@@ -1343,6 +1362,9 @@ public sealed class MainActivity : Activity
     private SettingsPage TroubleshootingPage() => new(GetString(Resource.String.troubleshooting),
     [
         [new(GetString(Resource.String.troubleshooting_menus), GetString(Resource.String.troubleshooting_menus_summary))],
+        [new(GetString(Resource.String.troubleshooting_beams),
+            $"{LanguageChoices.ModelBeams(this)} · {GetString(Resource.String.troubleshooting_beams_summary)}",
+            Tapped: AskBeams)],
         [
             new(GetString(Resource.String.troubleshooting_log), GetString(Resource.String.troubleshooting_log_summary)),
             Switch(Resource.String.troubleshooting_detailed_log, Resource.String.troubleshooting_detailed_log_summary, KeyPlusPreferences.DetailedLogKey, byDefault: false),

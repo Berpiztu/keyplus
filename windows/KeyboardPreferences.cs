@@ -70,7 +70,9 @@ public sealed record KeyboardPreferences(
     // The toolbar's Debug: a small window with what the context model really gave; off until turned on.
     bool ModelWindow = false,
     // Each language's Percentage for bold: 70 until one is written; left empty, 0, none by percentage.
-    Dictionary<string, int>? BoldPercent = null)
+    Dictionary<string, int>? BoldPercent = null,
+    // Troubleshooting's Search beams, for every language: 5 until one is written.
+    int Beams = ContextCorrector.BeamsUsual)
 {
     /// <summary>A language's Percentage for bold; 70 until one is written; left empty, 0, none by percentage.</summary>
     public int BoldPercentIn(string language) => BoldPercent?.GetValueOrDefault(language, WordSuggestions.BoldPercentUsual) ?? WordSuggestions.BoldPercentUsual;

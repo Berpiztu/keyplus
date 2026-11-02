@@ -306,8 +306,10 @@ a window that does.
   bold only where it is sure which word was meant ("aora": "ahora"), and a
   space writes only a word in bold; not clear, nothing is in bold and what was
   typed stays. **Debug**, a button of the toolbar (any build): a small window you can move,
-  with the model chosen, the one really loaded, the Percentage for bold and its
-  words with percentages.
+  with the model chosen, the one really loaded, the Percentage for bold, the
+  search's beams and its words with percentages. **Search beams**, in
+  Troubleshooting: how many answers the model follows at once for the words it
+  offers, from 3 to 10, 5 by default; fewer is faster and may give worse words.
   Autocorrect writes by itself only where the field is surely a document
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,

@@ -801,15 +801,16 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 }
 
                 // Said in the debug window, where it is on: the model chosen, the one really loaded, what it gave.
+                var beams = LanguageChoices.ModelBeams(this);
                 if (await context.Async() is not { } suggester || suggester.Name != named)
                 {
-                    panel?.ShowModelWindow(ContextCorrector.Said(named, null, sentence, [], LanguageChoices.BoldPercentIn(this, language.Code)));
+                    panel?.ShowModelWindow(ContextCorrector.Said(named, null, sentence, [], LanguageChoices.BoldPercentIn(this, language.Code), beams));
                     return [];
                 }
 
-                var scored = await Task.Run(() => suggester.SuggestScored(sentence, language.Code, cancel), cancel);
+                var scored = await Task.Run(() => suggester.SuggestScored(sentence, language.Code, cancel, beams), cancel);
                 lastScored = scored;
-                panel?.ShowModelWindow(ContextCorrector.Said(named, suggester.Name, sentence, scored, LanguageChoices.BoldPercentIn(this, language.Code)));
+                panel?.ShowModelWindow(ContextCorrector.Said(named, suggester.Name, sentence, scored, LanguageChoices.BoldPercentIn(this, language.Code), beams));
                 return WordSuggestions.OfModel(sentence[(sentence.LastIndexOf(' ') + 1)..], [.. scored.Select(offered => offered.Word)]);
             };
             panel.KnownWord = (language, word) => !spelling.Unknown(language, word);

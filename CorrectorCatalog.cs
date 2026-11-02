@@ -8,7 +8,7 @@ namespace Berpiztu.KeyPlus;
 /// The context models Berpiztu publishes on Hugging Face (berpiztu/keyboard-correctors, mT5's under Apache 2.0, and
 /// berpiztu/keyboard-correctors-gemma, T5Gemma 2's under the Gemma Terms of Use; made by llm-create's huggingface/),
 /// read live from each repository's correctors.json, the owner's choice (2026-11-01), so a corrector published there
-/// is offered without a new keyboard: each corrector's name, licence, size and files with their SHA-256, its licence's
+/// is offered without a new keyboard: each corrector's name, languages, licence, size and files with their SHA-256, its licence's
 /// files with them, fetched into a folder of its name as <see cref="ContextCorrector"/> reads them.
 /// </summary>
 public static class CorrectorCatalog
@@ -16,12 +16,20 @@ public static class CorrectorCatalog
     private const string Hub = "https://huggingface.co/berpiztu/";
     private static readonly string[] Repositories = ["keyboard-correctors-gemma", "keyboard-correctors"];
 
-    /// <summary>A corrector offered: its name, its weights' bits (8, 32), its licence (gemma, apache-2.0), its own files' size and its files, its licence's (a few KB) among them.</summary>
-    public sealed record Offered(string Name, int Bits, string License, long Bytes, IReadOnlyList<Downloads.Item> Files)
+    /// <summary>A corrector offered: its name, its weights' bits (8, 32), its languages (es, en), its licence (gemma, apache-2.0), its own files' size and its files, its licence's (a few KB) among them.</summary>
+    public sealed record Offered(string Name, int Bits, IReadOnlyList<string> Languages, string License, long Bytes, IReadOnlyList<Downloads.Item> Files)
     {
         /// <summary>Under the Gemma Terms of Use: its notice and use restrictions said before it is downloaded.</summary>
         public bool Gemma => License == "gemma";
     }
+
+    /// <summary>Those offered that read a language (the owner, 2026-11-01): a corrector of Spanish alone never on English's page.</summary>
+    public static IReadOnlyList<Offered> In(IReadOnlyList<Offered> offered, string language) =>
+        [.. offered.Where(model => model.Languages.Contains(language))];
+
+    /// <summary>The models on the device a language's list shows: all but one published that does not read it, once downloaded too; one put by hand says no language and stays.</summary>
+    public static IEnumerable<string> HereIn(IEnumerable<string> here, IReadOnlyList<Offered> offered, string language) =>
+        here.Where(name => offered.FirstOrDefault(model => model.Name == name) is not { } model || model.Languages.Contains(language));
 
     /// <summary>The correctors offered, as the repositories list them now; none where they cannot be read, said in the log.</summary>
     public static async Task<IReadOnlyList<Offered>> ReadAsync(CancellationToken cancel = default)
@@ -39,7 +47,8 @@ public static class CorrectorCatalog
                 foreach (var corrector in listed.RootElement.GetProperty("correctors").EnumerateArray())
                 {
                     var files = Items(root, corrector.GetProperty("files")).ToList();
-                    offered.Add(new(corrector.GetProperty("name").GetString()!, corrector.GetProperty("bits").GetInt32(), corrector.GetProperty("license").GetString()!,
+                    offered.Add(new(corrector.GetProperty("name").GetString()!, corrector.GetProperty("bits").GetInt32(),
+                        [.. corrector.GetProperty("languages").EnumerateArray().Select(language => language.GetString()!)], corrector.GetProperty("license").GetString()!,
                         corrector.GetProperty("bytes").GetInt64(), [.. files, .. licence]));
                 }
             }

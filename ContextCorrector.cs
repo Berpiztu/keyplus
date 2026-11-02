@@ -182,8 +182,11 @@ public sealed class ContextCorrector : IDisposable
     /// <summary>What a sentence is given as to be asked for the words to offer, as llm-create taught it (suggest_pairs.TAG).</summary>
     private const string SuggestTag = "sugerir: ";
 
-    /// <summary>The words offered, as llm-create measures them (common.suggest): the likeliest of a beam search of this many…</summary>
-    public const int Beams = 5;
+    /// <summary>The words offered, as llm-create measures them (common.suggest): the likeliest of a beam search of this many, unless Troubleshooting's Search beams says other…</summary>
+    public const int BeamsUsual = 5;
+
+    /// <summary>The most beams Search beams takes; the fewest are the words offered.</summary>
+    public const int BeamsMost = 10;
 
     /// <summary>…written up to this many tokens, each a word…</summary>
     private const int WordTokens = 12;
@@ -191,9 +194,12 @@ public sealed class ContextCorrector : IDisposable
     /// <summary>…of which the three likeliest are offered.</summary>
     public const int Offered = 3;
 
+    /// <summary>The fewest beams Search beams takes: fewer could not give the words offered.</summary>
+    public const int BeamsFewest = Offered;
+
     /// <summary>
     /// The words the model offers for the sentence typed so far, its last word being typed ("hola que t": "tal"), the
-    /// likeliest first, as llm-create taught and measures it: a beam search of <see cref="Beams"/>, each hypothesis
+    /// likeliest first, as llm-create taught and measures it: a beam search of <see cref="BeamsUsual"/>, each hypothesis
     /// scored by its log-probability over its length, the <see cref="Offered"/> best of those ended. None where the
     /// sentence is empty or too long, the corrector was let go, or <paramref name="cancel"/> asked to stop (a newer letter).
     /// A model taught with the language in it is asked in the keyboard's (<paramref name="language"/>, es or en).
@@ -203,14 +209,15 @@ public sealed class ContextCorrector : IDisposable
 
     /// <summary>
     /// What the debug window shows (the owner, 2026-11-01): the model chosen, the one really loaded, the language's Percentage for
-    /// bold, what it was asked and the words it gave with their percentages, as it gave them; none loaded, that the words come from the list.
+    /// bold, the search's beams, what it was asked and the words it gave with their percentages, as it gave them; none loaded, that the words come from the list.
     /// </summary>
-    public static string Said(string? chosen, string? loaded, string asked, IReadOnlyList<(string Word, double Probability)> words, int boldPercent = 0)
+    public static string Said(string? chosen, string? loaded, string asked, IReadOnlyList<(string Word, double Probability)> words, int boldPercent = 0, int beams = BeamsUsual)
     {
         var said = new System.Text.StringBuilder();
         said.AppendLine($"Elegido: {chosen ?? "ninguno"}");
         said.AppendLine($"Cargado: {loaded ?? "ninguno: palabras de la lista"}");
         said.AppendLine($"Negrita desde: {(boldPercent > 0 ? $"{boldPercent} %" : "sin porcentaje")}");
+        said.AppendLine($"Haces: {beams}");
         said.AppendLine($"Escrito: {asked}");
         foreach (var (word, probability) in words)
         {
@@ -220,9 +227,10 @@ public sealed class ContextCorrector : IDisposable
         return said.ToString().TrimEnd();
     }
 
-    /// <summary>The words of <see cref="Suggest"/>, each with the probability the search gave to writing it whole.</summary>
-    public IReadOnlyList<(string Word, double Probability)> SuggestScored(string typed, string language, CancellationToken cancel = default)
+    /// <summary>The words of <see cref="Suggest"/>, each with the probability the search gave to writing it whole, by a search of <paramref name="beamCount"/> beams.</summary>
+    public IReadOnlyList<(string Word, double Probability)> SuggestScored(string typed, string language, CancellationToken cancel = default, int beamCount = BeamsUsual)
     {
+        var width = Math.Clamp(beamCount, BeamsFewest, BeamsMost);
         var text = typed.TrimStart();
         if (text.Length == 0)
         {
@@ -248,7 +256,7 @@ public sealed class ContextCorrector : IDisposable
             var mask = new DenseTensor<long>(Enumerable.Repeat(1L, read.Length).ToArray(), [1, read.Length]);
             using var encoded = encoder.Run([NamedOnnxValue.CreateFromTensor("input_ids", ids), NamedOnnxValue.CreateFromTensor("attention_mask", mask)]);
             var hidden = encoded.First().AsTensor<float>();
-            var (length, width) = (hidden.Dimensions[1], hidden.Dimensions[2]);
+            var (length, heardWidth) = (hidden.Dimensions[1], hidden.Dimensions[2]);
             var sentence = hidden.ToArray();
 
             // The sentence read and its mask, once for each beam, made once for each number of beams and copied whole:
@@ -258,7 +266,7 @@ public sealed class ContextCorrector : IDisposable
             {
                 if (!heardFor.TryGetValue(rows, out var made))
                 {
-                    var heard = new DenseTensor<float>([rows, length, width]);
+                    var heard = new DenseTensor<float>([rows, length, heardWidth]);
                     var masks = new DenseTensor<long>([rows, read.Length]);
                     for (var row = 0; row < rows; row++)
                     {
@@ -313,12 +321,12 @@ public sealed class ContextCorrector : IDisposable
                     }
 
                     var logSum = most + Math.Log(sum);
-                    // The 2 × Beams likeliest tokens, kept in a small heap whose least is let go: only a token above it goes in.
+                    // The 2 × width likeliest tokens, kept in a small heap whose least is let go: only a token above it goes in.
                     var best = new PriorityQueue<int, float>();
                     for (var token = 0; token < vocabulary; token++)
                     {
                         var score = scores[token];
-                        if (best.Count < Beams * 2)
+                        if (best.Count < width * 2)
                         {
                             best.Enqueue(token, score);
                         }
@@ -335,21 +343,21 @@ public sealed class ContextCorrector : IDisposable
                 }
 
                 beams = [];
-                foreach (var hypothesis in grown.OrderByDescending(hypothesis => hypothesis.LogProbability).Take(Beams * 2))
+                foreach (var hypothesis in grown.OrderByDescending(hypothesis => hypothesis.LogProbability).Take(width * 2))
                 {
                     if (hypothesis.Tokens[^1] == Eos)
                     {
                         // Ended: scored over its length, as the beam search llm-create measures with (length penalty 1).
                         ended.Add((hypothesis.Tokens, hypothesis.LogProbability / (hypothesis.Tokens.Count - 1), hypothesis.LogProbability));
                     }
-                    else if (beams.Count < Beams)
+                    else if (beams.Count < width)
                     {
                         beams.Add(hypothesis);
                     }
                 }
 
                 // Done once enough have ended and none still growing can beat the worst of the best ended.
-                if (ended.Count >= Beams && beams.All(beam => beam.LogProbability / beam.Tokens.Count <= ended.OrderByDescending(end => end.Score).ElementAt(Beams - 1).Score))
+                if (ended.Count >= width && beams.All(beam => beam.LogProbability / beam.Tokens.Count <= ended.OrderByDescending(end => end.Score).ElementAt(width - 1).Score))
                 {
                     break;
                 }

@@ -344,6 +344,8 @@
   <string name="spelling_download_again">Download again</string>
   <string name="spelling_undo_enter">Undo after Enter</string>
   <string name="spelling_undo_enter_summary">A sentence corrected as Enter ends it offers ↶ in the toolbar too, which asks the program to undo (Ctrl+Z): how much it takes back is the program\'s</string>
+  <string name="troubleshooting_beams">Search beams</string>
+  <string name="troubleshooting_beams_summary">How many answers the context model follows at once for the words it offers: from 3 to 10, 5 by default. Fewer is faster and may give worse words</string>
   <string name="troubleshooting_detailed_log">Detailed log</string>
   <string name="troubleshooting_detailed_log_summary">Also writes what the keyboard follows, to find a fault: the names of the windows, fields and menus focused, and why Spelling did or did not correct. Off, the log keeps only errors, warnings and the main events, never what is on the screen</string>
   <string name="troubleshooting_log_view">What the log keeps</string>

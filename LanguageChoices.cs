@@ -48,6 +48,12 @@ public static class LanguageChoices
     /// <summary>A language's Percentage for bold, kept as written.</summary>
     public static void SetBoldPercent(Context context, string language, int percent) => KeyPlusPreferences.Global(context).Edit()!.PutInt(Key("spellingBoldPercent", language), percent)!.Apply();
 
+    /// <summary>Troubleshooting's Search beams, for every language; 5 until one is written.</summary>
+    public static int ModelBeams(Context context) => KeyPlusPreferences.Global(context).GetInt("modelBeams", ContextCorrector.BeamsUsual);
+
+    /// <summary>Troubleshooting's Search beams, kept as written.</summary>
+    public static void SetModelBeams(Context context, int beams) => KeyPlusPreferences.Global(context).Edit()!.PutInt("modelBeams", beams)!.Apply();
+
     /// <summary>Whether the debug window shows what the context model gave (the toolbar's Debug), for every language; off until turned on.</summary>
     public static bool ModelWindow(Context context) => KeyPlusPreferences.Global(context).GetBoolean("modelWindow", false);
 
