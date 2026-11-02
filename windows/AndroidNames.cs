@@ -75,6 +75,8 @@ namespace Berpiztu.KeyPlus
             public const int ic_tool_resize = 27;
             public const int ic_tool_spellcheck = 28;
             public const int ic_tool_debug = 31;
+            public const int ic_tool_online = 32;
+            public const int ic_tool_local = 33;
             public const int ic_settings_gesture = 29;
             public const int ic_emoji_search = 30;
         }

@@ -263,21 +263,23 @@ public sealed class ColorsRow : FrameLayout
 /// A list's words in Tema's small type (<see cref="ColorsRow.TextSp"/>), the shown one and those dropped down alike; the
 /// shown one on one line, cut short with … where its list is narrower, those dropped down whole. Its list and the label
 /// before it (<see cref="List"/>, <see cref="Label"/>) are the settings' one list, Tema's and a language's context
-/// model's alike.
+/// model's alike. A choice may have a sign at its line's right, shown and dropped down alike, in the words' colour.
 /// </summary>
-public sealed class SmallWords(Context context, IReadOnlyList<string> words)
+public sealed class SmallWords(Context context, IReadOnlyList<string> words, IReadOnlyList<int>? signs = null)
     : ArrayAdapter<string>(context, Android.Resource.Layout.SimpleSpinnerItem, words.ToList())
 {
     private const float GapDp = 4;
+    private const float SignDp = 16;
 
     /// <summary>
     /// A list in small type, as wide as its longest choice whatever it shows, so a choice made moves nothing. A choice
     /// tells <paramref name="picked"/>; so does a list as it is first laid out, of the one it shows.
+    /// <paramref name="signs"/>, each choice's sign at its right, 0 for none.
     /// </summary>
-    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked)
+    public static Spinner List(Context context, IReadOnlyList<string> words, int chosen, Action<int> picked, IReadOnlyList<int>? signs = null)
     {
         // Dropped down in Android's own rows, a finger's height each, as Tema's lists are.
-        var adapter = new SmallWords(context, words);
+        var adapter = new SmallWords(context, words, signs);
         adapter.SetDropDownViewResource(Android.Resource.Layout.SimpleSpinnerDropDownItem);
         var list = new Spinner(context) { Adapter = adapter };
         if (chosen >= 0)
@@ -319,7 +321,7 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words)
 
     public override View GetView(int position, View? convertView, ViewGroup parent)
     {
-        var shown = Small(base.GetView(position, convertView, parent));
+        var shown = Small(base.GetView(position, convertView, parent), position);
         if (shown is TextView line)
         {
             line.SetSingleLine(true);
@@ -329,11 +331,26 @@ public sealed class SmallWords(Context context, IReadOnlyList<string> words)
         return shown;
     }
 
-    public override View? GetDropDownView(int position, View? convertView, ViewGroup? parent) => Small(base.GetDropDownView(position, convertView, parent));
+    public override View? GetDropDownView(int position, View? convertView, ViewGroup? parent) => Small(base.GetDropDownView(position, convertView, parent), position);
 
-    private View Small(View? view)
+    private View Small(View? view, int position)
     {
-        (view as TextView)?.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
+        if (view is TextView line)
+        {
+            line.SetTextSize(ComplexUnitType.Sp, ColorsRow.TextSp);
+            Drawable? sign = null;
+            if (signs is not null && position < signs.Count && signs[position] != 0 && context.GetDrawable(signs[position])?.Mutate() is { } drawn)
+            {
+                var size = Dp(context, SignDp);
+                drawn.SetBounds(0, 0, size, size);
+                drawn.SetTint(line.CurrentTextColor);
+                sign = drawn;
+            }
+
+            line.SetCompoundDrawablesRelative(null, null, sign, null);
+            line.CompoundDrawablePadding = Dp(context, GapDp);
+        }
+
         return view!;
     }
 }

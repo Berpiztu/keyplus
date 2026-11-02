@@ -548,6 +548,9 @@ public sealed class KeyPanel
     /// <summary>Whether the debug window is to be shown (the toolbar's Debug).</summary>
     public Func<bool>? ModelWindowOn { get; set; }
 
+    /// <summary>What the debug window says where no context model is on (the keyboard's ContextCorrector.Said, which the popup has not).</summary>
+    public Func<StandardLanguage, string, string>? SaidWithoutModel { get; set; }
+
     private PopupWindow? modelWindow;
     private TextView? modelWindowText;
     private (int X, int Y) modelWindowAt = (24, 240);
@@ -4906,9 +4909,9 @@ public sealed class KeyPanel
         }
 
         modelAsked?.Cancel();
-        if (word.Length > 0 && ModelWindowOn?.Invoke() == true)
+        if (word.Length > 0 && ModelWindowOn?.Invoke() == true && SaidWithoutModel is { } said)
         {
-            ShowModelWindow(ContextCorrector.Said(null, null, word, []));
+            ShowModelWindow(said(standard!.Language, word));
         }
 
         // The word list's words, as the model's: their first, the centre, is what a space takes with Autocorrect on. Kept

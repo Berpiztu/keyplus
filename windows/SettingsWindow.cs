@@ -381,8 +381,18 @@ public sealed class SettingsWindow : Window
 
                 form.Children.Add(WithLine(FieldSaying(null, both, Texts.Get(Resource.String.spelling_writes_offers_summary)), FetchLine(LanguageOptions.WordListOf(language))));
                 form.Children.Add(ContextModelPart(code, now, Keep, () => ShowPage(LanguagePage(language, from))));
-                form.Children.Add(ContextSuggestsPart(code, now));
-                form.Children.Add(BoldPercentPart(code));
+                // The percentage for bold turned off and faded while the model gives no words.
+                var bold = BoldPercentPart(code);
+                void ShowBold()
+                {
+                    var applies = now.Context is not null && KeyboardPreferences.Read().ContextSuggestsIn(code);
+                    bold.IsEnabled = applies;
+                    bold.Opacity = applies ? 1 : OffOpacity;
+                }
+
+                ShowBold();
+                form.Children.Add(ContextSuggestsPart(code, now, ShowBold));
+                form.Children.Add(bold);
                 continue;
             }
 
@@ -996,7 +1006,7 @@ public sealed class SettingsWindow : Window
         List<string> names = [];
         var kept = now.Context ?? KeyboardPreferences.Read().ContextModelIn(code);
         var box = new CheckBox { Content = Texts.Get(Resource.String.context_model), IsChecked = now.Context is not null };
-        var list = new ComboBox { VerticalAlignment = VerticalAlignment.Center };
+        var list = new ComboBox { VerticalAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Stretch, ItemTemplate = ModelLineTemplate() };
         list.Width = ModelListWidth(list);
         var fetching = new ContentControl();
         var filling = false;
@@ -1019,19 +1029,21 @@ public sealed class SettingsWindow : Window
             foreach (var name in names)
             {
                 // One offered says its weights' bits, as the repository lists them: the same model at 8 and at 32 bits told apart.
-                list.Items.Add(new ComboBoxItem { Content = offered.FirstOrDefault(model => model.Name == name) is { } model ? Texts.Get(Resource.String.context_model_bits, name, model.Bits) : name });
+                list.Items.Add(offered.FirstOrDefault(model => model.Name == name) is { } model
+                    ? new ModelLine(Texts.Get(Resource.String.context_model_bits, name, model.Bits), Resource.Drawable.ic_tool_online)
+                    : new ModelLine(name, Resource.Drawable.ic_tool_local));
             }
 
             if (names.Count == 0)
             {
-                list.Items.Add(new ComboBoxItem { Content = Texts.Get(Resource.String.context_model_none) });
+                list.Items.Add(new ModelLine(Texts.Get(Resource.String.context_model_none), null));
             }
 
             // The one kept no longer here: an empty line shown, never the first as if chosen.
             if (kept is not null && names.Count > 0 && !names.Contains(kept))
             {
                 names.Insert(0, "");
-                list.Items.Insert(0, new ComboBoxItem { Content = "—" });
+                list.Items.Insert(0, new ModelLine("—", null));
             }
 
             list.IsEnabled = names.Count > 0;
@@ -1137,14 +1149,14 @@ public sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// The context models' list's width, whatever it holds: the longest name llm-create gives a corrector
-    /// (gemma-wiki-glide-32) at the list's font, its padding, its arrow (a scroll bar's width) and its border.
+    /// The context models' list's width, whatever it holds: the longest line it shows a corrector with
+    /// (small-es-en-virtus-32 · 32 bits) at the list's font, its sign, its padding, its arrow (a scroll bar's width) and its border.
     /// </summary>
     private static double ModelListWidth(Control list)
     {
-        var longest = new FormattedText("gemma-wiki-glide-32", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+        var longest = new FormattedText("small-es-en-virtus-32 · 32 bits", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
             new Typeface(list.FontFamily, list.FontStyle, list.FontWeight, list.FontStretch), list.FontSize, Brushes.Black, 1.0);
-        return Math.Ceiling(longest.WidthIncludingTrailingWhitespace) + list.Padding.Left + list.Padding.Right
+        return Math.Ceiling(longest.WidthIncludingTrailingWhitespace) + ModelSign.Room + list.Padding.Left + list.Padding.Right
             + SystemParameters.VerticalScrollBarWidth + list.BorderThickness.Left + list.BorderThickness.Right;
     }
 
@@ -1152,7 +1164,7 @@ public sealed class SettingsWindow : Window
     /// Under the Context model, as Android's: Use it for suggestions too, the model's words offered as a word is typed,
     /// the word list's where it offers none; faded while the model is off, a click then saying why.
     /// </summary>
-    private static FrameworkElement ContextSuggestsPart(string code, LanguageSpelling now)
+    private static FrameworkElement ContextSuggestsPart(string code, LanguageSpelling now, Action turned)
     {
         var box = new CheckBox { Content = Texts.Get(Resource.String.context_model_suggests), IsChecked = KeyboardPreferences.Read().ContextSuggestsIn(code) };
         if (now.Context is null)
@@ -1173,22 +1185,57 @@ public sealed class SettingsWindow : Window
             var on = box.IsChecked == true;
             KeyboardPreferences.Read().WithContextSuggests(code, on).Keep();
             Log.Write($"Corrector: {code}'s context model {(on ? "gives" : "no longer gives")} the words offered as a word is typed");
+            turned();
         };
         return FieldSaying(null, box, Texts.Get(Resource.String.context_model_suggests_summary));
     }
 
-    /// <summary>Beside it, a language's Percentage for bold: a whole number from 1 to 100, kept as it is left; empty, none by percentage.</summary>
+    /// <summary>Beside it, a language's Percentage for bold, in a box of two figures, kept as it is written; empty, none by percentage.</summary>
     private static FrameworkElement BoldPercentPart(string code)
     {
         var now = KeyboardPreferences.Read().BoldPercentIn(code);
-        var field = new TextBox { Width = 60, HorizontalAlignment = HorizontalAlignment.Left, Text = now > 0 ? now.ToString(System.Globalization.CultureInfo.InvariantCulture) : "" };
-        field.LostFocus += (_, _) =>
-        {
-            var percent = int.TryParse(field.Text, out var written) ? Math.Clamp(written, 0, 100) : 0;
-            field.Text = percent > 0 ? percent.ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
-            KeyboardPreferences.Read().WithBoldPercent(code, percent).Keep();
-        };
-        return FieldSaying(Resource.String.context_model_bold, field, Texts.Get(Resource.String.context_model_bold_summary));
+        return NumberField(Resource.String.context_model_bold, Resource.String.context_model_bold_summary,
+            now > 0 ? Math.Min(now, 99).ToString(CultureInfo.InvariantCulture) : "", "%",
+            written => KeyboardPreferences.Read().WithBoldPercent(code, int.TryParse(written, out var percent) ? percent : 0).Keep());
+    }
+
+    /// <summary>
+    /// A number on the page itself, as Android's (the owner, 2026-11-01): its name, what it does, and under them a box of two
+    /// figures and what stays fixed beside it, kept as it is written.
+    /// </summary>
+    private static FrameworkElement NumberField(int name, int said, string now, string beside, Action<string> written)
+    {
+        var field = new TextBox { Width = 40, MaxLength = 2, HorizontalContentAlignment = HorizontalAlignment.Center, Text = now };
+        field.TextChanged += (_, _) => written(field.Text);
+        var line = new StackPanel { Orientation = Orientation.Horizontal };
+        line.Children.Add(field);
+        line.Children.Add(new TextBlock { Text = beside, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) });
+        return UnderWords(name, said, line);
+    }
+
+    /// <summary>A parameter: its name, what it does, and under them what it is written or chosen in.</summary>
+    private static FrameworkElement UnderWords(int name, int said, FrameworkElement control)
+    {
+        control.Margin = new Thickness(0, 4, 0, 0);
+        var under = new StackPanel();
+        under.Children.Add(new TextBlock { Text = Texts.Get(said), Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
+        under.Children.Add(control);
+        return FieldSaying(name, under, null);
+    }
+
+    /// <summary>A line of the context models' list: its words and, at its right, its sign.</summary>
+    private static DataTemplate ModelLineTemplate()
+    {
+        var line = new FrameworkElementFactory(typeof(DockPanel));
+        var sign = new FrameworkElementFactory(typeof(ModelSign));
+        sign.SetValue(DockPanel.DockProperty, Dock.Right);
+        var words = new FrameworkElementFactory(typeof(TextBlock));
+        words.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(ModelLine.Words)));
+        words.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
+        words.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+        line.AppendChild(sign);
+        line.AppendChild(words);
+        return new DataTemplate { VisualTree = line };
     }
 
     /// <summary>The context models Hugging Face offers, read once while the settings are open (<see cref="CorrectorCatalog"/>).</summary>
@@ -1501,23 +1548,18 @@ public sealed class SettingsWindow : Window
         return form;
     }
 
-    /// <summary>Search beams, for every language: a whole number from 3 to 10, kept as soon as it is one; left empty or out of range, written back as allowed.</summary>
+    /// <summary>Search beams, for every language: chosen in a list of one width, from 1 to 10, kept as it is chosen.</summary>
     private static FrameworkElement BeamsPart()
     {
-        var field = new TextBox { Width = 60, HorizontalAlignment = HorizontalAlignment.Left, Text = KeyboardPreferences.Read().Beams.ToString(System.Globalization.CultureInfo.InvariantCulture) };
-        field.TextChanged += (_, _) =>
+        var list = new ComboBox { Width = 60, HorizontalAlignment = HorizontalAlignment.Left };
+        foreach (var beams in Enumerable.Range(ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost))
         {
-            if (int.TryParse(field.Text, out var written) && written is >= ContextCorrector.BeamsFewest and <= ContextCorrector.BeamsMost)
-            {
-                (KeyboardPreferences.Read() with { Beams = written }).Keep();
-            }
-        };
-        field.LostFocus += (_, _) =>
-        {
-            var beams = int.TryParse(field.Text, out var written) ? Math.Clamp(written, ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost) : ContextCorrector.BeamsUsual;
-            field.Text = beams.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        };
-        return FieldSaying(Resource.String.troubleshooting_beams, field, Texts.Get(Resource.String.troubleshooting_beams_summary));
+            list.Items.Add(beams.ToString(CultureInfo.InvariantCulture));
+        }
+
+        list.SelectedIndex = Math.Clamp(KeyboardPreferences.Read().Beams, ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost) - ContextCorrector.BeamsFewest;
+        list.SelectionChanged += (_, _) => (KeyboardPreferences.Read() with { Beams = list.SelectedIndex + ContextCorrector.BeamsFewest }).Keep();
+        return UnderWords(Resource.String.troubleshooting_beams, Resource.String.troubleshooting_beams_summary, list);
     }
 
     /// <summary>Solución de problemas, as Android's: what an app or Windows needs for the keyboard to work with it, and where the keyboard's log is.</summary>
@@ -1825,4 +1867,35 @@ public sealed class SettingsWindow : Window
     /// <summary>A part of a page under its own heading: Spelling and Dictionary on a language's page.</summary>
     private static TextBlock Section(int name) =>
         new() { Text = Texts.Get(name), FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, FieldGapDp / 2, 0, FieldGapDp / 2) };
+}
+
+/// <summary>A line of the context models' list: its words, and its sign (a globe for one published, a computer for one only here), or none.</summary>
+public sealed record ModelLine(string Words, int? Sign);
+
+/// <summary>A line's sign, at its right, in the words' colour.</summary>
+public sealed class ModelSign : FrameworkElement
+{
+    private const double Size = 16;
+    private const double Gap = 4;
+
+    /// <summary>The room it takes in a line.</summary>
+    public const double Room = Size + Gap;
+
+    public ModelSign()
+    {
+        Width = Size;
+        Height = Size;
+        Margin = new Thickness(Gap, 0, 0, 0);
+        VerticalAlignment = VerticalAlignment.Center;
+        DataContextChanged += (_, _) => InvalidateVisual();
+    }
+
+    protected override void OnRender(DrawingContext drawing)
+    {
+        if (DataContext is ModelLine { Sign: { } sign })
+        {
+            var color = TextElement.GetForeground(this) is SolidColorBrush words ? words.Color : SystemColors.ControlTextColor;
+            Icons.Draw(drawing, sign, new Point(Size / 2, Size / 2), Size, color);
+        }
+    }
 }

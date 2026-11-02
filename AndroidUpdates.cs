@@ -80,6 +80,22 @@ public static class AndroidUpdates
         }
     }
 
+    /// <summary>From Información's Check now: GitHub asked, its latest release given back for the page itself to show; none where it cannot be read, said in the log.</summary>
+    public static async Task<Updates.Release?> LatestAsync(Context context)
+    {
+        try
+        {
+            var release = await Updates.LatestAsync(File);
+            KeepChecked(context);
+            return release;
+        }
+        catch (Exception failed) when (Failed(failed))
+        {
+            Log.Write($"Updates: {failed.Message}");
+            return null;
+        }
+    }
+
     /// <summary>From the app: GitHub asked, and a newer release offered in a dialog; asked by hand, an answer whatever it is.</summary>
     public static async Task CheckAsync(Activity activity, bool asked)
     {
@@ -179,7 +195,7 @@ public static class AndroidUpdates
     }
 #else
     /// <summary>The release's page on GitHub opened in the browser: what it brings, and its APK to download and install.</summary>
-    private static void Open(Activity activity, Updates.Release release)
+    public static void Open(Activity activity, Updates.Release release)
     {
         try
         {

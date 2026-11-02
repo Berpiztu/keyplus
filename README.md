@@ -2,6 +2,9 @@
 sentences and suggest words, were created using Virtus, an AI alignment framework by Berpiztu that builds in character
 and values, not constraints alone: natively, in the weights, not as an external limiter.
 
+[![Hugging Face: keyboard-correctors](https://img.shields.io/badge/Hugging%20Face-keyboard--correctors-FFD21E?logo=huggingface&logoColor=000)](https://huggingface.co/berpiztu/keyboard-correctors)
+[![Hugging Face: keyboard-correctors-gemma](https://img.shields.io/badge/Hugging%20Face-keyboard--correctors--gemma-FFD21E?logo=huggingface&logoColor=000)](https://huggingface.co/berpiztu/keyboard-correctors-gemma)
+
 # KeyPlus
 
 **A keyboard made for productivity, that uses AI to do more, privately**: for working
@@ -236,7 +239,9 @@ a window that does.
   makes each touch felt. Android only: Windows has neither.
 - **Settings › About**: **Check for updates automatically** (on) asks
   GitHub once a day whether a new version is out, and **Check now** at
-  once; a new one asks whether to update (on Android a notification first,
+  once; on Android's page, Check now says under it the version installed
+  and the latest, a link to that release on GitHub. A new one found by
+  itself asks whether to update (on Android a notification first,
   which opens the app), and a yes downloads it and opens its installer:
   Windows' MSI; on Android a yes opens the release's page on GitHub, where
   its APK is downloaded and handed to Android's installer. The apps install
@@ -313,7 +318,8 @@ a window that does.
   with the model chosen, the one really loaded, the Percentage for bold, the
   search's beams and its words with percentages. **Search beams**, in
   Troubleshooting: how many answers the model follows at once for the words it
-  offers, from 3 to 10, 5 by default; fewer is faster and may give worse words.
+  offers, from 1 to 10, 5 by default; fewer is faster and may give worse words,
+  and under 3 it may offer fewer than three.
   Autocorrect writes by itself only where the field is surely a document
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,

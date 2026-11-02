@@ -771,6 +771,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Learnable = (language, word) => WordsField && personal.LearnTyped && Learns(language) && spelling.Unknown(language, word);
             panel.OnlyInHunspell = (language, word) => WordsField && spelling.OnlyInHunspell(language, word);
             panel.Sure = (language, word, offered) => WordsField ? spelling.Sure(language, word, offered) : null;
+            panel.SaidWithoutModel = (language, word) => ContextCorrector.Said(null, null, word, [], LanguageChoices.BoldPercentIn(this, language.Code), LanguageChoices.ModelBeams(this));
             // A misspelling's word first; else the one the model gave the language's Percentage for bold.
             panel.SureOfModel = (language, word, offered) => WordsField
                 ? spelling.SureOfModel(language, word, offered) ?? WordSuggestions.ByPercent(lastScored, offered, LanguageChoices.BoldPercentIn(this, language.Code))

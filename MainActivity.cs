@@ -842,12 +842,14 @@ public sealed class MainActivity : Activity
                     {
                         LanguageChoices.SetContextSuggests(this, code, on);
                         Log.Write($"Corrector: {code}'s context model {(on ? "gives" : "no longer gives")} the words offered as a word is typed");
+                        settings!.Refresh(Again());
                     }));
-                // Beside it, the percentage from which a word of the model's goes in bold.
+                // Beside it, the percentage from which a word of the model's goes in bold: turned off and faded while the model gives no words.
                 var boldPercent = LanguageChoices.BoldPercentIn(this, code);
-                spelling.Add(new(GetString(Resource.String.context_model_bold),
-                    $"{(boldPercent > 0 ? $"{boldPercent} %" : "—")} · {GetString(Resource.String.context_model_bold_summary)}",
-                    Tapped: () => AskBoldPercent(code, Again)));
+                var boldApplies = now.Context is not null && LanguageChoices.ContextSuggestsIn(this, code);
+                spelling.Add(new(GetString(Resource.String.context_model_bold), GetString(Resource.String.context_model_bold_summary), Enabled: boldApplies,
+                    Below: NumberBox(boldPercent > 0 ? Math.Min(boldPercent, 99).ToString(System.Globalization.CultureInfo.InvariantCulture) : "", "%",
+                        written => LanguageChoices.SetBoldPercent(this, code, int.TryParse(written, out var percent) ? percent : 0), boldApplies)));
                 continue;
             }
 
@@ -901,7 +903,8 @@ public sealed class MainActivity : Activity
     /// and under its line the list of the models on this device and those
     /// Berpiztu offers on Hugging Face (<see cref="CorrectorCatalog"/>, read
     /// once while the app is open, each with its bits, only those of the
-    /// language), where the one it reads
+    /// language; at each line's right a globe for one published, a computer
+    /// for one only on this device), where the one it reads
     /// with is chosen, as wide as its longest name, with its label before it as
     /// Tema's (<see cref="SmallWords"/>), and at that line's end that one's
     /// download button (<see cref="AddFetchButton"/>), its bar under the line,
@@ -961,7 +964,7 @@ public sealed class MainActivity : Activity
             }
 
             settings!.Refresh(page());
-        });
+        }, names.Count > 0 ? [.. names.Select(name => name.Length == 0 ? 0 : offered.Any(model => model.Name == name) ? Resource.Drawable.ic_tool_online : Resource.Drawable.ic_tool_local)] : null);
         ((LinearLayout.LayoutParams)list.LayoutParameters!).LeftMargin = 0;
         ColorsRow.Turned(list, names.Count > 0);
         // Under its words, as other rows' lists: Modelo, the list and, at the line's end, the chosen one's download button.
@@ -1002,41 +1005,37 @@ public sealed class MainActivity : Activity
 
     }
 
-    /// <summary>Troubleshooting's Search beams asked: a whole number from 3 to 10; empty, the usual 5.</summary>
-    private void AskBeams()
+    /// <summary>
+    /// A number written on the page itself, under its row's words (the owner, 2026-11-01: never a window of its own): a box
+    /// of two figures and what stays fixed beside it, kept as it is written.
+    /// </summary>
+    private View NumberBox(string now, string beside, Action<string> written, bool enabled)
     {
-        var field = new EditText(this) { Text = LanguageChoices.ModelBeams(this).ToString(System.Globalization.CultureInfo.InvariantCulture), InputType = Android.Text.InputTypes.ClassNumber };
-        new AlertDialog.Builder(this)
-            .SetTitle(Resource.String.troubleshooting_beams)!
-            .SetView(field)!
-            .SetPositiveButton(Android.Resource.String.Ok, (_, _) =>
-            {
-                var beams = int.TryParse(field.Text, out var written) ? Math.Clamp(written, ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost) : ContextCorrector.BeamsUsual;
-                LanguageChoices.SetModelBeams(this, beams);
-                Log.Write($"Corrector: search beams {beams}");
-                settings!.Refresh(TroubleshootingPage());
-            })!
-            .SetNegativeButton(Android.Resource.String.Cancel, (_, _) => { })!
-            .Show();
+        var density = Resources!.DisplayMetrics!.Density;
+        var field = Outlined(new EditText(this) { Text = now, InputType = Android.Text.InputTypes.ClassNumber, Gravity = GravityFlags.Center });
+        field.SetSingleLine(true);
+        field.SetFilters([new Android.Text.InputFilterLengthFilter(2)]);
+        field.TextChanged += (_, _) => written(field.Text ?? "");
+        field.Enabled = enabled;
+        var line = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+        line.SetGravity(GravityFlags.CenterVertical);
+        line.SetPadding(0, (int)(8 * density), 0, 0);
+        line.AddView(field, new LinearLayout.LayoutParams((int)(56 * density), ViewGroup.LayoutParams.WrapContent));
+        var fixedWords = new TextView(this) { Text = beside };
+        fixedWords.SetTextColor(settings!.Words);
+        fixedWords.SetPadding((int)(8 * density), 0, 0, 0);
+        line.AddView(fixedWords);
+        return line;
     }
 
-    /// <summary>A language's Percentage for bold asked: a whole number from 1 to 100, or empty for none by percentage.</summary>
-    private void AskBoldPercent(string code, Func<SettingsPage> page)
+    /// <summary>Troubleshooting's Search beams, chosen on the page itself in a list of one width, from 1 to 10.</summary>
+    private Spinner BeamsList()
     {
-        var now = LanguageChoices.BoldPercentIn(this, code);
-        var field = new EditText(this) { Text = now > 0 ? now.ToString(System.Globalization.CultureInfo.InvariantCulture) : "", InputType = Android.Text.InputTypes.ClassNumber };
-        new AlertDialog.Builder(this)
-            .SetTitle(Resource.String.context_model_bold)!
-            .SetView(field)!
-            .SetPositiveButton(Android.Resource.String.Ok, (_, _) =>
-            {
-                var percent = int.TryParse(field.Text, out var written) ? Math.Clamp(written, 0, 100) : 0;
-                LanguageChoices.SetBoldPercent(this, code, percent);
-                Log.Write($"Corrector: {code}'s percentage for bold {percent}");
-                settings!.Refresh(page());
-            })!
-            .SetNegativeButton(Android.Resource.String.Cancel, (_, _) => { })!
-            .Show();
+        var list = SmallWords.List(this, [.. Enumerable.Range(ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost).Select(beams => beams.ToString(System.Globalization.CultureInfo.InvariantCulture))],
+            Math.Clamp(LanguageChoices.ModelBeams(this), ContextCorrector.BeamsFewest, ContextCorrector.BeamsMost) - ContextCorrector.BeamsFewest,
+            chosen => LanguageChoices.SetModelBeams(this, chosen + ContextCorrector.BeamsFewest));
+        ((LinearLayout.LayoutParams)list.LayoutParameters!).LeftMargin = 0;
+        return list;
     }
 
     /// <summary>
@@ -1362,9 +1361,8 @@ public sealed class MainActivity : Activity
     private SettingsPage TroubleshootingPage() => new(GetString(Resource.String.troubleshooting),
     [
         [new(GetString(Resource.String.troubleshooting_menus), GetString(Resource.String.troubleshooting_menus_summary))],
-        [new(GetString(Resource.String.troubleshooting_beams),
-            $"{LanguageChoices.ModelBeams(this)} · {GetString(Resource.String.troubleshooting_beams_summary)}",
-            Tapped: AskBeams)],
+        [new(GetString(Resource.String.troubleshooting_beams), GetString(Resource.String.troubleshooting_beams_summary),
+            Below: BeamsList())],
         [
             new(GetString(Resource.String.troubleshooting_log), GetString(Resource.String.troubleshooting_log_summary)),
             Switch(Resource.String.troubleshooting_detailed_log, Resource.String.troubleshooting_detailed_log_summary, KeyPlusPreferences.DetailedLogKey, byDefault: false),
@@ -1429,16 +1427,68 @@ public sealed class MainActivity : Activity
         }
     }
 
-    private SettingsPage AboutPage() => new(GetString(Resource.String.about),
-    [
+    /// <summary>The latest release Check now was told, kept while the page is made again.</summary>
+    private static Updates.Release? latestRelease;
+
+    /// <summary>
+    /// Información: under Check now, on the page itself and in no window of its own (the owner, 2026-11-01), the version
+    /// installed and the latest, read when it is tapped, its number a link to that release on GitHub.
+    /// </summary>
+    private SettingsPage AboutPage()
+    {
+        var installed = VersionLine();
+        installed.Text = GetString(Resource.String.update_installed, new Java.Lang.String(AndroidUpdates.Running(this)));
+        var latest = VersionLine();
+        latest.Click += (_, _) =>
+        {
+            if (latestRelease is { } release)
+            {
+                AndroidUpdates.Open(this, release);
+            }
+        };
+        ShowLatest(latest, latestRelease?.Version.ToString() ?? "—", latestRelease is not null);
+        var lines = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        lines.AddView(installed);
+        lines.AddView(latest);
+        return new(GetString(Resource.String.about),
         [
-            new(GetString(Resource.String.version), AndroidUpdates.Running(this)),
-            Switch(Resource.String.updates_automatic, Resource.String.updates_automatic_summary, KeyPlusPreferences.UpdatesAutomaticKey),
-            new(GetString(Resource.String.updates_check), Tapped: () => _ = AndroidUpdates.CheckAsync(this, asked: true)),
-        ],
-        [new(GetString(Resource.String.futo))],
-        [new(GetString(Resource.String.licences), GetString(Resource.String.licences_summary))],
-    ]);
+            [
+                Switch(Resource.String.updates_automatic, Resource.String.updates_automatic_summary, KeyPlusPreferences.UpdatesAutomaticKey),
+                new(GetString(Resource.String.updates_check), Below: lines, Tapped: () => _ = CheckLatest(latest)),
+            ],
+            [new(GetString(Resource.String.futo))],
+            [new(GetString(Resource.String.licences), GetString(Resource.String.licences_summary))],
+        ]);
+    }
+
+    /// <summary>A line of Check now's, on one line whatever it says, in the rows' words' colour.</summary>
+    private TextView VersionLine()
+    {
+        var line = new TextView(this);
+        line.SetSingleLine(true);
+        line.Ellipsize = Android.Text.TextUtils.TruncateAt.End;
+        line.SetTextColor(settings!.Words);
+        return line;
+    }
+
+    /// <summary>GitHub asked for the latest release, said on the page as it is asked and as it answers.</summary>
+    private async Task CheckLatest(TextView latest)
+    {
+        ShowLatest(latest, GetString(Resource.String.update_checking)!, false);
+        latestRelease = await AndroidUpdates.LatestAsync(this);
+        ShowLatest(latest, latestRelease?.Version.ToString() ?? GetString(Resource.String.update_latest_failed)!, latestRelease is not null);
+    }
+
+    /// <summary>The latest line: what it says, blue, underlined and taking a tap only where it is a release's link.</summary>
+    private void ShowLatest(TextView latest, string said, bool link)
+    {
+        latest.Text = GetString(Resource.String.update_latest, new Java.Lang.String(said));
+        latest.Clickable = link;
+        latest.SetTextColor(link ? Android.Graphics.Color.ParseColor("#2196F3") : settings!.Words);
+        latest.PaintFlags = link
+            ? latest.PaintFlags | Android.Graphics.PaintFlags.UnderlineText
+            : latest.PaintFlags & ~Android.Graphics.PaintFlags.UnderlineText;
+    }
 
     /// <summary>Whether Berpiztu AI Keyboard is the keyboard in use.</summary>
     private bool IsKeyboardInUse() =>

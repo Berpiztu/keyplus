@@ -185,7 +185,7 @@ public sealed class ContextCorrector : IDisposable
     /// <summary>The words offered, as llm-create measures them (common.suggest): the likeliest of a beam search of this many, unless Troubleshooting's Search beams says other…</summary>
     public const int BeamsUsual = 5;
 
-    /// <summary>The most beams Search beams takes; the fewest are the words offered.</summary>
+    /// <summary>The most beams Search beams takes.</summary>
     public const int BeamsMost = 10;
 
     /// <summary>…written up to this many tokens, each a word…</summary>
@@ -194,8 +194,8 @@ public sealed class ContextCorrector : IDisposable
     /// <summary>…of which the three likeliest are offered.</summary>
     public const int Offered = 3;
 
-    /// <summary>The fewest beams Search beams takes: fewer could not give the words offered.</summary>
-    public const int BeamsFewest = Offered;
+    /// <summary>The fewest beams Search beams takes: under <see cref="Offered"/>, it may give fewer words than that.</summary>
+    public const int BeamsFewest = 1;
 
     /// <summary>
     /// The words the model offers for the sentence typed so far, its last word being typed ("hola que t": "tal"), the
