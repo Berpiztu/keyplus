@@ -123,6 +123,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     private string? contextLanguage;
 
     /// <summary>A language's context model as the keyboard applies it: none with Spelling off.</summary>
+    /// <summary>What the context model last gave, with its percentages, for the Percentage for bold.</summary>
+    private IReadOnlyList<(string Word, double Probability)> lastScored = [];
+
     private string? ContextModelOf(string? language) => language is null ? null : LanguageChoices.Applied(this, language).Context;
 
     /// <summary>Swipes read as words; whether a language is swiped in is its own (its Glide typing, <see cref="LanguageChoices.Glides"/>).</summary>
@@ -768,6 +771,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Learnable = (language, word) => WordsField && personal.LearnTyped && Learns(language) && spelling.Unknown(language, word);
             panel.OnlyInHunspell = (language, word) => WordsField && spelling.OnlyInHunspell(language, word);
             panel.Sure = (language, word, offered) => WordsField ? spelling.Sure(language, word, offered) : null;
+            // A misspelling's word first; else the one the model gave the language's Percentage for bold.
+            panel.SureOfModel = (language, word, offered) => WordsField
+                ? spelling.SureOfModel(language, word, offered) ?? WordSuggestions.ByPercent(lastScored, offered, LanguageChoices.BoldPercentIn(this, language.Code))
+                : null;
             panel.Learn = (language, word) =>
             {
                 personal.Learn(language.Code, word);
@@ -783,12 +790,28 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.Suggesting = (language, typed) => accountField ? [.. Addresses(typed).Take(WordSuggestions.Offered)]
                 : WordsField ? personal.WithAddresses(spelling.Suggest(language, typed), typed, WordSuggestions.Offered) : [];
             // While a word is typed, the words the language's context model offers for its sentence (llm-create taught
-            // them), the language's alone (SpellingEngine.OfLanguage), never mixed with the word list's; none where it has
-            // no model on, or the field is not words'.
+            // them), never mixed with the word list's nor filtered by it (WordSuggestions.OfModel); none where it has no
+            // model on, or the field is not words'.
+            panel.ModelWindowOn = () => LanguageChoices.ModelWindow(this);
             panel.ModelSuggesting = async (language, sentence, cancel) =>
-                WordsField && ContextModelOf(language.Code) is { } named && await context.Async() is { } suggester && suggester.Name == named
-                    ? await Task.Run(() => spelling.OfLanguage(language, sentence[(sentence.LastIndexOf(' ') + 1)..], suggester.Suggest(sentence, language.Code, cancel)), cancel)
-                    : [];
+            {
+                if (!WordsField || ContextModelOf(language.Code) is not { } named)
+                {
+                    return [];
+                }
+
+                // Said in the debug window, where it is on: the model chosen, the one really loaded, what it gave.
+                if (await context.Async() is not { } suggester || suggester.Name != named)
+                {
+                    panel?.ShowModelWindow(ContextCorrector.Said(named, null, sentence, [], LanguageChoices.BoldPercentIn(this, language.Code)));
+                    return [];
+                }
+
+                var scored = await Task.Run(() => suggester.SuggestScored(sentence, language.Code, cancel), cancel);
+                lastScored = scored;
+                panel?.ShowModelWindow(ContextCorrector.Said(named, suggester.Name, sentence, scored, LanguageChoices.BoldPercentIn(this, language.Code)));
+                return WordSuggestions.OfModel(sentence[(sentence.LastIndexOf(' ') + 1)..], [.. scored.Select(offered => offered.Word)]);
+            };
             panel.KnownWord = (language, word) => !spelling.Unknown(language, word);
             panel.IsWord = spelling.IsWord;
             panel.Meaning = (language, word) => WordsField ? spelling.Meant(language, word) : [];
@@ -943,6 +966,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 On: LanguageChoices.SpellingOn(this) && LanguageChoices.CanCorrect(this, KeyPlusPreferences.Language(this).Code)),
             new("glide", GetString(Resource.String.glide), Resource.Drawable.ic_settings_gesture, GlideTapped,
                 On: LanguageChoices.Glides(this, KeyPlusPreferences.Language(this))),
+            new("debug", GetString(Resource.String.context_model_window), Resource.Drawable.ic_tool_debug, DebugTapped, On: LanguageChoices.ModelWindow(this)),
         ];
     }
 
@@ -977,6 +1001,19 @@ public sealed class KeyPlusKeyboard : InputMethodService
         LanguageChoices.SetSpellingOn(this, !LanguageChoices.SpellingOn(this));
         panel!.GridTiles = GridTiles();
         SentenceShift();
+    }
+
+    /// <summary>The Debug tool: the small window with what the context model really gave on or off, shown at the next letter.</summary>
+    private void DebugTapped()
+    {
+        var on = !LanguageChoices.ModelWindow(this);
+        LanguageChoices.SetModelWindow(this, on);
+        if (!on)
+        {
+            panel?.HideModelWindow();
+        }
+
+        panel!.GridTiles = GridTiles();
     }
 
     /// <summary>The Glide typing tool: Glide typing on or off for every language; without the model or the language typed in's word list, said in the toolbar with Download beside it, for what is missing.</summary>
@@ -1816,6 +1853,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     {
         LearnAddress();
         panel?.StopRepeat();
+        panel?.HideModelWindow();
         DropDictation();
         base.OnFinishInputView(finishingInput);
     }

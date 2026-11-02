@@ -42,6 +42,18 @@ public static class LanguageChoices
     public static bool ContextSuggestsIn(Context context, string language) =>
         KeyPlusPreferences.Global(context).GetBoolean(Key("spellingContextSuggests", language), true);
 
+    /// <summary>A language's Percentage for bold; 70 until one is written (the owner, 2026-11-01); left empty, 0, none by percentage.</summary>
+    public static int BoldPercentIn(Context context, string language) => KeyPlusPreferences.Global(context).GetInt(Key("spellingBoldPercent", language), WordSuggestions.BoldPercentUsual);
+
+    /// <summary>A language's Percentage for bold, kept as written.</summary>
+    public static void SetBoldPercent(Context context, string language, int percent) => KeyPlusPreferences.Global(context).Edit()!.PutInt(Key("spellingBoldPercent", language), percent)!.Apply();
+
+    /// <summary>Whether the debug window shows what the context model gave (the toolbar's Debug), for every language; off until turned on.</summary>
+    public static bool ModelWindow(Context context) => KeyPlusPreferences.Global(context).GetBoolean("modelWindow", false);
+
+    /// <summary>The toolbar's Debug, kept as turned.</summary>
+    public static void SetModelWindow(Context context, bool on) => KeyPlusPreferences.Global(context).Edit()!.PutBoolean("modelWindow", on)!.Apply();
+
     /// <summary>A language's Use it for suggestions too, kept as turned.</summary>
     public static void SetContextSuggests(Context context, string language, bool on) =>
         KeyPlusPreferences.Global(context).Edit()!.PutBoolean(Key("spellingContextSuggests", language), on)!.Apply();

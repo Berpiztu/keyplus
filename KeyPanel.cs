@@ -545,8 +545,80 @@ public sealed class KeyPanel
     /// <summary>Whether only Hunspell knows a word, no list nor the personal dictionary (the keyboard's SpellingEngine.OnlyInHunspell).</summary>
     public Func<StandardLanguage, string, bool>? OnlyInHunspell { get; set; }
 
+    /// <summary>Whether the debug window is to be shown (the toolbar's Debug).</summary>
+    public Func<bool>? ModelWindowOn { get; set; }
+
+    private PopupWindow? modelWindow;
+    private TextView? modelWindowText;
+    private (int X, int Y) modelWindowAt = (24, 240);
+
+    /// <summary>
+    /// What the context model gave put in the debug window, which never takes the focus and is moved with a finger; gone
+    /// where it is turned off. Called from any thread.
+    /// </summary>
+    public void ShowModelWindow(string said) => handler.Post(() =>
+    {
+        if (ModelWindowOn?.Invoke() != true)
+        {
+            HideModelWindow();
+            return;
+        }
+
+        if (modelWindow is null)
+        {
+            modelWindowText = new TextView(context) { Background = new ColorDrawable(Color.Argb(235, 20, 20, 20)) };
+            modelWindowText.SetTextColor(Color.White);
+            modelWindowText.SetTextSize(ComplexUnitType.Sp, 13);
+            modelWindowText.SetPadding(Dp(8), Dp(6), Dp(8), Dp(6));
+            modelWindow = new PopupWindow(modelWindowText, ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent, false)
+            {
+                OutsideTouchable = false,
+                Touchable = true,
+                ClippingEnabled = false,
+                Elevation = Dp(8),
+            };
+            modelWindow.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
+            (float X, float Y, int FromX, int FromY) grabbed = default;
+            modelWindowText.Touch += (_, touch) =>
+            {
+                if (touch.Event is not { } moved)
+                {
+                    return;
+                }
+
+                if (moved.ActionMasked == MotionEventActions.Down)
+                {
+                    grabbed = (moved.RawX, moved.RawY, modelWindowAt.X, modelWindowAt.Y);
+                }
+                else if (moved.ActionMasked == MotionEventActions.Move)
+                {
+                    modelWindowAt = (grabbed.FromX + (int)(moved.RawX - grabbed.X), grabbed.FromY + (int)(moved.RawY - grabbed.Y));
+                    modelWindow?.Update(modelWindowAt.X, modelWindowAt.Y, -1, -1);
+                }
+            };
+        }
+
+        modelWindowText!.Text = said;
+        if (!modelWindow.IsShowing && root.WindowToken is not null)
+        {
+            modelWindow.ShowAtLocation(root, GravityFlags.NoGravity, modelWindowAt.X, modelWindowAt.Y);
+        }
+    });
+
+    /// <summary>The debug window gone, while no keyboard is shown or it is turned off.</summary>
+    public void HideModelWindow()
+    {
+        if (modelWindow?.IsShowing == true)
+        {
+            modelWindow.Dismiss();
+        }
+    }
+
     /// <summary>The word the one typed surely meant, of those offered (the keyboard's SpellingEngine.Sure); none where it is not clear.</summary>
     public Func<StandardLanguage, string, IReadOnlyList<string>, string?>? Sure { get; set; }
+
+    /// <summary>The word a misspelling means, among those the context model offered (the keyboard's SpellingEngine.SureOfModel); none where it is no misspelling or not clear.</summary>
+    public Func<StandardLanguage, string, IReadOnlyList<string>, string?>? SureOfModel { get; set; }
 
     /// <summary>The word it is sure the one typed meant: in bold in the toolbar's centre and what a space writes, as Gboard's (the owner, 2026-11-01); none, nothing in bold and nothing written.</summary>
     private (string Word, string Sure)? surely;
@@ -4834,6 +4906,10 @@ public sealed class KeyPanel
         }
 
         modelAsked?.Cancel();
+        if (word.Length > 0 && ModelWindowOn?.Invoke() == true)
+        {
+            ShowModelWindow(ContextCorrector.Said(null, null, word, []));
+        }
 
         // The word list's words, as the model's: their first, the centre, is what a space takes with Autocorrect on. Kept
         // through a word not begun yet (the space just typed asks again): the space's own correction reads it after.
@@ -4873,11 +4949,14 @@ public sealed class KeyPanel
         ShowBars();
     }
 
-    /// <summary>The words offered for a word being typed as the toolbar and a space take them: the one it is sure was meant first, kept in <see cref="surely"/>.</summary>
-    private IReadOnlyList<string> TakenOffered(StandardLanguage language, string word, IReadOnlyList<string> words)
+    /// <summary>
+    /// The words offered for a word being typed as the toolbar and a space take them: the one it is sure was meant first,
+    /// kept in <see cref="surely"/>. The context model's as it gives them, in bold only the one a misspelling means (the owner, 2026-11-01).
+    /// </summary>
+    private IReadOnlyList<string> TakenOffered(StandardLanguage language, string word, IReadOnlyList<string> words, bool ofModel = false)
     {
-        var sure = Sure?.Invoke(language, word, words);
-        var offered = sure is null ? words : WordSuggestions.Surely(words, sure);
+        var sure = ofModel ? SureOfModel?.Invoke(language, word, words) : Sure?.Invoke(language, word, words);
+        var offered = sure is null ? words : ofModel ? WordSuggestions.SurelyOfModel(words, sure, word) : WordSuggestions.Surely(words, sure);
         surely = sure is null ? null : (word, sure);
         modelOffer = offered.Count > 0 ? (word, offered) : null;
         return offered;
@@ -4901,10 +4980,12 @@ public sealed class KeyPanel
         var from = before.LastIndexOfAny(['.', '?', '!', '\n']) + 1;
         var sentence = before[from..].TrimStart();
         IReadOnlyList<string> offered;
+        var ofModel = false;
         var language = standard.Language;
         try
         {
             offered = await asking(language, sentence, asked.Token);
+            ofModel = offered.Count > 0;
 
             // Nothing of the language from the model nor the list ("henorme"): what it may have meant in the centre, as
             // Gboard's, found away from the keys' thread (Hunspell took 6 s for "corrrecta").
@@ -4929,9 +5010,10 @@ public sealed class KeyPanel
             // None offered (the sentence too long, the model let go): the word list's, as with the model's words off. A word
             // no list has shown as typed at the left in quotes, as with the list's, a tap learning it.
             typingWord = word;
-            typingWords = TakenOffered(language, word, offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(language, word) ?? []);
-            learnable = word.Length >= 2 && Suggests && Learnable?.Invoke(language, word) == true;
-            inHunspellAlone = word.Length >= 2 && Suggests && OnlyInHunspell?.Invoke(language, word) == true;
+            typingWords = TakenOffered(language, word, offered.Count > 0 ? [.. offered.Take(WordSuggestions.Offered)] : Suggesting?.Invoke(language, word) ?? [], ofModel);
+            // The model's words as it gave them, its first in the centre: no list says what was typed is new (the owner, 2026-11-01).
+            learnable = !ofModel && word.Length >= 2 && Suggests && Learnable?.Invoke(language, word) == true;
+            inHunspellAlone = !ofModel && word.Length >= 2 && Suggests && OnlyInHunspell?.Invoke(language, word) == true;
             ShowBars();
         });
     }

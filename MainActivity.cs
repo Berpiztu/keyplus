@@ -843,6 +843,11 @@ public sealed class MainActivity : Activity
                         LanguageChoices.SetContextSuggests(this, code, on);
                         Log.Write($"Corrector: {code}'s context model {(on ? "gives" : "no longer gives")} the words offered as a word is typed");
                     }));
+                // Beside it, the percentage from which a word of the model's goes in bold.
+                var boldPercent = LanguageChoices.BoldPercentIn(this, code);
+                spelling.Add(new(GetString(Resource.String.context_model_bold),
+                    $"{(boldPercent > 0 ? $"{boldPercent} %" : "—")} · {GetString(Resource.String.context_model_bold_summary)}",
+                    Tapped: () => AskBoldPercent(code, Again)));
                 continue;
             }
 
@@ -918,10 +923,16 @@ public sealed class MainActivity : Activity
 
         var names = here.Union(offered.Select(model => model.Name)).Order(StringComparer.Ordinal).ToList();
         var kept = now.Context ?? LanguageChoices.ContextModelIn(this, code);
+        // The one kept no longer here: an empty line shown, never the first as if chosen, for choosing that one would then do nothing.
+        if (kept is not null && names.Count > 0 && !names.Contains(kept))
+        {
+            names.Insert(0, "");
+        }
+
         var shownAt = kept is null ? 0 : Math.Max(0, names.IndexOf(kept));
 
         // One offered says its weights' bits: the same model at 8 and at 32 bits told apart.
-        string Shown(string name) => offered.FirstOrDefault(model => model.Name == name) is { } model
+        string Shown(string name) => name.Length == 0 ? "—" : offered.FirstOrDefault(model => model.Name == name) is { } model
             ? GetString(Resource.String.context_model_bits, new Java.Lang.String(name), Java.Lang.Integer.ValueOf(model.Bits))!
             : name;
         var list = SmallWords.List(this, names.Count > 0 ? [.. names.Select(Shown)] : [GetString(Resource.String.context_model_none)!], shownAt, chosen =>
@@ -953,7 +964,7 @@ public sealed class MainActivity : Activity
         ((LinearLayout.LayoutParams)list.LayoutParameters!).LeftMargin = 0;
         ColorsRow.Turned(list, names.Count > 0);
         // Under its words, as other rows' lists: Modelo, the list and, at the line's end, the chosen one's download button.
-        var shownName = names.Count > 0 ? names[shownAt] : null;
+        var shownName = names.Count > 0 && names[shownAt].Length > 0 ? names[shownAt] : null;
         var offeredModel = offered.FirstOrDefault(model => model.Name == shownName);
         var line = new LinearLayout(this) { Orientation = Orientation.Horizontal };
         line.SetGravity(GravityFlags.CenterVertical);
@@ -988,6 +999,25 @@ public sealed class MainActivity : Activity
                 settings!.Refresh(page());
             });
 
+    }
+
+    /// <summary>A language's Percentage for bold asked: a whole number from 1 to 100, or empty for none by percentage.</summary>
+    private void AskBoldPercent(string code, Func<SettingsPage> page)
+    {
+        var now = LanguageChoices.BoldPercentIn(this, code);
+        var field = new EditText(this) { Text = now > 0 ? now.ToString(System.Globalization.CultureInfo.InvariantCulture) : "", InputType = Android.Text.InputTypes.ClassNumber };
+        new AlertDialog.Builder(this)
+            .SetTitle(Resource.String.context_model_bold)!
+            .SetView(field)!
+            .SetPositiveButton(Android.Resource.String.Ok, (_, _) =>
+            {
+                var percent = int.TryParse(field.Text, out var written) ? Math.Clamp(written, 0, 100) : 0;
+                LanguageChoices.SetBoldPercent(this, code, percent);
+                Log.Write($"Corrector: {code}'s percentage for bold {percent}");
+                settings!.Refresh(page());
+            })!
+            .SetNegativeButton(Android.Resource.String.Cancel, (_, _) => { })!
+            .Show();
     }
 
     /// <summary>

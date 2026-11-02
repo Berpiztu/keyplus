@@ -66,8 +66,19 @@ public sealed record KeyboardPreferences(
     // Each language's context model chosen in its list, kept while it is off, so it is the one turned on again.
     Dictionary<string, string>? ContextModels = null,
     // Each language's Use it for suggestions too, as Android's: on until turned off, and turned on with the model.
-    Dictionary<string, bool>? ContextSuggests = null)
+    Dictionary<string, bool>? ContextSuggests = null,
+    // The toolbar's Debug: a small window with what the context model really gave; off until turned on.
+    bool ModelWindow = false,
+    // Each language's Percentage for bold: 70 until one is written; left empty, 0, none by percentage.
+    Dictionary<string, int>? BoldPercent = null)
 {
+    /// <summary>A language's Percentage for bold; 70 until one is written; left empty, 0, none by percentage.</summary>
+    public int BoldPercentIn(string language) => BoldPercent?.GetValueOrDefault(language, WordSuggestions.BoldPercentUsual) ?? WordSuggestions.BoldPercentUsual;
+
+    /// <summary>The preferences with a language's Percentage for bold written.</summary>
+    public KeyboardPreferences WithBoldPercent(string language, int percent) =>
+        this with { BoldPercent = new Dictionary<string, int>(BoldPercent ?? []) { [language] = percent } };
+
     /// <summary>Whether a language's context model gives the words offered as a word is typed too, the word list's where it offers none; on until turned off.</summary>
     public bool ContextSuggestsIn(string language) => ContextSuggests?.GetValueOrDefault(language, true) ?? true;
 

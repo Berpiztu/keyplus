@@ -217,37 +217,20 @@ public sealed class SpellingEngine
         WordListOf(language).InUse() is { } ready ? ready.Knows(word) : SwipeData.HasWordList(language);
 
     /// <summary>
-    /// The words a context model offers for the word being typed, kept to the keyboard's language: only those its word
-    /// list (accents aside), the user's dictionary or its Hunspell knows, the word typed first where it is one. The model
-    /// is one for Spanish and English and offered English for a Spanish "h", and words of its own ("he'dn't"); the owner,
-    /// 2026-11-01. As offered where the language has no word list to tell by. Hunspell may be asked: called away from the
-    /// keys' thread.
+    /// Of the words a context model offered, the one a misspelling means, in bold and written by a space (the owner, 2026-11-01):
+    /// what was typed no word of the language, and only one of them a word that sounds as it, in Spanish, an h aside, or one
+    /// letter written for another ("jente": gente). None else: nothing else of the list decides the model's words.
     /// </summary>
-    public IReadOnlyList<string> OfLanguage(StandardLanguage language, string typed, IReadOnlyList<string> offered)
+    public string? SureOfModel(StandardLanguage language, string typed, IReadOnlyList<string> offered)
     {
-        if (!SwipeData.HasWordList(language))
+        if (language.Code != StandardKeys.Spanish.Code || typed.Length < 2 || IsWord(language, typed) || WordListOf(language).InUse() is null)
         {
-            return offered;
+            return null;
         }
 
-        // The centre as long as what was typed, a letter more at most (the owner, 2026-11-01: three letters typed are not
-        // a word of five, a thumb may have missed one): the model's of that length where it offers one; else the word
-        // list's starting so ("h": "ha", not "hablar"); else, where nothing starts so, what it may have meant ("quw":
-        // "que"). The model was taught words cut short, so it offers longer ones; those go to the sides.
-        var kept = offered.Where(word => !Unknown(language, word)).ToList();
-        bool Near(string word) => word.Length <= typed.Length + 1;
-        var near = kept.Where(Near).ToList();
-        if (near.Count == 0 && typed.Length > 0)
-        {
-            near = [.. Suggest(language, typed).Where(Near).Take(1)];
-            if (near.Count == 0 && !IsWord(language, typed))
-            {
-                near = [.. Meant(language, typed).Where(Near).Take(1)];
-            }
-        }
-
-        IEnumerable<string> itself = typed.Length > 0 && Listed(language, typed) ? [typed] : [];
-        return [.. itself.Concat(near).Concat(kept).Distinct(StringComparer.OrdinalIgnoreCase).Take(WordSuggestions.Offered)];
+        var sound = SpanishSounds.Key(typed);
+        var alike = offered.Where(word => !word.Equals(typed, StringComparison.OrdinalIgnoreCase) && SpanishSounds.Key(word) == sound && Listed(language, word)).ToList();
+        return alike.Count == 1 ? alike[0] : null;
     }
 
     /// <summary>Whether no word list, no dictionary of the user's and no Hunspell of the language has the word; while the list is read, known, so nothing is offered to learn by mistake.</summary>

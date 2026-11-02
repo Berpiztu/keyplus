@@ -183,7 +183,7 @@ public sealed class ContextCorrector : IDisposable
     private const string SuggestTag = "sugerir: ";
 
     /// <summary>The words offered, as llm-create measures them (common.suggest): the likeliest of a beam search of this many…</summary>
-    private const int Beams = 5;
+    public const int Beams = 5;
 
     /// <summary>…written up to this many tokens, each a word…</summary>
     private const int WordTokens = 12;
@@ -198,7 +198,30 @@ public sealed class ContextCorrector : IDisposable
     /// sentence is empty or too long, the corrector was let go, or <paramref name="cancel"/> asked to stop (a newer letter).
     /// A model taught with the language in it is asked in the keyboard's (<paramref name="language"/>, es or en).
     /// </summary>
-    public IReadOnlyList<string> Suggest(string typed, string language, CancellationToken cancel = default)
+    public IReadOnlyList<string> Suggest(string typed, string language, CancellationToken cancel = default) =>
+        [.. SuggestScored(typed, language, cancel).Select(offered => offered.Word)];
+
+    /// <summary>
+    /// What the debug window shows (the owner, 2026-11-01): the model chosen, the one really loaded, the language's Percentage for
+    /// bold, what it was asked and the words it gave with their percentages, as it gave them; none loaded, that the words come from the list.
+    /// </summary>
+    public static string Said(string? chosen, string? loaded, string asked, IReadOnlyList<(string Word, double Probability)> words, int boldPercent = 0)
+    {
+        var said = new System.Text.StringBuilder();
+        said.AppendLine($"Elegido: {chosen ?? "ninguno"}");
+        said.AppendLine($"Cargado: {loaded ?? "ninguno: palabras de la lista"}");
+        said.AppendLine($"Negrita desde: {(boldPercent > 0 ? $"{boldPercent} %" : "sin porcentaje")}");
+        said.AppendLine($"Escrito: {asked}");
+        foreach (var (word, probability) in words)
+        {
+            said.AppendLine($"{word}  {(probability * 100).ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("es-ES"))} %");
+        }
+
+        return said.ToString().TrimEnd();
+    }
+
+    /// <summary>The words of <see cref="Suggest"/>, each with the probability the search gave to writing it whole.</summary>
+    public IReadOnlyList<(string Word, double Probability)> SuggestScored(string typed, string language, CancellationToken cancel = default)
     {
         var text = typed.TrimStart();
         if (text.Length == 0)
@@ -213,7 +236,7 @@ public sealed class ContextCorrector : IDisposable
             return [];
         }
 
-        var ended = new List<(List<long> Tokens, double Score)>();
+        var ended = new List<(List<long> Tokens, double Score, double LogProbability)>();
         lock (running)
         {
             if (disposed || cancel.IsCancellationRequested)
@@ -317,7 +340,7 @@ public sealed class ContextCorrector : IDisposable
                     if (hypothesis.Tokens[^1] == Eos)
                     {
                         // Ended: scored over its length, as the beam search llm-create measures with (length penalty 1).
-                        ended.Add((hypothesis.Tokens, hypothesis.LogProbability / (hypothesis.Tokens.Count - 1)));
+                        ended.Add((hypothesis.Tokens, hypothesis.LogProbability / (hypothesis.Tokens.Count - 1), hypothesis.LogProbability));
                     }
                     else if (beams.Count < Beams)
                     {
@@ -336,7 +359,7 @@ public sealed class ContextCorrector : IDisposable
             // with ease would else outscore a word that ended ("te").
             if (ended.Count < Offered)
             {
-                ended.AddRange(beams.Select(beam => (beam.Tokens, beam.LogProbability / beam.Tokens.Count)));
+                ended.AddRange(beams.Select(beam => (beam.Tokens, beam.LogProbability / beam.Tokens.Count, beam.LogProbability)));
             }
         }
 
@@ -346,11 +369,11 @@ public sealed class ContextCorrector : IDisposable
         }
 
         var words = ended.OrderByDescending(end => end.Score)
-            .Select(end => tokenizer.Decode(end.Tokens.Skip(1).Where(id => !notText.Contains(id)).Select(id => (int)id))?.Trim() ?? "")
+            .Select(end => (Written: tokenizer.Decode(end.Tokens.Skip(1).Where(id => !notText.Contains(id)).Select(id => (int)id))?.Trim() ?? "", end.LogProbability))
             // A word is what the toolbar offers: where the model wrote on after it ("corregiendo. ¿Quién…"), its first, its marks aside.
-            .Select(written => written.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim('.', ',', ';', ':', '?', '!', '¿', '¡', '…', '"') ?? "")
-            .Where(word => word.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(Offered).ToList();
-        Log.Detail($"Corrector: {Name} offered {string.Join(" | ", words)} for «{text}» in {started.ElapsedMilliseconds} ms");
+            .Select(end => (Word: end.Written.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim('.', ',', ';', ':', '?', '!', '¿', '¡', '…', '"') ?? "", Probability: Math.Exp(end.LogProbability)))
+            .Where(offered => offered.Word.Length > 0).DistinctBy(offered => offered.Word, StringComparer.OrdinalIgnoreCase).Take(Offered).ToList();
+        Log.Detail($"Corrector: {Name} offered {string.Join(" | ", words.Select(offered => offered.Word))} for «{text}» in {started.ElapsedMilliseconds} ms");
         return words;
     }
 

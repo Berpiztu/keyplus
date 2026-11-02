@@ -382,6 +382,7 @@ public sealed class SettingsWindow : Window
                 form.Children.Add(WithLine(FieldSaying(null, both, Texts.Get(Resource.String.spelling_writes_offers_summary)), FetchLine(LanguageOptions.WordListOf(language))));
                 form.Children.Add(ContextModelPart(code, now, Keep, () => ShowPage(LanguagePage(language, from))));
                 form.Children.Add(ContextSuggestsPart(code, now));
+                form.Children.Add(BoldPercentPart(code));
                 continue;
             }
 
@@ -1003,7 +1004,7 @@ public sealed class SettingsWindow : Window
         // The chosen model's line, always there: Download for one offered; for one put by hand, or none, its button turned off.
         void ShowFetch()
         {
-            var name = list.SelectedIndex >= 0 && list.SelectedIndex < names.Count ? names[list.SelectedIndex] : null;
+            var name = list.SelectedIndex >= 0 && list.SelectedIndex < names.Count && names[list.SelectedIndex].Length > 0 ? names[list.SelectedIndex] : null;
             var model = offered.FirstOrDefault(each => each.Name == name);
             fetching.Content = FetchLine(model is not null ? Of(model) : name is not null ? Here : NoModel, fetchable: model is not null);
         }
@@ -1024,6 +1025,13 @@ public sealed class SettingsWindow : Window
             if (names.Count == 0)
             {
                 list.Items.Add(new ComboBoxItem { Content = Texts.Get(Resource.String.context_model_none) });
+            }
+
+            // The one kept no longer here: an empty line shown, never the first as if chosen.
+            if (kept is not null && names.Count > 0 && !names.Contains(kept))
+            {
+                names.Insert(0, "");
+                list.Items.Insert(0, new ComboBoxItem { Content = "—" });
             }
 
             list.IsEnabled = names.Count > 0;
@@ -1053,7 +1061,7 @@ public sealed class SettingsWindow : Window
 
         list.SelectionChanged += (_, _) =>
         {
-            if (filling || names.Count == 0 || list.SelectedIndex < 0)
+            if (filling || names.Count == 0 || list.SelectedIndex < 0 || names[list.SelectedIndex].Length == 0)
             {
                 return;
             }
@@ -1167,6 +1175,20 @@ public sealed class SettingsWindow : Window
             Log.Write($"Corrector: {code}'s context model {(on ? "gives" : "no longer gives")} the words offered as a word is typed");
         };
         return FieldSaying(null, box, Texts.Get(Resource.String.context_model_suggests_summary));
+    }
+
+    /// <summary>Beside it, a language's Percentage for bold: a whole number from 1 to 100, kept as it is left; empty, none by percentage.</summary>
+    private static FrameworkElement BoldPercentPart(string code)
+    {
+        var now = KeyboardPreferences.Read().BoldPercentIn(code);
+        var field = new TextBox { Width = 60, HorizontalAlignment = HorizontalAlignment.Left, Text = now > 0 ? now.ToString(System.Globalization.CultureInfo.InvariantCulture) : "" };
+        field.LostFocus += (_, _) =>
+        {
+            var percent = int.TryParse(field.Text, out var written) ? Math.Clamp(written, 0, 100) : 0;
+            field.Text = percent > 0 ? percent.ToString(System.Globalization.CultureInfo.InvariantCulture) : "";
+            KeyboardPreferences.Read().WithBoldPercent(code, percent).Keep();
+        };
+        return FieldSaying(Resource.String.context_model_bold, field, Texts.Get(Resource.String.context_model_bold_summary));
     }
 
     /// <summary>The context models Hugging Face offers, read once while the settings are open (<see cref="CorrectorCatalog"/>).</summary>

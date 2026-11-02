@@ -118,6 +118,9 @@ public sealed class KeyboardWindow : Window
     /// <summary>The toolbar's Spelling on and off (<see cref="KeyboardPreferences.SpellingOn"/>), lit while on.</summary>
     private readonly SignButton spellingButton;
 
+    /// <summary>The toolbar's Debug on and off (<see cref="KeyboardPreferences.ModelWindow"/>), lit while on.</summary>
+    private readonly SignButton debugButton;
+
     /// <summary>The toolbar's Glide typing on and off for every language (<see cref="KeyboardPreferences.GlideTyping"/>), lit while on with the language typed in's files.</summary>
     private readonly SignButton glideButton;
     private readonly FocusWatch focus = new();
@@ -459,6 +462,7 @@ public sealed class KeyboardWindow : Window
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
         close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
         spellingButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_spellcheck };
+        debugButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_debug, ToolTip = Texts.Get(Resource.String.context_model_window) };
         glideButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_settings_gesture };
         mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
         mic.Clicked += Listen;
@@ -556,6 +560,8 @@ public sealed class KeyboardWindow : Window
             (kept with { SpellingOn = !spellingButton.Lit }).Keep();
         };
         DockPanel.SetDock(spellingButton, Dock.Left);
+        debugButton.Clicked += () => (KeyboardPreferences.Read() with { ModelWindow = !debugButton.Lit }).Keep();
+        DockPanel.SetDock(debugButton, Dock.Left);
 
         // Glide typing on or off for every language, lit while on; without the model or the language typed in's word list, said, with Download beside it for what is missing.
         glideButton.Clicked += () =>
@@ -582,6 +588,7 @@ public sealed class KeyboardWindow : Window
         bar.Children.Add(smiley);
         bar.Children.Add(spellingButton);
         bar.Children.Add(glideButton);
+        bar.Children.Add(debugButton);
         bar.Children.Add(close);
         bar.Children.Add(mic);
         bar.Children.Add(settings);
@@ -592,7 +599,7 @@ public sealed class KeyboardWindow : Window
         bar.Children.Add(barMiddle);
 
         // While words are suggested, as Android's (Gboard's): the first and the last button, the words between them.
-        between = [smiley, spellingButton, glideButton, mic, settings, design, dock, resize];
+        between = [smiley, spellingButton, glideButton, debugButton, mic, settings, design, dock, resize];
         System.ComponentModel.DependencyPropertyDescriptor.FromProperty(VisibilityProperty, typeof(Grid)).AddValueChanged(suggestions, (_, _) => ShowTools());
         Moves(bar);
 
@@ -1116,7 +1123,16 @@ public sealed class KeyboardWindow : Window
     /// language typed in has something downloaded to correct with: off
     /// without it, whatever was chosen, for nothing would be corrected.
     /// </summary>
-    private void ShowSpellingButton(KeyboardPreferences kept) => spellingButton.Lit = kept.SpellingOn && kept.CanCorrect(keys.KeyLanguage.Code);
+    private void ShowSpellingButton(KeyboardPreferences kept)
+    {
+        spellingButton.Lit = kept.SpellingOn && kept.CanCorrect(keys.KeyLanguage.Code);
+        debugButton.Lit = kept.ModelWindow;
+        if (!kept.ModelWindow)
+        {
+            modelWindow?.Close();
+            modelWindow = null;
+        }
+    }
 
     /// <summary>Whether the dictionary learns from what is typed in a language: only while its Autocorrect is on and Spelling is not off from the toolbar.</summary>
     private bool Learns(StandardLanguage language) => preferences.Applied(language.Code).Autocorrect;
@@ -1218,6 +1234,40 @@ public sealed class KeyboardWindow : Window
         keys.TakeModelWord(word, mended, endedAt);
     }
 
+    /// <summary>What the context model last gave, with its percentages, for the Percentage for bold.</summary>
+    private IReadOnlyList<(string Word, double Probability)> lastScored = [];
+
+    private Window? modelWindow;
+    private TextBlock? modelWindowText;
+
+    /// <summary>What the context model gave put in the debug window (the toolbar's Debug): it never takes the focus and is dragged anywhere; gone where it is turned off.</summary>
+    private void ShowModelWindow(string said)
+    {
+        if (!KeyboardPreferences.Read().ModelWindow)
+        {
+            return;
+        }
+
+        if (modelWindow is null)
+        {
+            modelWindowText = new TextBlock { Foreground = System.Windows.Media.Brushes.White, Margin = new Thickness(8, 6, 8, 6), FontSize = 13 };
+            modelWindow = new Window
+            {
+                Content = modelWindowText, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, SizeToContent = SizeToContent.WidthAndHeight,
+                Topmost = true, ShowInTaskbar = false, ShowActivated = false, Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(235, 20, 20, 20)),
+                Left = 24, Top = 240, Title = Texts.Get(Resource.String.context_model_window),
+            };
+            modelWindow.SourceInitialized += (_, _) => NeverActivated.Apply(modelWindow, taskbar: false);
+            modelWindow.MouseLeftButtonDown += (_, _) => modelWindow.DragMove();
+        }
+
+        modelWindowText!.Text = said;
+        if (!modelWindow.IsVisible)
+        {
+            modelWindow.Show();
+        }
+    }
+
     /// <summary>The question to the context model for the words being offered, cancelled by the next letter's.</summary>
     private CancellationTokenSource? modelAsked;
 
@@ -1239,9 +1289,9 @@ public sealed class KeyboardWindow : Window
     {
         modelAsked?.Cancel();
         var spelling = preferences.Applied(keys.KeyLanguage.Code);
-        // The sentence not known to these keys (a click put the caret in it), or no model: the word list's words.
+        // No model: the word list's words.
         if (word.Length == 0 || !spelling.Suggestions || spelling.Context is null || !preferences.ContextSuggestsIn(keys.KeyLanguage.Code)
-            || keys.TypingAddress || keys.SentenceSoFar is not { Length: > 0 } sentence)
+            || keys.TypingAddress)
         {
             ShowWords(word, listed);
             return;
@@ -1252,18 +1302,24 @@ public sealed class KeyboardWindow : Window
         {
             if (!asked.IsCancellationRequested)
             {
+                ShowModelWindow(ContextCorrector.Said(spelling.Context, null, word, [], KeyboardPreferences.Read().BoldPercentIn(keys.KeyLanguage.Code)));
                 ShowWords(word, listed);
             }
 
             return;
         }
 
+        // The sentence not known to these keys (a click put the caret in it): the model asked for the word alone.
+        var sentence = keys.SentenceSoFar is { Length: > 0 } known ? known : word;
         IReadOnlyList<string> offered;
         try
         {
-            // The language's alone, the word typed first where it is one (SpellingEngine.OfLanguage), as Android's.
+            // The model's alone, no list asked (WordSuggestions.OfModel), as Android's.
             var language = keys.KeyLanguage;
-            offered = await Task.Run(() => spellingEngine.OfLanguage(language, word, corrector.Suggest(sentence, language.Code, asked.Token)), asked.Token);
+            var scored = await Task.Run(() => corrector.SuggestScored(sentence, language.Code, asked.Token), asked.Token);
+            lastScored = scored;
+            ShowModelWindow(ContextCorrector.Said(spelling.Context, corrector.Name, sentence, scored, KeyboardPreferences.Read().BoldPercentIn(language.Code)));
+            offered = WordSuggestions.OfModel(word, [.. scored.Select(one => one.Word)]);
         }
         catch (OperationCanceledException)
         {
@@ -1275,10 +1331,16 @@ public sealed class KeyboardWindow : Window
             return;
         }
 
+        if (offered.Count > 0)
+        {
+            ShowWords(word, offered, ofModel: true);
+            return;
+        }
+
         // None offered (the sentence too long, the model let go): the word list's, as with no model on.
-        // Nothing of the language from the model nor the list ("henorme"): what it may have meant in the centre, as Gboard's,
-        // found away from the window's thread (Hunspell took 6 s for "corrrecta").
-        IReadOnlyList<string> shown = offered.Count > 0 ? [.. offered.Take(ContextCorrector.Offered)] : listed;
+        // Nothing from the list either: what it may have meant in the centre, as Gboard's, found away from the window's
+        // thread (Hunspell took 6 s for "corrrecta").
+        var shown = listed;
         if (shown.Count == 0)
         {
             var language = keys.KeyLanguage;
@@ -1559,11 +1621,14 @@ public sealed class KeyboardWindow : Window
     /// space takes with Autocorrect on (kept through a word not begun yet: the space's own correction reads it after); one
     /// no list has, with learning on, shown as typed at the left in quotes, as Gboard's, a tap learning it.
     /// </summary>
-    private void ShowWords(string typed, IReadOnlyList<string> words)
+    private void ShowWords(string typed, IReadOnlyList<string> words, bool ofModel = false)
     {
         var language = keys.KeyLanguage;
-        var sure = typed.Length > 0 && !keys.TypingAddress ? spellingEngine.Sure(language, typed, words) : null;
-        words = sure is null ? words : WordSuggestions.Surely(words, sure);
+        // In bold among the context model's: the one a misspelling means; else the one it gave the language's Percentage for bold (the owner, 2026-11-01).
+        var sure = typed.Length == 0 || keys.TypingAddress ? null
+            : ofModel ? spellingEngine.SureOfModel(language, typed, words) ?? WordSuggestions.ByPercent(lastScored, words, KeyboardPreferences.Read().BoldPercentIn(language.Code))
+            : spellingEngine.Sure(language, typed, words);
+        words = sure is null ? words : ofModel ? WordSuggestions.SurelyOfModel(words, sure, typed) : WordSuggestions.Surely(words, sure);
         if (typed.Length > 0)
         {
             modelOffer = words.Count > 0 ? (typed, words) : null;
@@ -1571,7 +1636,8 @@ public sealed class KeyboardWindow : Window
         }
 
         var learnable = personal.LearnTyped && Learns(language) && spellingEngine.Unknown(language, typed);
-        if (typed.Length < 2 || keys.TypingAddress || !(learnable || spellingEngine.OnlyInHunspell(language, typed)))
+        // The model's words as it gave them, its first in the centre: no list says what was typed is new (the owner, 2026-11-01).
+        if (ofModel || typed.Length < 2 || keys.TypingAddress || !(learnable || spellingEngine.OnlyInHunspell(language, typed)))
         {
             LogOffered(typed, words, learning: false, bold: sure is not null);
             ShowSuggestions(words, null, boldCentre: sure is not null);

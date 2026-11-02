@@ -74,6 +74,7 @@ namespace Berpiztu.KeyPlus
             public const int ic_grid_floating_off = 26;
             public const int ic_tool_resize = 27;
             public const int ic_tool_spellcheck = 28;
+            public const int ic_tool_debug = 31;
             public const int ic_settings_gesture = 29;
             public const int ic_emoji_search = 30;
         }
@@ -307,6 +308,9 @@ namespace Berpiztu.KeyPlus
             public const int context_model_suggests = 241;
             public const int context_model_suggests_summary = 242;
             public const int context_model_suggests_off = 243;
+            public const int context_model_window = 244;
+            public const int context_model_bold = 245;
+            public const int context_model_bold_summary = 246;
             public const int context_model_gemma_title = 238;
             public const int context_model_gemma_terms = 239;
         }

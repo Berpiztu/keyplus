@@ -294,16 +294,20 @@ a window that does.
   faded and kept as they were for when it is turned off. Under it, **Use it
   for suggestions too** (on by default, turned on with the model): the words
   offered as you type are the model's, its three likeliest for the sentence
-  so far, never mixed with the word list's, which come only where it offers
-  none, so the centre never changes under the finger; and a word no list has,
-  ended with a space, becomes the word it offered in the centre ("plat":
-  "plato"). Off, they are the word list's, found without the sentence: those
+  so far, never mixed with the word list's nor filtered by it, which come only
+  where it offers none, so the centre never changes under the finger; with
+  them in bold the word a misspelling means, what was typed no word and only
+  one of those offered a word that sounds as it ("jente": "gente"), else the
+  likeliest with **Percentage for bold** or more, a language's own, 70 until
+  one is written, none where left empty. Off, they are the word list's, found without the sentence: those
   starting as typed, those that sound so in Spanish ("hiva": "iba"), and
   those with a key beside one typed ("quw": "que"); in the centre, the
   commonest at most a letter longer than typed. The centre is in
   bold only where it is sure which word was meant ("aora": "ahora"), and a
   space writes only a word in bold; not clear, nothing is in bold and what was
-  typed stays.
+  typed stays. **Debug**, a button of the toolbar (any build): a small window you can move,
+  with the model chosen, the one really loaded, the Percentage for bold and its
+  words with percentages.
   Autocorrect writes by itself only where the field is surely a document
   (Word, a message, a mail: a document or a field of many lines, as Windows'
   UI Automation tells it); in an address bar, a search box, a form's field,

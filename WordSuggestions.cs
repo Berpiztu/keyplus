@@ -18,6 +18,14 @@ public sealed class WordSuggestions
     public const int Offered = 3;
 
     /// <summary>
+    /// A context model's words as the toolbar shows them, no list nor dictionary asked (the owner, 2026-11-01: its switch
+    /// means the model's and not the list's): those as long as what was typed, a letter more at most, first, for three
+    /// letters typed are not a word of five; the longer ones after them, each group as likely as the model has it.
+    /// </summary>
+    public static IReadOnlyList<string> OfModel(string typed, IReadOnlyList<string> offered) =>
+        [.. offered.OrderBy(word => word.Length > typed.Length + 1).Take(Offered)];
+
+    /// <summary>
     /// Whether a word mended differs from the word typed only in its accents (como, cómo; el, él): a space leaves a word
     /// right as typed so, the sentence's close telling whether it is a question (the owner, 2026-11-01).
     /// </summary>
@@ -152,6 +160,21 @@ public sealed class WordSuggestions
         from = from < 0 ? ~from : from;
         return from >= letters.Length || !letters[from].StartsWith(start, StringComparison.Ordinal);
     }
+
+    /// <summary>A language's Percentage for bold until one is written (the owner, 2026-11-01).</summary>
+    public const int BoldPercentUsual = 70;
+
+    /// <summary>
+    /// The likeliest of the words offered that the context model gave at least this percentage, in bold (the owner, 2026-11-01:
+    /// a language's Percentage for bold); none at 0 or under, or where none reaches it.
+    /// </summary>
+    public static string? ByPercent(IReadOnlyList<(string Word, double Probability)> scored, IReadOnlyList<string> offered, int percent) =>
+        percent <= 0 ? null : scored.Where(one => one.Probability * 100 >= percent && offered.Contains(one.Word, StringComparer.OrdinalIgnoreCase))
+            .OrderByDescending(one => one.Probability).Select(one => one.Word).FirstOrDefault();
+
+    /// <summary>A context model's words with the word a misspelling means first, and what was typed, known to be wrong, no more among them.</summary>
+    public static IReadOnlyList<string> SurelyOfModel(IReadOnlyList<string> words, string sure, string typed) =>
+        Surely([.. words.Where(word => !word.Equals(typed, StringComparison.OrdinalIgnoreCase))], sure);
 
     /// <summary>The words offered with the one it is sure of first, the toolbar's centre.</summary>
     public static IReadOnlyList<string> Surely(IReadOnlyList<string> words, string sure) =>

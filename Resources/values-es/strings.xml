@@ -294,6 +294,9 @@
   <string name="spelling_on">Corregir mientras escribo</string>
   <string name="context_model">Modelo de contexto</string>
   <string name="context_model_summary">Un modelo en este dispositivo, elegido en la lista, corrige él solo este idioma: con cada espacio lee la frase hasta ahí y corrige la última palabra, y al cerrarla con . ? ! o Intro la escribe entera corregida (ortografía, acentos, puntuación y mayúsculas). Las sugerencias de completar palabra salen de la lista de palabras, salvo con Usarlo también para sugerencias encendido. Las opciones de debajo quedan en gris, guardadas como están, hasta que lo apagues</string>
+  <string name="context_model_window">Debug</string>
+  <string name="context_model_bold">Porcentaje para negrita</string>
+  <string name="context_model_bold_summary">Una palabra del modelo con este porcentaje o más sale en negrita y el espacio la escribe. Vacío: ninguna por porcentaje</string>
   <string name="context_model_suggests">Usarlo también para sugerencias</string>
   <string name="context_model_suggests_summary">Las palabras que se ofrecen al escribir salen del modelo, que lee la frase hasta ahí; si no ofrece ninguna, de la lista de palabras. Un espacio cambia una palabra que no está en ninguna lista por la del centro. Apagado, salen de la lista de palabras</string>
   <string name="context_model_suggests_off">Enciende el modelo de contexto para usarlo también para sugerencias.</string>
