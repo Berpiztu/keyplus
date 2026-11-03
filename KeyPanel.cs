@@ -406,6 +406,53 @@ public sealed class KeyPanel
     private const float EmojiRowCellDp = 83 / 2.25f;
     private const float EmojiRowShare = 48f / 83;
 
+    /// <summary>An emoji's width in its cell: its ink 60% of the row's height, measured on the Fold (the owner, 2026-11-03).</summary>
+    private const float EmojiCellShare = 0.82f;
+
+    /// <summary>A toolbar button's circle and its sign's box, as shares of the toolbar's height: the sign's ink 60% of it, measured on the Fold (the owner, 2026-11-03).</summary>
+    private const float ToolCircleShare = 0.85f;
+    private const float ToolSignShare = 0.646f;
+
+    /// <summary>The most of a circle its sign's box takes, for a circle lit to show around the sign.</summary>
+    private const float ToolSignInCircle = 0.88f;
+
+    /// <summary>The least height of the toolbar and the row of those typed lately: a row of keys at half its size, as on Windows, below which their buttons could not be hit.</summary>
+    private const float LeastLineDp = StandardKeyboard.LetterRowDp / 2;
+
+    private bool? headset;
+
+    private bool Headset => headset ??= KeyPlusPreferences.IsHeadset(context);
+
+    /// <summary>
+    /// The share of their sizes the toolbar and the row of those typed lately are made: as tall as a row of keys up to the
+    /// toolbar's own height, taller keys leaving them there (the owner, 2026-11-03); on a headset, whole, as it fills its window.
+    /// </summary>
+    private float LineShare => Headset
+        ? 1f
+        : Math.Min(1f, Math.Max(StandardKeyboard.LetterRowDp * scale, LeastLineDp) / ToolbarDp);
+
+    /// <summary>The toolbar's share: while designing or customising, whole, for what those show in it.</summary>
+    private float BarShare => designingStandard || editingTools ? 1f : LineShare;
+
+    /// <summary>The row of those typed lately as tall as the toolbar, up to its own height.</summary>
+    private int EmojiRowHeight => Dp(Math.Min(ToolbarDp * LineShare, EmojiRowDp));
+
+    /// <summary>The toolbar and the row of those typed lately as tall as the keys make them; set only what changed.</summary>
+    private bool SizeBars()
+    {
+        var (bar, row) = (Dp(ToolbarDp * BarShare), EmojiRowHeight);
+        if (standardBar.LayoutParameters!.Height == bar && emojiRow.LayoutParameters!.Height == row)
+        {
+            return false;
+        }
+
+        standardBar.LayoutParameters.Height = bar;
+        emojiRow.LayoutParameters!.Height = row;
+        standardBar.RequestLayout();
+        emojiRow.RequestLayout();
+        return true;
+    }
+
     /// <summary>The grid's buttons the keyboard gives, Gboard's, before the panel's own (the other standard keyboard, Minimizar).</summary>
     private IReadOnlyList<GridTile> gridTiles = [];
 
@@ -1489,7 +1536,7 @@ public sealed class KeyPanel
         foreach (var entry in copies)
         {
             var place = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.MatchParent);
-            place.SetMargins(Dp(ChipApartDp), Dp(6), Dp(ChipApartDp), Dp(6));
+            place.SetMargins(Dp(ChipApartDp), Dp(6 * LineShare), Dp(ChipApartDp), Dp(6 * LineShare));
             // The one previewed has its ✕ hidden in its place, which would read as closing the preview.
             chips.AddView(Chip(entry, () => AskDeleteCopy(entry), closeShown: !IsPreviewed(entry)), place);
         }
@@ -1544,6 +1591,7 @@ public sealed class KeyPanel
     {
         standardBar.RemoveAllViews();
         barRoomShown = -1;
+        SizeBars();
 
         // The line over the toolbar first: the words offered go there while it shows, and the toolbar keeps its buttons.
         ShowEmojiRow();
@@ -1572,7 +1620,7 @@ public sealed class KeyPanel
         var first = covered is not null
             ? StandardTool(Resource.Drawable.ic_tool_close, "The keys again", Uncover, colors.Function)
             : StandardTool(Resource.Drawable.ic_tool_grid, "Tools and settings", () => Toggle(standardGrid!, ShowGrid), suggesting ? colors.GridCircle : null);
-        standardBar.AddView(first, new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+        standardBar.AddView(first, new LinearLayout.LayoutParams(ToolPlace, ViewGroup.LayoutParams.MatchParent));
         if (offer is { } offered)
         {
             (offered.Parent as ViewGroup)?.RemoveView(offered);
@@ -1603,7 +1651,7 @@ public sealed class KeyPanel
             standardBar.AddView(new View(context), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
         }
 
-        standardBar.AddView(MicTool(), new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+        standardBar.AddView(MicTool(), new LinearLayout.LayoutParams(ToolPlace, ViewGroup.LayoutParams.MatchParent));
     }
 
     /// <summary>🎤 tapped: a dictation started, or the one going on stopped.</summary>
@@ -1646,7 +1694,7 @@ public sealed class KeyPanel
         round.SetShape(ShapeType.Oval);
         round.SetColor(standardColors.Primary);
         halo.Background = round;
-        place.AddView(halo, 0, new FrameLayout.LayoutParams(Dp(ToolCircleDp), Dp(ToolCircleDp), GravityFlags.Center));
+        place.AddView(halo, 0, new FrameLayout.LayoutParams(ToolCircle, ToolCircle, GravityFlags.Center));
         micHalo = halo;
         micSign = (ImageView)place.GetChildAt(1)!;
         ShowListening(listening, listeningLevel);
@@ -1732,6 +1780,15 @@ public sealed class KeyPanel
     /// <summary>A toolbar sign's place: Gboard's, or, where seven of them do not fit (a narrow window), a seventh of the bar.</summary>
     private int ToolSlot => standardBar.Width > 0 ? Math.Min(Dp(ToolSlotDp), standardBar.Width / 7) : Dp(ToolSlotDp);
 
+    /// <summary>A toolbar sign's place as drawn, at the toolbar's share.</summary>
+    private int ToolPlace => (int)(ToolSlot * BarShare);
+
+    /// <summary>A toolbar button's circle where it has a place of its own, inside that place; on a headset, Gboard's.</summary>
+    private int ToolCircle => Headset ? Dp(ToolCircleDp) : Math.Min((int)(Dp(ToolbarDp * BarShare) * ToolCircleShare), ToolPlace);
+
+    /// <summary>A sign's box in a circle so wide; on a headset, Gboard's.</summary>
+    private int ToolSign(int across) => Headset ? Dp(ToolIconDp) : Math.Min((int)(Dp(ToolbarDp * BarShare) * ToolSignShare), (int)(across * ToolSignInCircle));
+
     /// <summary>
     /// A sign of the standard keyboard's toolbar, centred in its place, in a
     /// circle where it has one (its outline, where it has one), in the keys'
@@ -1740,13 +1797,13 @@ public sealed class KeyPanel
     /// </summary>
     private FrameLayout StandardTool(int icon, string description, Action pressed, Color? circle = null, Color? glyph = null, Color? ring = null, int? diameter = null)
     {
-        var across = diameter ?? Dp(ToolCircleDp);
+        var across = diameter ?? ToolCircle;
         // Its name shown as the mouse rests on it, as the owner asked.
         var sign = new ImageView(context) { ContentDescription = description, TooltipText = description };
         sign.SetImageResource(icon);
         sign.ImageTintList = ColorStateList.ValueOf(glyph ?? standardColors!.Glyph);
         sign.SetScaleType(ImageView.ScaleType.FitCenter);
-        var inset = (across - Dp(ToolIconDp)) / 2;
+        var inset = (across - ToolSign(across)) / 2;
         sign.SetPadding(inset, inset, inset, inset);
         var ground = new GradientDrawable();
         ground.SetShape(ShapeType.Oval);
@@ -1918,7 +1975,10 @@ public sealed class KeyPanel
         {
             EndEmojiSearch();
             ShowEmojis();
-        }, colors.Function), new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+        }, colors.Function), new LinearLayout.LayoutParams(ToolPlace, ViewGroup.LayoutParams.MatchParent));
+
+        // The box as tall as the line it stands in leaves it, what is typed fitting it.
+        var boxHeight = Math.Min(Dp(SearchBoxHeightDp), Dp(ToolbarDp * LineShare));
 
         // What is typed, the caret after it, and Buscar, faint, after it while nothing is.
         TextView Words(string words, Color color)
@@ -1927,6 +1987,11 @@ public sealed class KeyPanel
             view.SetSingleLine(true);
             view.SetTextColor(color);
             view.SetTextSize(ComplexUnitType.Sp, SuggestionSp);
+            if (view.LineHeight > boxHeight)
+            {
+                view.SetTextSize(ComplexUnitType.Px, view.TextSize * boxHeight / view.LineHeight);
+            }
+
             return view;
         }
 
@@ -1948,17 +2013,17 @@ public sealed class KeyPanel
         line.Post(() => line.FullScroll(FocusSearchDirection.Right));
         var pill = new GradientDrawable();
         pill.SetColor(colors.High);
-        pill.SetCornerRadius(Dp(SearchBoxHeightDp) / 2f);
+        pill.SetCornerRadius(boxHeight / 2f);
         var box = new FrameLayout(context) { Background = pill };
         box.SetPadding(Dp(12), 0, Dp(12), 0);
         box.AddView(line, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        into.AddView(box, new LinearLayout.LayoutParams(wide ? 0 : Dp(SearchBoxDp), Dp(SearchBoxHeightDp), wide ? 1f : 0f) { Gravity = GravityFlags.CenterVertical, RightMargin = Dp(6) });
+        into.AddView(box, new LinearLayout.LayoutParams(wide ? 0 : Dp(SearchBoxDp), boxHeight, wide ? 1f : 0f) { Gravity = GravityFlags.CenterVertical, RightMargin = Dp(6) });
     }
 
     /// <summary>The emoji the search finds, across, a tap typing one and going back to the emoji.</summary>
     private HorizontalScrollView SearchFound()
     {
-        var cell = Dp(EmojiRowCellDp);
+        var cell = Dp(EmojiRowCellDp * LineShare);
         var size = EmojiCellTextSize(cell);
         var found = new LinearLayout(context) { Orientation = Orientation.Horizontal };
         foreach (var emoji in Emojis.Search(context, standard!.Language.Code, emojiSearch!))
@@ -1998,10 +2063,10 @@ public sealed class KeyPanel
     }
 
     /// <summary>An emoji's text size to fill a cell as Gboard's row does, measured by what "😀" draws.</summary>
-    private static float EmojiCellTextSize(int cell)
+    private float EmojiCellTextSize(int cell)
     {
         var measure = new Paint { TextSize = 100 };
-        return 100 * cell * EmojiRowShare / Math.Max(1, measure.MeasureText("😀"));
+        return 100 * cell * (Headset ? EmojiRowShare : EmojiCellShare) / Math.Max(1, measure.MeasureText("😀"));
     }
 
     /// <summary>An emoji in its cell, a tap doing what is asked.</summary>
@@ -2057,7 +2122,7 @@ public sealed class KeyPanel
 
         var recent = Emojis.Recent(context);
         var width = strip.Width > 0 ? strip.Width : context.Resources!.DisplayMetrics!.WidthPixels;
-        var cell = Dp(EmojiRowCellDp);
+        var cell = Dp(EmojiRowCellDp * LineShare);
         var size = EmojiCellTextSize(cell);
         foreach (var emoji in recent.Take(Math.Max(1, width / cell)))
         {
@@ -2168,7 +2233,7 @@ public sealed class KeyPanel
     /// fit between ⊞ and 🎤 inside the customising outline; not laid out yet, at the width it was measured at (<see cref="FitBar"/>).
     /// </summary>
     private int BarRoom => BarMiddle > 0
-        ? Math.Max(1, (BarMiddle - (2 * EditSideInset) + Dp(ToolGapDp)) / (ToolDiameter + Dp(ToolGapDp)))
+        ? Math.Max(1, (BarMiddle - (2 * EditSideInset) + Dp(ToolGapDp)) / (WholeToolDiameter + Dp(ToolGapDp)))
         : BarFirst.Length;
 
     /// <summary>The toolbar between ⊞ and 🎤, in pixels; 0 while its width is not known.</summary>
@@ -2184,7 +2249,12 @@ public sealed class KeyPanel
     /// The circle of each of the toolbar's own buttons, customising or not, in pixels: as tall as the customising outline
     /// leaves inside it, and as wide, so it is round and as many fit as can be.
     /// </summary>
-    private int ToolDiameter => Dp(EditBarDp) - (2 * EditInset);
+    private int ToolDiameter => Headset || editingTools || BarMiddle == 0
+        ? WholeToolDiameter
+        : Math.Min((int)(Dp(ToolbarDp * BarShare) * ToolCircleShare), ((BarMiddle - (2 * EditSideInset)) / BarRoom) - Dp(ToolGapDp));
+
+    /// <summary>The circle at its whole size: how many buttons the toolbar holds does not change with the keys' size, so none moves to the grid or from it.</summary>
+    private int WholeToolDiameter => Dp(EditBarDp) - (2 * EditInset);
 
     /// <summary>The toolbar's room its buttons were placed for; -1 while it shows no buttons (words, a copy, customising).</summary>
     private int barRoomShown = -1;
@@ -2244,7 +2314,7 @@ public sealed class KeyPanel
     {
         var colors = standardColors!;
         standardBar.AddView(StandardTool(Resource.Drawable.ic_tool_check, context.GetString(Resource.String.done), EndEditingTools, colors.Primary, colors.OnPrimary),
-            new LinearLayout.LayoutParams(ToolSlot, ViewGroup.LayoutParams.MatchParent));
+            new LinearLayout.LayoutParams(ToolPlace, ViewGroup.LayoutParams.MatchParent));
 
         var outline = new GradientDrawable();
         outline.SetColor(colors.Dim);
@@ -6104,6 +6174,10 @@ public sealed class KeyPanel
         if (standard is not null)
         {
             standard.Scale = scale;
+            if (SizeBars() && standardBar.Visibility == ViewStates.Visible)
+            {
+                FillStandardBar();
+            }
         }
 
         foreach (var row in rowViews)
@@ -6121,7 +6195,7 @@ public sealed class KeyPanel
         // The title bar as tall as the keys make it, between its least
         // height, still enough to hold and move the window by, and its usual
         // one: a keyboard made small keeps a title bar near its size.
-        // Gboard's toolbar keeps its height whatever the keys' size, so its
+        // The bar of chips keeps its height whatever the keys' size, so its
         // words are always read.
         var barDp = copiedInTitleBar ? ChipBarDp : TitleBarDp;
         foreach (var bar in new View[] { titleBar, closeBar, chipBar, toolbar, menuBar })

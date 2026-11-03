@@ -35,7 +35,9 @@ public sealed class KeyboardWindow : Window
     private const double ShadowDp = 12;
     /// <summary>The toolbar's height, and the designer's pills' in its place, here and in the settings' preview.</summary>
     public const double BarDp = 40;
-    private const double SignDp = 22;
+
+    /// <summary>A toolbar sign's box: its ink 60% of the toolbar's height, as Android's, the same drawables (the owner, 2026-11-03).</summary>
+    private const double SignDp = BarDp * 0.646;
     private const double HandleBandDp = 22;
     /// <summary>The size of the short words the card shows by themselves: the toolbar's notices, the band's administrator.</summary>
     private const double NoticeFontSize = 13;
@@ -164,12 +166,18 @@ public sealed class KeyboardWindow : Window
     private readonly Grid barMiddle = new();
 
     /// <summary>
-    /// Over the toolbar (Preferences' Show the emoji row, on unless turned off), the Android keyboard's height, Gboard's
+    /// Over the toolbar (Preferences' Show the emoji row, on unless turned off), at most the Android keyboard's height, Gboard's
     /// 100 px of the Fold: the emoji typed lately, or the words offered while typing, so the toolbar keeps its buttons.
     /// </summary>
     private const double EmojiRowDp = 100 / 2.25;
     private readonly Grid emojiRow = new() { Height = EmojiRowDp, Background = Brushes.Transparent };
     private readonly EmojiStrip recentEmoji = new();
+
+    /// <summary>The toolbar and the emoji row as tall as a row of keys up to their own height, their buttons, signs and emoji with them (<see cref="ChromeAt"/>).</summary>
+    private readonly ScaleTransform barsShare = new(1, 1);
+
+    /// <summary>The words read in the toolbar and the emoji row back at their own size: at the bars' size, with small keys, they could not be read.</summary>
+    private readonly ScaleTransform wordsShare = new(1, 1);
 
     /// <summary>The emoji searched (the emoji panel's Buscar), the keys under it: ← and what is typed, in the emoji row's place where it shows, and what it finds, in the toolbar's.</summary>
     private readonly DockPanel searchBar = new() { Height = BarDp, Background = Brushes.Transparent, Visibility = Visibility.Collapsed };
@@ -198,6 +206,7 @@ public sealed class KeyboardWindow : Window
 
     /// <summary>The toolbar's buttons that make room for the words offered in its middle, without the emoji row: all but the first and the last.</summary>
     private UIElement[] between = [];
+    private const int BarEndButtons = 2;
 
     private const double SuggestionSize = 15;
     private readonly DispatcherTimer noticeTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -657,6 +666,8 @@ public sealed class KeyboardWindow : Window
             Effect = shadow,
         };
 
+        bar.LayoutTransform = searchBar.LayoutTransform = emojiRow.LayoutTransform = barsShare;
+        notice.LayoutTransform = suggestions.LayoutTransform = searchBox.LayoutTransform = wordsShare;
         ShowEmojiRow();
         Restore();
         ShowSwitcher();
@@ -690,7 +701,16 @@ public sealed class KeyboardWindow : Window
             Log.Detail("Keyboard: closed, its watches let go");
         };
         LocationChanged += (_, _) => KeepSoon();
-        SizeChanged += (_, _) => KeepSoon();
+        SizeChanged += (_, _) =>
+        {
+            // Docked, only the frame sizes it, through FitKeys; floating, Windows does too, at the card's edges.
+            if (!docked)
+            {
+                ShareBars(ScaleAt(ActualHeight));
+            }
+
+            KeepSoon();
+        };
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += DisplayChanged;
         // Docked, the room is kept only while the keyboard is in sight.
         IsVisibleChanged += (_, _) =>
@@ -1406,7 +1426,7 @@ public sealed class KeyboardWindow : Window
         {
             Text = address ? PersonalWords.InTwoLines(text) : text,
             TextAlignment = TextAlignment.Center,
-            FontSize = address ? SuggestionSize * PersonalWords.AddressTypeShare : SuggestionSize,
+            FontSize = address ? Math.Min(SuggestionSize * PersonalWords.AddressTypeShare, BarDp * barsShare.ScaleY / 2 / FontFamily.LineSpacing) : SuggestionSize,
             FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
             Foreground = new SolidColorBrush(colors.Glyph),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -2141,7 +2161,11 @@ public sealed class KeyboardWindow : Window
         HideEmoji();
         ShowSuggestions([], null);
         bar.Visibility = Visibility.Collapsed;
+        var scale = keys.RowScale;
         designer.Start(keyboard);
+
+        // The pills stay at full size, for their words: the window grows by what they take over the toolbar, the rows as tall.
+        FitKeys(scale);
     }
 
     /// <summary>The design ended (<see cref="KeyboardDesigner"/>): the keyboard as it now is in sight, the toolbar back; Cancelar's design as it was, its rows as tall.</summary>
@@ -2149,11 +2173,7 @@ public sealed class KeyboardWindow : Window
     {
         keyboard = shown;
         preferences = KeyboardPreferences.Read();
-        if (!kept)
-        {
-            FitKeys(scale);
-        }
-
+        FitKeys(scale);
         bar.Visibility = Visibility.Visible;
         ShowSwitcher();
     }
@@ -2210,8 +2230,67 @@ public sealed class KeyboardWindow : Window
         SetForegroundWindow(back);
     }
 
-    /// <summary>The bar, the handle and the shadow's band around the keys, at the window's height for rows at a share of Gboard's; docked, the bar alone.</summary>
-    private double ChromeHeight => (preferences.EmojiRow ? EmojiRowDp : 0) + (docked ? BarDp + dockedLift : (2 * ShadowDp) + BarDp + HandleBandDp);
+    /// <summary>
+    /// The emoji row, the bar, the handle and the shadow's band around the keys, with the rows at a share of Gboard's; docked,
+    /// no handle nor shadow. The row and the bar as tall as a row of keys up to their own height, taller keys leaving them
+    /// there; the designer's pills at their own height.
+    /// </summary>
+    private double ChromeAt(double scale)
+    {
+        var line = KeyboardSurface.LetterRowDp * scale;
+        return (preferences.EmojiRow ? Math.Min(line, RowMost) : 0) + (keys.Designing ? BarDp : Math.Min(line, BarMost)) + (docked ? dockedLift : (2 * ShadowDp) + HandleBandDp);
+    }
+
+    /// <summary>
+    /// The toolbar's greatest height: its own, or, on a narrow card, where its buttons, as wide as they are tall, fill the
+    /// card: taller, some would be left out (the owner, 2026-11-03).
+    /// </summary>
+    private double BarMost
+    {
+        get
+        {
+            var card = docked ? dockedWidth : Width - (2 * ShadowDp);
+            return card > 0 ? Math.Min(BarDp, card / (between.Length + BarEndButtons)) : BarDp;
+        }
+    }
+
+    /// <summary>The emoji row's greatest height: its own, or the toolbar's where the card's width holds that one down.</summary>
+    private double RowMost => BarMost < BarDp ? BarMost : EmojiRowDp;
+
+    /// <summary>The window's height with the rows at a share of Gboard's.</summary>
+    private double HeightFor(double scale) => ChromeAt(scale) + keys.HeightAt(scale);
+
+    /// <summary>
+    /// The rows' share of Gboard's that makes the window as tall as asked, the bars sized with them; half Gboard's at least.
+    /// The window's height is straight between the shares at which the bar and the row reach their own height.
+    /// </summary>
+    private double ScaleAt(double height)
+    {
+        var from = 0.0;
+        foreach (var reached in new[] { BarMost / KeyboardSurface.LetterRowDp, RowMost / KeyboardSurface.LetterRowDp })
+        {
+            if (height <= HeightFor(reached))
+            {
+                return Math.Max(KeyboardSurface.MinRowScale, from + ((height - HeightFor(from)) * (reached - from) / (HeightFor(reached) - HeightFor(from))));
+            }
+
+            from = reached;
+        }
+
+        return from + ((height - HeightFor(from)) / (keys.HeightAt(1) - keys.HeightAt(0)));
+    }
+
+    /// <summary>The toolbar and the emoji row as tall as a row of keys at a share of Gboard's, up to their own height; the search's box as tall as its text needs, inside them.</summary>
+    private void ShareBars(double scale)
+    {
+        var line = KeyboardSurface.LetterRowDp * Math.Max(KeyboardSurface.MinRowScale, scale);
+        var share = Math.Min(line, BarMost) / BarDp;
+        barsShare.ScaleX = barsShare.ScaleY = share;
+        emojiRow.Height = Math.Min(line, RowMost) / share;
+        wordsShare.ScaleX = wordsShare.ScaleY = 1 / share;
+        searchBox.Height = Math.Min(SearchBoxHeightDp, BarDp * share);
+        searchBox.CornerRadius = new CornerRadius(searchBox.Height / 2);
+    }
 
     /// <summary>
     /// The window as tall as the keyboard in use needs for rows at a share of Gboard's: its rows keep their height when the
@@ -2219,8 +2298,10 @@ public sealed class KeyboardWindow : Window
     /// </summary>
     private void FitKeys(double scale, bool asked = true)
     {
-        MinHeight = ChromeHeight + keys.HeightAt(KeyboardSurface.MinRowScale);
-        Height = ChromeHeight + keys.HeightAt(Math.Max(KeyboardSurface.MinRowScale, scale));
+        var rows = Math.Max(KeyboardSurface.MinRowScale, scale);
+        ShareBars(rows);
+        MinHeight = HeightFor(KeyboardSurface.MinRowScale);
+        Height = HeightFor(rows);
         if (docked)
         {
             PlaceDocked(asked);
@@ -2399,10 +2480,10 @@ public sealed class KeyboardWindow : Window
         switch (part)
         {
             case Part.Top:
-                SizeKeys(keys.HeightAt(start.RowScale) - moved.Y, keepBottom: true);
+                SizeKeys(HeightFor(start.RowScale) - moved.Y, keepBottom: true);
                 break;
             case Part.Bottom:
-                SizeKeys(keys.HeightAt(start.RowScale) + moved.Y, keepBottom: false);
+                SizeKeys(HeightFor(start.RowScale) + moved.Y, keepBottom: false);
                 break;
             case Part.Left when docked:
                 SizeDocked(start.DockedWidth - moved.X, -1);
@@ -2438,11 +2519,11 @@ public sealed class KeyboardWindow : Window
         Keep();
     }
 
-    /// <summary>The keys as tall as dragged, the window no taller than the screen; floating, its bottom staying where it is when the top is dragged.</summary>
+    /// <summary>The window as tall as dragged, no taller than the screen, the keys and the bars sharing it; floating, its bottom staying where it is when the top is dragged.</summary>
     private void SizeKeys(double height, bool keepBottom)
     {
         var bottom = Top + Height;
-        FitKeys(keys.ScaleFor(Math.Min(height, held.Room - ChromeHeight)), asked: false);
+        FitKeys(ScaleAt(Math.Min(height, held.Room)), asked: false);
         if (!docked && keepBottom)
         {
             Top = bottom - Height;
@@ -2453,7 +2534,7 @@ public sealed class KeyboardWindow : Window
     private void LiftDocked(double lift)
     {
         var scale = held.Keyboard.RowScale;
-        var most = Math.Min(held.Room / 2, held.Room - BarDp - keys.HeightAt(scale));
+        var most = Math.Min(held.Room / 2, held.Room - Math.Min(KeyboardSurface.LetterRowDp * scale, BarMost) - keys.HeightAt(scale));
         dockedLift = Math.Clamp(lift, 0, Math.Max(0, most));
         frame.Margin = new Thickness(0, 0, 0, dockedLift);
         FitKeys(scale, asked: false);
@@ -2466,6 +2547,7 @@ public sealed class KeyboardWindow : Window
         dockedWidth = Math.Clamp(width, MinWidthDp, Math.Max(MinWidthDp, ActualWidth));
         frame.Width = dockedWidth;
         MoveDocked(start.DockedOffset + (side * (dockedWidth - start.DockedWidth) / 2));
+        FitKeys(start.RowScale, asked: false);
     }
 
     /// <summary>The docked keys at their width, place and lift on the bar.</summary>

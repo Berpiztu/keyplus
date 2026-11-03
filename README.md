@@ -585,7 +585,7 @@ address's), on Android and in the Windows settings alike.
 
 **Preferences › Extra line for suggestions and recent emoji** (on unless
 turned off), on Android and Windows: a line over the toolbar, of one height
-whatever it holds, with the words offered while typing, else (on Android)
+whatever it holds (as the toolbar, as tall as a row of keys up to its usual height), with the words offered while typing, else (on Android)
 for five minutes after a copy or a cut the things copied as chips, scrolling
 across: the one just copied, then the pinned, then the others from the newest,
 each with a ✕ that deletes it from the clipboard once Yes answers "Delete it

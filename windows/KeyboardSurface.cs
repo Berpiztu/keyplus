@@ -28,7 +28,7 @@ public sealed class KeyboardSurface : FrameworkElement
     private const double KeyGapDp = 14 / PixelsPerDp;
     private const double RowGapDp = 22.5 / PixelsPerDp;
     private const double NumberRowDp = 117 / PixelsPerDp;
-    private const double LetterRowDp = 124 / PixelsPerDp;
+    public const double LetterRowDp = 124 / PixelsPerDp;
     private const double TopDp = 11 / PixelsPerDp;
     private const double BottomDp = 32 / PixelsPerDp;
     private const double CornerDp = 15.5 / PixelsPerDp;

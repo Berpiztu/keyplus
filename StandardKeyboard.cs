@@ -218,7 +218,7 @@ public sealed class StandardKeyboard : View
     private const float KeyGapDp = 14 / PixelsPerDp;
     private const float RowGapDp = 22.5f / PixelsPerDp;
     private const float NumberRowDp = 117 / PixelsPerDp;
-    private const float LetterRowDp = 124 / PixelsPerDp;
+    internal const float LetterRowDp = 124 / PixelsPerDp;
     private const float TopDp = 11 / PixelsPerDp;
     private const float BottomDp = 32 / PixelsPerDp;
     private const float CornerDp = 15.5f / PixelsPerDp;

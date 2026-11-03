@@ -462,7 +462,9 @@ public sealed class EmojiStrip : FrameworkElement
 {
     private const double PixelsPerDp = 2.25;
     private const double CellDp = 83 / PixelsPerDp;
-    private const double EmojiDp = CellDp * 48 / 83;
+
+    /// <summary>An emoji's share of the row's height, Android's (the owner, 2026-11-03).</summary>
+    private const double EmojiShare = 0.6;
     private const double SideDp = 12 / PixelsPerDp;
 
     private IReadOnlyList<string> items = [];
@@ -483,11 +485,12 @@ public sealed class EmojiStrip : FrameworkElement
     protected override void OnRender(DrawingContext context)
     {
         context.DrawRectangle(Brushes.Transparent, null, new Rect(RenderSize));
-        var pixels = (int)Math.Round(EmojiDp * VisualTreeHelper.GetDpi(this).DpiScaleX);
-        var top = (RenderSize.Height - EmojiDp) / 2;
+        var emoji = RenderSize.Height * EmojiShare;
+        var pixels = (int)Math.Round(emoji * VisualTreeHelper.GetDpi(this).DpiScaleX);
+        var top = (RenderSize.Height - emoji) / 2;
         for (var i = 0; i < items.Count && SideDp + ((i + 1) * CellDp) <= RenderSize.Width; i++)
         {
-            context.DrawImage(EmojiArt.Draw(items[i], pixels), new Rect(SideDp + (i * CellDp) + ((CellDp - EmojiDp) / 2), top, EmojiDp, EmojiDp));
+            context.DrawImage(EmojiArt.Draw(items[i], pixels), new Rect(SideDp + (i * CellDp) + ((CellDp - emoji) / 2), top, emoji, emoji));
         }
     }
 
