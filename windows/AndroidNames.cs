@@ -317,6 +317,13 @@ namespace Berpiztu.KeyPlus
             public const int troubleshooting_beams_summary = 248;
             public const int context_model_gemma_title = 238;
             public const int context_model_gemma_terms = 239;
+            public const int export_designs = 249;
+            public const int import_designs = 250;
+            public const int designs_exported = 251;
+            public const int designs_imported = 252;
+            public const int designs_none = 253;
+            public const int restore_keyboard = 254;
+            public const int make_icon = 255;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

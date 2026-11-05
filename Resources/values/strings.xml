@@ -196,6 +196,8 @@
   <string name="voice_user">User</string>
   <string name="voice_password">Password</string>
   <string name="voice_sign_in_refused">The speech service does not take the user and password</string>
+  <string name="restore_keyboard">Restore keyboard</string>
+  <string name="make_icon">Make icon</string>
   <string name="open_keyboard">Open the keyboard</string>
   <string name="quit">Quit</string>
   <string name="voice_permission">Allow the microphone</string>
@@ -288,6 +290,9 @@
   <string name="dictionary_export_summary">Every language\'s words in a file another device\'s keyboard imports</string>
   <string name="dictionary_import">Import a dictionary</string>
   <string name="dictionary_import_summary">One exported here, with every language, Gboard\'s, or a text with a word a line, into this language; added to your words, none taken away</string>
+  <string name="designs_exported">Keyboards exported: %1$s</string>
+  <string name="designs_imported">Keyboards added to Theme: %1$s of %2$s; those already there are not added again</string>
+  <string name="designs_none">That file holds no keyboard design.</string>
   <string name="dictionary_exported">Dictionary exported: %1$s words</string>
   <string name="dictionary_imported">%1$s words added</string>
   <string name="dictionary_file_failed">The file could not be read or written: %1$s</string>

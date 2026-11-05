@@ -145,7 +145,7 @@ public sealed class KeyboardWindow : Window
     private readonly DropShadowEffect shadow = new() { BlurRadius = ShadowDp * 1.5, ShadowDepth = 2, Opacity = 0.3 };
     private readonly System.Windows.Shell.WindowChrome chrome = new()
     {
-        ResizeBorderThickness = new Thickness(ShadowDp),
+        ResizeBorderThickness = new Thickness(0),
         CaptionHeight = 0,
         GlassFrameThickness = new Thickness(0),
         UseAeroCaptionButtons = false,
@@ -264,10 +264,9 @@ public sealed class KeyboardWindow : Window
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
-        ResizeMode = ResizeMode.CanResize;
+        // Neither resized nor maximized by Windows until Redimensionar is on (LetWindowsResize).
+        ResizeMode = ResizeMode.NoResize;
         MinWidth = MinWidthDp + (2 * ShadowDp);
-
-        // Windows' own resizing at the card's edges and corners: the shadow's band around it.
         System.Windows.Shell.WindowChrome.SetWindowChrome(this, chrome);
         Topmost = true;
         ShowActivated = false;
@@ -505,7 +504,8 @@ public sealed class KeyboardWindow : Window
                 return;
             }
 
-            if (preferences.ShowKeyboard)
+            // As its icon it stays so, a field or not, until the icon or the clock's menu brings it back (the owner, 2026-11-05).
+            if (preferences.ShowKeyboard && !AsIcon)
             {
                 openedByHand = false;
                 if (!IsVisible)
@@ -520,7 +520,7 @@ public sealed class KeyboardWindow : Window
         icon = new KeyboardIconWindow(colors);
         icon.Tapped += OpenByHand;
         icon.Moved += Keep;
-        tray = new TrayIcon(OpenByHand, SettingsWindow.Start, Quit);
+        tray = new TrayIcon(OpenByHand, MakeIcon, () => IsVisible, SettingsWindow.Start, Quit);
         preferencesWatch = KeyboardPreferences.Watch(Prefer);
         appsWatch = AppColors.Watch(() => Prefer(KeyboardPreferences.Read()));
         // A saved keyboard's design changed elsewhere (the settings' Tema): the one in sight shown as it now is.
@@ -796,6 +796,16 @@ public sealed class KeyboardWindow : Window
         }
     }
 
+    /// <summary>Whether it is now its ⌨ icon.</summary>
+    private bool AsIcon => icon.IsVisible;
+
+    /// <summary>The clock's menu: the keyboard its ⌨ icon, whatever the preferences say, until the icon or the menu brings it back.</summary>
+    private void MakeIcon()
+    {
+        hiddenByCross = false;
+        HideKeyboard(asIcon: true);
+    }
+
     private void HideKeyboardByHand(bool asIcon)
     {
         Log.Detail("Keyboard: ✕");
@@ -876,7 +886,7 @@ public sealed class KeyboardWindow : Window
         // until then it heeds nothing more.
         preferences = kept;
         remade = true;
-        Dispatcher.BeginInvoke(() => Remake(show: true));
+        Dispatcher.BeginInvoke(() => Remake(show: !icon.IsVisible));
         return true;
     }
 
@@ -934,6 +944,7 @@ public sealed class KeyboardWindow : Window
         Log.Detail($"Keyboard: made again in its colours, {preferences.Look}{(app is null ? "" : $", typing in {app}")}");
         Keep();
         var shown = show || IsVisible;
+        var asIcon = icon.IsVisible;
         dockedBar?.Undock();
         var made = new KeyboardWindow(app, ownColor);
         Log.Detail("Keyboard: the new one made, the old one closing");
@@ -945,6 +956,11 @@ public sealed class KeyboardWindow : Window
         else
         {
             new WindowInteropHelper(made).EnsureHandle();
+            if (asIcon)
+            {
+                made.PlaceIcon();
+                made.icon.Show();
+            }
         }
 
         Quit();
@@ -2333,9 +2349,9 @@ public sealed class KeyboardWindow : Window
         frame.HorizontalAlignment = on ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
         Background = on ? frame.Background : Brushes.Transparent;
         handleBand.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
-        chrome.ResizeBorderThickness = new Thickness(on ? 0 : ShadowDp);
         resize.Lit = false;
         resizeFrame.Visibility = Visibility.Collapsed;
+        LetWindowsResize();
 
         dock.Sign = on ? Resource.Drawable.ic_grid_floating : Resource.Drawable.ic_grid_floating_off;
         designer.Docked = on;
@@ -2362,6 +2378,19 @@ public sealed class KeyboardWindow : Window
         {
             resizeStart = Current();
         }
+
+        LetWindowsResize();
+    }
+
+    /// <summary>
+    /// Windows' resizing at the card's edges and corners (the shadow's band around it) and its maximizing, only while
+    /// Redimensionar is on and floating (the owner, 2026-11-05); docked, never. Its frame and the program's own sizing need neither.
+    /// </summary>
+    private void LetWindowsResize()
+    {
+        var free = resize.Lit && !docked;
+        ResizeMode = free ? ResizeMode.CanResize : ResizeMode.NoResize;
+        chrome.ResizeBorderThickness = new Thickness(free ? ShadowDp : 0);
     }
 
     private Sizing Current() => new(Left, Top, Width, keys.RowScale, dockedWidth, dockedOffset, dockedLift);

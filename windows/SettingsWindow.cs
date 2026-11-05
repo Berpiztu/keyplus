@@ -515,6 +515,13 @@ public sealed class SettingsWindow : Window
         controls.Children.Add(Card(coloring));
         DockPanel.SetDock(controls, Dock.Top);
         form.Children.Add(controls);
+
+        // Import and Export under the keyboard drawn (the owner, 2026-11-05).
+        var import = new Button { Content = Texts.Get(Resource.String.import_designs) };
+        var export = new Button { Content = Texts.Get(Resource.String.export_designs), Margin = new Thickness(FieldGapDp / 2, 0, 0, 0) };
+        var carrying = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, FieldGapDp / 2, 0, 0), Children = { import, export } };
+        DockPanel.SetDock(carrying, Dock.Bottom);
+        form.Children.Add(carrying);
         var zoom = new Viewbox { Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Top, HorizontalAlignment = HorizontalAlignment.Left, Child = box };
         form.Children.Add(zoom);
 
@@ -523,7 +530,7 @@ public sealed class SettingsWindow : Window
         void Designing(bool on)
         {
             themeDesigning = on;
-            side.Visibility = title.Visibility = controls.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+            side.Visibility = title.Visibility = controls.Visibility = carrying.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
             zoom.Stretch = on ? Stretch.None : Stretch.Uniform;
             if (on && form.ActualWidth < box.Width)
             {
@@ -607,6 +614,53 @@ public sealed class SettingsWindow : Window
             {
                 Keyboards.Delete(shown.Id);
                 Fill();
+            }
+        };
+        export.Click += (_, _) =>
+        {
+            var save = new Microsoft.Win32.SaveFileDialog { FileName = $"keyplus-designs-{DateTime.Now:yyyy-MM-dd_HHmm}.json", Filter = "JSON|*.json" };
+            if (save.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                var (text, count) = Keyboards.Export();
+                System.IO.File.WriteAllText(save.FileName, text);
+                MessageBox.Show(Texts.Get(Resource.String.designs_exported, count), Texts.Get(Resource.String.export_designs));
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
+            {
+                Log.Write($"The keyboards could not be exported: {failure.Message}");
+                MessageBox.Show(failure.Message, Texts.Get(Resource.String.export_designs), MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        };
+        import.Click += (_, _) =>
+        {
+            var open = new Microsoft.Win32.OpenFileDialog { Filter = "JSON|*.json" };
+            if (open.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                var (found, added) = Keyboards.Import(System.IO.File.ReadAllText(open.FileName));
+                if (found == 0)
+                {
+                    Log.Write("A file imported holds no keyboard this one reads.");
+                    MessageBox.Show(Texts.Get(Resource.String.designs_none), Texts.Get(Resource.String.import_designs), MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                Fill();
+                MessageBox.Show(Texts.Get(Resource.String.designs_imported, added, found), Texts.Get(Resource.String.import_designs));
+            }
+            catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
+            {
+                Log.Write($"The keyboards could not be imported: {failure.Message}");
+                MessageBox.Show(failure.Message, Texts.Get(Resource.String.import_designs), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         };
         preview.RowsChanged += () => preview.Height = preview.HeightAt(rowScale);

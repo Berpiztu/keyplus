@@ -94,6 +94,53 @@ public static class Keyboards
     public static void SetDesign(string id, string? design, bool docked) =>
         Keep([.. Made().Select(keyboard => keyboard.Id != id ? keyboard : docked ? keyboard with { DockedDesign = design } : keyboard with { Design = design })]);
 
+    /// <summary>What Android's export calls its files; a file of Windows' also has each keyboard whole: its base, its language and its designs.</summary>
+    private sealed record DesignsFile(string Kind, int Version, string Device, DateTime Exported, Dictionary<string, string> Designs, List<KeyboardEntry>? Keyboards = null);
+
+    private const string DesignsKind = "keyplus-designs";
+
+    /// <summary>The keyboards saved, in every language, as a file's text, and how many.</summary>
+    public static (string Text, int Count) Export()
+    {
+        var made = Made();
+        var designs = made.Where(keyboard => keyboard.Design is not null).GroupBy(keyboard => keyboard.Name).ToDictionary(named => named.Key, named => named.First().Design!);
+        return (JsonSerializer.Serialize(new DesignsFile(DesignsKind, 2, "Windows", DateTime.Now, designs, made), new JsonSerializerOptions { WriteIndented = true }), made.Count);
+    }
+
+    /// <summary>
+    /// A file's keyboards added to the list, nothing replaced, one already there as it is not added again: whole where the
+    /// file has them so; else, as Android's, its designs as Estándar PC keyboards of no language. How many were found and
+    /// how many added; none found where it is no such file or none of its designs reads.
+    /// </summary>
+    public static (int Found, int Added) Import(string text)
+    {
+        DesignsFile? read;
+        try
+        {
+            read = JsonSerializer.Deserialize<DesignsFile>(text);
+        }
+        catch (JsonException unreadable)
+        {
+            Log.Write($"A file of keyboards could not be read: {unreadable.Message}");
+            return (0, 0);
+        }
+
+        if (read?.Kind != DesignsKind)
+        {
+            return (0, 0);
+        }
+
+        var found = (read.Keyboards ?? (read.Designs ?? []).Select(design => new KeyboardEntry("", design.Key, StandardPcBase, design.Value)))
+            .Where(keyboard => keyboard.Design is null || StandardDesign.FromText(keyboard.Design) is not null)
+            .ToList();
+        var made = Made();
+        var added = found.Where(keyboard => !made.Any(kept => kept with { Id = keyboard.Id } == keyboard))
+            .Select(keyboard => keyboard with { Id = Guid.NewGuid().ToString("N")[..8] })
+            .ToList();
+        Keep([.. made, .. added]);
+        return (found.Count, added.Count);
+    }
+
     private static List<KeyboardEntry> Made()
     {
         try

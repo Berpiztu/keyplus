@@ -190,6 +190,8 @@
   <string name="voice_user">Usuario</string>
   <string name="voice_password">Clave</string>
   <string name="voice_sign_in_refused">El servicio de voz no acepta el usuario y la clave</string>
+  <string name="restore_keyboard">Restaurar el teclado</string>
+  <string name="make_icon">Convertir en icono</string>
   <string name="open_keyboard">Abrir el teclado</string>
   <string name="quit">Salir</string>
   <string name="voice_permission">Permitir el micrófono</string>
@@ -282,6 +284,9 @@
   <string name="dictionary_export_summary">Las palabras de todos los idiomas en un fichero que importa el teclado de otro dispositivo</string>
   <string name="dictionary_import">Importar un diccionario</string>
   <string name="dictionary_import_summary">Uno exportado aquí, con todos los idiomas, el de Gboard o un texto con una palabra por línea, a este idioma; se añaden a tus palabras, no se quita ninguna</string>
+  <string name="designs_exported">Teclados exportados: %1$s</string>
+  <string name="designs_imported">Teclados añadidos a Tema: %1$s de %2$s; los que ya estaban no se añaden otra vez</string>
+  <string name="designs_none">Ese fichero no tiene ningún diseño de teclado.</string>
   <string name="dictionary_exported">Diccionario exportado: %1$s palabras</string>
   <string name="dictionary_imported">%1$s palabras añadidas</string>
   <string name="dictionary_file_failed">No se pudo leer o escribir el fichero: %1$s</string>
