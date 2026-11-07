@@ -9,9 +9,9 @@ namespace Berpiztu.KeyPlus;
 /// <summary>
 /// The keyboard by Windows' clock, while it runs, shown or hidden: the app's
 /// icon; a click, and its menu's first line, restore the keyboard where it is
-/// out of sight and make it its ⌨ icon where it is in sight (the owner,
-/// 2026-11-07); the menu also opens the settings or quits, the only way the
-/// keyboard ends.
+/// out of sight and put it away where it is in sight, as its ⌨ icon or hidden
+/// as "When the field lets go" says (the owner, 2026-11-07); the menu also
+/// opens the settings or quits, the only way the keyboard ends.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
@@ -21,13 +21,13 @@ public sealed class TrayIcon : IDisposable
     private readonly Forms.NotifyIcon icon;
     private readonly System.Drawing.Icon drawn;
 
-    public TrayIcon(Action show, Action makeIcon, Func<bool> inSight, Action settings, Action quit)
+    public TrayIcon(Action show, Action putAway, Func<bool> inSight, Func<bool> asIcon, Action settings, Action quit)
     {
         void Toggle()
         {
             if (inSight())
             {
-                makeIcon();
+                putAway();
             }
             else
             {
@@ -37,7 +37,7 @@ public sealed class TrayIcon : IDisposable
 
         var menu = new Forms.ContextMenuStrip();
         var showing = menu.Items.Add("", null, (_, _) => Toggle());
-        menu.Opening += (_, _) => showing.Text = Texts.Get(inSight() ? Resource.String.make_icon : Resource.String.restore_keyboard);
+        menu.Opening += (_, _) => showing.Text = Texts.Get(!inSight() ? Resource.String.restore_keyboard : asIcon() ? Resource.String.make_icon : Resource.String.hide_keyboard);
         menu.Items.Add(Texts.Get(Resource.String.keyboard_settings), null, (_, _) => settings());
         menu.Items.Add(Texts.Get(Resource.String.quit), null, (_, _) => quit());
         drawn = Drawn();

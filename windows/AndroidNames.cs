@@ -324,6 +324,7 @@ namespace Berpiztu.KeyPlus
             public const int designs_none = 253;
             public const int restore_keyboard = 254;
             public const int make_icon = 255;
+            public const int hide_keyboard = 256;
         }
 
         /// <summary>A resource's name by its id, as its field is named.</summary>

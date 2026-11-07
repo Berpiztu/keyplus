@@ -192,6 +192,7 @@
   <string name="voice_sign_in_refused">El servicio de voz no acepta el usuario y la clave</string>
   <string name="restore_keyboard">Restaurar el teclado</string>
   <string name="make_icon">Convertir en icono</string>
+  <string name="hide_keyboard">Ocultar el teclado</string>
   <string name="open_keyboard">Abrir el teclado</string>
   <string name="quit">Salir</string>
   <string name="voice_permission">Permitir el micrófono</string>

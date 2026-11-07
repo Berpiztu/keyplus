@@ -198,6 +198,7 @@
   <string name="voice_sign_in_refused">The speech service does not take the user and password</string>
   <string name="restore_keyboard">Restore keyboard</string>
   <string name="make_icon">Make icon</string>
+  <string name="hide_keyboard">Hide keyboard</string>
   <string name="open_keyboard">Open the keyboard</string>
   <string name="quit">Quit</string>
   <string name="voice_permission">Allow the microphone</string>

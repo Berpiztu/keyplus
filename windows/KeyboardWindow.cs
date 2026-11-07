@@ -462,11 +462,10 @@ public sealed class KeyboardWindow : Window
         resize.Clicked += ToggleResize;
         FillResizeFrame();
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
-        // ✕ makes it its ⌨ icon, which stays until the icon or the clock's icon opens it (the owner, 2026-11-07), as the clock's Make icon does.
         close.Clicked += () =>
         {
             Log.Detail("Keyboard: ✕");
-            MakeIcon();
+            PutAway();
         };
         spellingButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_spellcheck };
         debugButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_debug, ToolTip = Texts.Get(Resource.String.context_model_window) };
@@ -499,8 +498,9 @@ public sealed class KeyboardWindow : Window
                 return;
             }
 
-            // As its icon it stays so, a field or not, until the icon or the clock's menu brings it back (the owner, 2026-11-05).
-            if (preferences.ShowKeyboard && !AsIcon)
+            // As its icon it stays so, a field or not, until the icon or the clock's menu brings it back (the owner, 2026-11-05);
+            // hidden from the clock, the focus it gives back to the field does not bring it back either.
+            if (preferences.ShowKeyboard && !AsIcon && !FocusJustGivenBack)
             {
                 openedByHand = false;
                 if (!IsVisible)
@@ -515,7 +515,7 @@ public sealed class KeyboardWindow : Window
         icon = new KeyboardIconWindow(colors);
         icon.Tapped += OpenByHand;
         icon.Moved += Keep;
-        tray = new TrayIcon(() => FromTheClock(OpenByHand), () => FromTheClock(MakeIcon), () => IsVisible, SettingsWindow.Start, Quit);
+        tray = new TrayIcon(() => FromTheClock(OpenByHand), () => FromTheClock(PutAway), () => IsVisible, () => PutsAwayAsIcon, SettingsWindow.Start, Quit);
         preferencesWatch = KeyboardPreferences.Watch(Prefer);
         appsWatch = AppColors.Watch(() => Prefer(KeyboardPreferences.Read()));
         // A saved keyboard's design changed elsewhere (the settings' Tema): the one in sight shown as it now is.
@@ -795,6 +795,25 @@ public sealed class KeyboardWindow : Window
 
     /// <summary>The clock's menu: the keyboard its ⌨ icon, whatever the preferences say, until the icon or the menu brings it back.</summary>
     private void MakeIcon() => HideKeyboard(asIcon: true);
+
+    /// <summary>
+    /// Whether ✕ and the clock's icon put the keyboard away as its ⌨ icon: as "When the field lets go" says, Become the
+    /// icon; Hide and Stay on screen hide it (the owner, 2026-11-07).
+    /// </summary>
+    private bool PutsAwayAsIcon => preferences.FocusLost == KeyboardPreferences.FocusLostIcon;
+
+    /// <summary>✕, or the clock's icon with the keyboard in sight: its ⌨ icon, which stays until opened, or hidden, as the preferences say.</summary>
+    private void PutAway()
+    {
+        if (PutsAwayAsIcon)
+        {
+            MakeIcon();
+        }
+        else
+        {
+            HideKeyboard(asIcon: false);
+        }
+    }
 
     /// <summary>The focus gone from where text is typed: the keyboard hides, becomes its icon or stays, as the preferences say; never while it is dragged, listening or being designed, nor while it was opened by hand.</summary>
     private void FocusLeft()
@@ -2208,9 +2227,19 @@ public sealed class KeyboardWindow : Window
         if (back != IntPtr.Zero)
         {
             Log.Detail("Keyboard: the clock's icon used, the front given back to the window typed in");
+            givenBackAt = IsVisible ? 0 : Environment.TickCount64;
             SetForegroundWindow(back);
         }
     }
+
+    /// <summary>Environment.TickCount64 when the front was given back with the keyboard put away from the clock; 0 otherwise.</summary>
+    private long givenBackAt;
+
+    /// <summary>How long the field's focus, given back by the keyboard, is taken for that and not for a field come to.</summary>
+    private const long GivenBackQuietMs = 1500;
+
+    /// <summary>Whether a field's focus now is the one the keyboard gave back after putting itself away from the clock.</summary>
+    private bool FocusJustGivenBack => givenBackAt != 0 && Environment.TickCount64 - givenBackAt <= GivenBackQuietMs;
 
     private void GiveFrontBack()
     {
