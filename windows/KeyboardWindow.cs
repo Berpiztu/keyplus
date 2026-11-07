@@ -239,14 +239,8 @@ public sealed class KeyboardWindow : Window
     /// <summary>Opened by hand (started, the clock's icon, ⌨, the settings) rather than by a text field: it stays until a text field takes the focus.</summary>
     private bool openedByHand = true;
 
-    /// <summary>The presses and the computer's keys, while the keyboard runs: a tap on the text after ✕ (<see cref="ShowIfTapped"/>), and Spelling's sentence touched by anything but the keys.</summary>
+    /// <summary>The presses and the computer's keys, while the keyboard runs: Spelling's sentence touched by anything but the keys.</summary>
     private readonly InputWatch input = new();
-
-    /// <summary>Hidden by ✕ while text has the focus: a tap on it brings the keyboard back.</summary>
-    private bool hiddenByCross;
-
-    /// <summary>How soon after a press the caret moves for the press to be taken for a tap on the text.</summary>
-    private static readonly TimeSpan TapToCaret = TimeSpan.FromMilliseconds(600);
 
     /// <summary>The keyboard started: in the colours of the application in front, its window's as seen there last.</summary>
     public KeyboardWindow()
@@ -468,7 +462,12 @@ public sealed class KeyboardWindow : Window
         resize.Clicked += ToggleResize;
         FillResizeFrame();
         var close = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_close };
-        close.Clicked += () => HideKeyboardByHand(asIcon: !preferences.ShowKeyboard && preferences.KeyboardIcon);
+        // ✕ makes it its ⌨ icon, which stays until the icon or the clock's icon opens it (the owner, 2026-11-07), as the clock's Make icon does.
+        close.Clicked += () =>
+        {
+            Log.Detail("Keyboard: ✕");
+            MakeIcon();
+        };
         spellingButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_spellcheck };
         debugButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_debug, ToolTip = Texts.Get(Resource.String.context_model_window) };
         glideButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_settings_gesture };
@@ -481,11 +480,7 @@ public sealed class KeyboardWindow : Window
         keys.SpokenLetGo += StopListening;
         var settings = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_settings, ToolTip = Texts.Get(Resource.String.keyboard_settings) };
         settings.Clicked += SettingsWindow.Start;
-        focus.CaretMoved += at =>
-        {
-            ShowIfTapped();
-            AvoidText(at);
-        };
+        focus.CaretMoved += AvoidText;
         focus.MenuOpened += at => Avoid(Dips(at), menu: true);
         focus.MenuClosed += () => movedForMenu = false;
         focus.TextFocused += () =>
@@ -520,7 +515,7 @@ public sealed class KeyboardWindow : Window
         icon = new KeyboardIconWindow(colors);
         icon.Tapped += OpenByHand;
         icon.Moved += Keep;
-        tray = new TrayIcon(OpenByHand, MakeIcon, () => IsVisible, SettingsWindow.Start, Quit);
+        tray = new TrayIcon(() => FromTheClock(OpenByHand), () => FromTheClock(MakeIcon), () => IsVisible, SettingsWindow.Start, Quit);
         preferencesWatch = KeyboardPreferences.Watch(Prefer);
         appsWatch = AppColors.Watch(() => Prefer(KeyboardPreferences.Read()));
         // A saved keyboard's design changed elsewhere (the settings' Tema): the one in sight shown as it now is.
@@ -770,7 +765,6 @@ public sealed class KeyboardWindow : Window
     /// <summary>The keyboard in sight, its icon gone; never activated, the focus stays where it is.</summary>
     private void ShowKeyboard()
     {
-        hiddenByCross = false;
         icon.Hide();
         if (!IsVisible)
         {
@@ -800,38 +794,7 @@ public sealed class KeyboardWindow : Window
     private bool AsIcon => icon.IsVisible;
 
     /// <summary>The clock's menu: the keyboard its ⌨ icon, whatever the preferences say, until the icon or the menu brings it back.</summary>
-    private void MakeIcon()
-    {
-        hiddenByCross = false;
-        HideKeyboard(asIcon: true);
-    }
-
-    private void HideKeyboardByHand(bool asIcon)
-    {
-        Log.Detail("Keyboard: ✕");
-        HideKeyboard(asIcon);
-        if (preferences.ShowKeyboard)
-        {
-            hiddenByCross = true;
-        }
-    }
-
-    /// <summary>
-    /// After ✕, the text tapped or clicked again: the focus stays where it
-    /// was, so Windows tells only the caret moving; moved just after a press,
-    /// the keyboard shows, as Android's does when its field is tapped. Typing
-    /// on the computer's keyboard moves the caret with no press and leaves it
-    /// hidden.
-    /// </summary>
-    private void ShowIfTapped()
-    {
-        if (hiddenByCross && !IsVisible && input.PressedWithin(TapToCaret))
-        {
-            Log.Detail("Keyboard: shown, the text tapped again");
-            openedByHand = false;
-            ShowKeyboard();
-        }
-    }
+    private void MakeIcon() => HideKeyboard(asIcon: true);
 
     /// <summary>The focus gone from where text is typed: the keyboard hides, becomes its icon or stays, as the preferences say; never while it is dragged, listening or being designed, nor while it was opened by hand.</summary>
     private void FocusLeft()
@@ -2234,6 +2197,21 @@ public sealed class KeyboardWindow : Window
     /// back to the window typed in, where its keys go; after a drag, once it ends, for taking the front away during one
     /// would end it.
     /// </summary>
+    /// <summary>
+    /// What the clock's icon asks done, then the front given back to the window typed in: a click there gives the front to
+    /// the taskbar, and the field would lose its focus (the owner, 2026-11-07).
+    /// </summary>
+    private void FromTheClock(Action asked)
+    {
+        asked();
+        var back = focus.LastFront;
+        if (back != IntPtr.Zero)
+        {
+            Log.Detail("Keyboard: the clock's icon used, the front given back to the window typed in");
+            SetForegroundWindow(back);
+        }
+    }
+
     private void GiveFrontBack()
     {
         var back = focus.LastFront;

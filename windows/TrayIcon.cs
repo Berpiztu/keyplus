@@ -8,9 +8,10 @@ namespace Berpiztu.KeyPlus;
 
 /// <summary>
 /// The keyboard by Windows' clock, while it runs, shown or hidden: the app's
-/// icon; a click opens the keyboard, and its menu restores it where it is out
-/// of sight or makes it its ⌨ icon where it is in sight, opens the settings or
-/// quits, the only way the keyboard ends.
+/// icon; a click, and its menu's first line, restore the keyboard where it is
+/// out of sight and make it its ⌨ icon where it is in sight (the owner,
+/// 2026-11-07); the menu also opens the settings or quits, the only way the
+/// keyboard ends.
 /// </summary>
 public sealed class TrayIcon : IDisposable
 {
@@ -22,8 +23,7 @@ public sealed class TrayIcon : IDisposable
 
     public TrayIcon(Action show, Action makeIcon, Func<bool> inSight, Action settings, Action quit)
     {
-        var menu = new Forms.ContextMenuStrip();
-        var showing = menu.Items.Add("", null, (_, _) =>
+        void Toggle()
         {
             if (inSight())
             {
@@ -33,7 +33,10 @@ public sealed class TrayIcon : IDisposable
             {
                 show();
             }
-        });
+        }
+
+        var menu = new Forms.ContextMenuStrip();
+        var showing = menu.Items.Add("", null, (_, _) => Toggle());
         menu.Opening += (_, _) => showing.Text = Texts.Get(inSight() ? Resource.String.make_icon : Resource.String.restore_keyboard);
         menu.Items.Add(Texts.Get(Resource.String.keyboard_settings), null, (_, _) => settings());
         menu.Items.Add(Texts.Get(Resource.String.quit), null, (_, _) => quit());
@@ -43,7 +46,7 @@ public sealed class TrayIcon : IDisposable
         {
             if (e.Button == Forms.MouseButtons.Left)
             {
-                show();
+                Toggle();
             }
         };
     }

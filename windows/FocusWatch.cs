@@ -263,7 +263,8 @@ public sealed class FocusWatch : IDisposable
     {
         if (kind == ForegroundChanged)
         {
-            if (!OwnWindow(window))
+            // The taskbar and its icons' corner take the front for a click on the clock's icon: never the window typed in.
+            if (!OwnWindow(window) && !Taskbar(window))
             {
                 Interlocked.Exchange(ref lastFront, window);
             }
@@ -607,6 +608,14 @@ public sealed class FocusWatch : IDisposable
     private IntPtr lastFront;
 
     /// <summary>Whether a window is the keyboard's own process's (the keyboard, its icon), not the settings', which are a program apart.</summary>
+    /// <summary>Windows' taskbar and the corner its hidden icons open in, by their classes.</summary>
+    private static bool Taskbar(IntPtr window)
+    {
+        var name = new StringBuilder(64);
+        return GetClassName(window, name, name.Capacity) > 0
+            && name.ToString() is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "NotifyIconOverflowWindow" or "TopLevelWindowForOverflowXamlIsland";
+    }
+
     private static bool OwnWindow(IntPtr window)
     {
         GetWindowThreadProcessId(window, out var id);

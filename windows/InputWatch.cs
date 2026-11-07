@@ -10,8 +10,7 @@ namespace Berpiztu.KeyPlus;
 /// key of the computer's own keyboard last went down (one sent by a program,
 /// the keyboard's own included, is marked injected and left out). Low-level
 /// hooks on a thread of its own that only note the moment, so no press ever
-/// waits on the keyboard. For a tap on the text after ✕ (the caret moving
-/// just after a press), and for Spelling on Windows, which mends a sentence
+/// waits on the keyboard. For Spelling on Windows, which mends a sentence
 /// only while nothing but the keyboard has touched it.
 /// </summary>
 public sealed class InputWatch : IDisposable
@@ -55,10 +54,6 @@ public sealed class InputWatch : IDisposable
         started.Wait();
         watching = made!;
     }
-
-    /// <summary>Whether a press outside the keyboard came no longer ago than <paramref name="span"/>.</summary>
-    public bool PressedWithin(TimeSpan span) =>
-        Interlocked.Read(ref pressedAt) is > 0 and var at && Environment.TickCount64 - at <= span.TotalMilliseconds;
 
     /// <summary>Environment.TickCount64 at the last press outside the keyboard's windows: the caret may have gone anywhere.</summary>
     public long PressedAt => Interlocked.Read(ref pressedAt);
