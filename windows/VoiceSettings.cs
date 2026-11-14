@@ -12,11 +12,13 @@ namespace Berpiztu.KeyPlus;
 /// tapped again (the default), how much the recorded volume is
 /// raised, and which ia-voice reads it: the local one, this computer's
 /// container; one on the local network, by its IP; or a remote one, at an
-/// address, with the user and password its proxy asks for. Kept in the app's
+/// address, with the user and password its proxy asks for; and whether what
+/// was said and not typed yet when Enter sends the text is still typed after
+/// (Keep transcribing after sending, off by default). Kept in the app's
 /// folder, the password sealed for this Windows user (DPAPI), never in the
 /// repository.
 /// </summary>
-public sealed record VoiceSettings(string Microphone, bool AutoStop, double SilenceSeconds, double Gain, string Choice, string LanAddress, string Address, string User, string Password)
+public sealed record VoiceSettings(string Microphone, bool AutoStop, double SilenceSeconds, double Gain, string Choice, string LanAddress, string Address, string User, string Password, bool KeepAfterSend = false)
 {
     public const double LeastSilence = 0.5;
     public const double MostSilence = 30;
@@ -49,7 +51,7 @@ public sealed record VoiceSettings(string Microphone, bool AutoStop, double Sile
 
             // Kept before the local network was a choice: Local then said this computer or the address.
             var choice = stored.Choice ?? (stored.Local == false ? VoiceTyping.Remote : VoiceTyping.OnDevice);
-            return new VoiceSettings(stored.Microphone ?? "", stored.AutoStop, stored.SilenceSeconds, stored.Gain, choice, stored.LanAddress ?? "", stored.Address ?? "", stored.User ?? "", Unsealed(stored.Password)).Bounded();
+            return new VoiceSettings(stored.Microphone ?? "", stored.AutoStop, stored.SilenceSeconds, stored.Gain, choice, stored.LanAddress ?? "", stored.Address ?? "", stored.User ?? "", Unsealed(stored.Password), stored.KeepAfterSend).Bounded();
         }
         catch (Exception unreadable) when (unreadable is JsonException or CryptographicException or FormatException)
         {
@@ -62,7 +64,7 @@ public sealed record VoiceSettings(string Microphone, bool AutoStop, double Sile
     {
         var kept = Bounded();
         Directory.CreateDirectory(Path.GetDirectoryName(Kept)!);
-        File.WriteAllText(Kept, JsonSerializer.Serialize(new Stored(kept.Microphone, kept.AutoStop, kept.SilenceSeconds, kept.Gain, kept.Choice, kept.LanAddress, kept.Address, kept.User, Sealed(kept.Password))));
+        File.WriteAllText(Kept, JsonSerializer.Serialize(new Stored(kept.Microphone, kept.AutoStop, kept.SilenceSeconds, kept.Gain, kept.Choice, kept.LanAddress, kept.Address, kept.User, Sealed(kept.Password), KeepAfterSend: kept.KeepAfterSend)));
     }
 
     /// <summary>The values within their limits: silence 0.5 to 30 s, gain ×1 to ×4; with no address for the choice, this computer's service.</summary>
@@ -90,5 +92,5 @@ public sealed record VoiceSettings(string Microphone, bool AutoStop, double Sile
         string.IsNullOrEmpty(sealedPassword) ? "" : Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(sealedPassword), null, DataProtectionScope.CurrentUser));
 
     /// <summary>The settings as the file holds them, the password sealed.</summary>
-    private sealed record Stored(string? Microphone, bool AutoStop, double SilenceSeconds, double Gain, string? Choice, string? LanAddress, string? Address, string? User, string? Password, bool? Local = null);
+    private sealed record Stored(string? Microphone, bool AutoStop, double SilenceSeconds, double Gain, string? Choice, string? LanAddress, string? Address, string? User, string? Password, bool? Local = null, bool KeepAfterSend = false);
 }

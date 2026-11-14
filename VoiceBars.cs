@@ -10,6 +10,16 @@ public static class VoiceBars
 {
     public const int Count = 4;
 
+    /// <summary>
+    /// The microphone's circle while it listens, the owner's of 2026-11-14,
+    /// on Android and Windows alike: red while it waits for a voice
+    /// (Material's red 700), blue while one is speaking (Material's blue
+    /// 700), and the bars on either, white.
+    /// </summary>
+    public const uint ListeningRed = 0xFFD32F2F;
+    public const uint SpeakingBlue = 0xFF1976D2;
+    public const uint OnCircle = 0xFFFFFFFF;
+
     /// <summary>A bar's width, and the room between two, as shares of the sign.</summary>
     public const double WidthShare = 0.13;
     public const double GapShare = 0.1;

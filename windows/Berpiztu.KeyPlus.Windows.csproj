@@ -57,6 +57,7 @@
     <Compile Include="..\SwipeWords.cs" Link="Shared\SwipeWords.cs" />
     <Compile Include="..\EmojiList.cs" Link="Shared\EmojiList.cs" />
     <Compile Include="..\VoiceTyping.cs" Link="Shared\VoiceTyping.cs" />
+    <Compile Include="..\VoiceCommands.cs" Link="Shared\VoiceCommands.cs" />
     <Compile Include="..\WordSuggestions.cs" Link="Shared\WordSuggestions.cs" />
     <Compile Include="..\Updates.cs" Link="Shared\Updates.cs" />
     <Compile Include="..\PersonalWords.cs" Link="Shared\PersonalWords.cs" />

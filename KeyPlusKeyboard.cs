@@ -69,6 +69,9 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnCreate()
     {
         base.OnCreate();
+
+        // Sounds a dictation silenced and a keyboard that ended before giving them back left so.
+        VoicePreferences.GiveSoundsBack(this);
         KeyPlusPreferences.SplitLayoutsOnce(this);
         clipboard = new ClipboardHistory(this);
         clipboardManager = (ClipboardManager?)GetSystemService(ClipboardService);
@@ -456,7 +459,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             if (!answers)
             {
                 Log.Write($"Voice typing: {VoicePreferences.Choice(this)} did not answer, so Android's recognizer listens");
-                Toast.MakeText(this, Resource.String.voice_fallback_local, ToastLength.Short)!.Show();
+                Notice(Resource.String.voice_fallback_local);
                 local = true;
             }
         }
@@ -469,7 +472,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             var speech = new AndroidSpeech(this, Log.Write);
             if (!speech.Available)
             {
-                Toast.MakeText(this, Resource.String.voice_unavailable, ToastLength.Short)!.Show();
+                Notice(Resource.String.voice_unavailable);
                 return;
             }
 
@@ -486,12 +489,55 @@ public sealed class KeyPlusKeyboard : InputMethodService
         {
             if (dictation == made && made.Recording)
             {
-                panel?.ShowListening(true, level);
+                panel?.ShowListening(true, level, made.Speaking);
             }
         };
-        made.Partial += text => CurrentInputConnection?.SetComposingText(text.Length == 0 ? "" : Lead() + text, 1);
+        made.Partial += text =>
+        {
+            if (dictation != made || !made.Recording)
+            {
+                return;
+            }
+
+            var said = VoiceCommands.Apply(text, locale, open: true, spokenCase);
+            spokenCaseNow = said.Case;
+#if DEBUG
+            // A Debug build alone: what was heard with a command in it, to learn how the recognizer writes them.
+            if (text != heardLogged && text.Contains("comand", StringComparison.OrdinalIgnoreCase))
+            {
+                heardLogged = text;
+                Log.Write($"Voice typing (Debug build only): heard \"{text}\"");
+            }
+#endif
+
+            // Nothing to write and nothing of the dictation's written: the field is left alone, for writing nothing
+            // over what a command selected would delete it.
+            if (said.Text.Length > 0 || spokenShown)
+            {
+                if (selectedByCommand && !spokenShown)
+                {
+                    // Words after a command's selection go after it, never in its place: a command not understood,
+                    // written as words, deleted all that was selected.
+                    selectedByCommand = false;
+                    if (CurrentInputConnection?.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is { } held)
+                    {
+                        var end = held.StartOffset + Math.Max(held.SelectionStart, held.SelectionEnd);
+                        CurrentInputConnection.SetSelection(end, end);
+                        spokenLead = null;
+                    }
+                }
+
+                CurrentInputConnection?.SetComposingText(WithLead(said.Text), 1);
+                spokenShown = said.Text.Length > 0;
+            }
+
+            SayUnderstood(said);
+            CommandsSaid(said, locale);
+        };
         made.Silence += EndDictation;
         spokenLead = null;
+        spokenLocale = locale;
+        ForgetCommands();
         Lead();
         try
         {
@@ -500,12 +546,14 @@ public sealed class KeyPlusKeyboard : InputMethodService
         catch (Exception none) when (none is InvalidOperationException or Java.Lang.Exception)
         {
             Log.Write($"The microphone could not listen: {none.Message}");
-            Toast.MakeText(this, Resource.String.voice_no_microphone, ToastLength.Short)!.Show();
+            Notice(Resource.String.voice_no_microphone);
             made.Dispose();
             return;
         }
 
         dictation = made;
+        selectedByCommand = false;
+        spokenCase = spokenCaseNow = VoiceCase.AsHeard;
         Log.Write($"Voice typing: listening by {(local ? "Android's recognizer" : VoicePreferences.Choice(this))}, {(options.AutoStop ? $"stopping after {options.SilenceSeconds} s of silence" : "until the microphone is tapped")}");
         panel?.ShowListening(true, 0);
     }
@@ -522,6 +570,580 @@ public sealed class KeyPlusKeyboard : InputMethodService
         return spokenLead;
     }
 
+    /// <summary>A dictation's text as it is written: the space it needs before it, unless it starts with something written against what is there (a mark, a new line).</summary>
+    private string WithLead(string text) => text.Length == 0 || VoiceCommands.StartsAttached(text) ? text : Lead() + text;
+
+    /// <summary>The language the dictation going on is heard in, by its locale: its commands' marks and Help's list.</summary>
+    private string spokenLocale = StandardKeys.Spanish.Locale;
+
+    /// <summary>How long a dictation's commands for the keyboard (send, stop, help) must stand as heard before they are done: the recognizer changes its last words while they are being said.</summary>
+    private const int CommandStandsMs = 700;
+
+    /// <summary>How much of the field before the caret is read to find the word or the sentence a command deletes.</summary>
+    private const int DeleteReach = 1000;
+
+    private readonly Android.OS.Handler commandsHandler = new(Android.OS.Looper.MainLooper!);
+
+    /// <summary>The commands for the keyboard the dictation going on holds, as last heard, how many of them were done already, and how many were waited on.</summary>
+    private IReadOnlyList<VoiceAction> commandsHeard = [];
+    private int commandsDone;
+    private int commandsWaited;
+
+    /// <summary>Whether the dictation going on has words of its own written in the field (its composing text).</summary>
+    private bool spokenShown;
+
+    /// <summary>How the dictation going on writes its words from its start, or from where it last started afresh (capitals or small letters asked for before then), and how it is writing them now.</summary>
+    private VoiceCase spokenCase;
+    private VoiceCase spokenCaseNow;
+
+    /// <summary>A command of the dictation going on selected text that is still selected for all the keyboard knows: its next words are written after it.</summary>
+    private bool selectedByCommand;
+
+#if DEBUG
+    /// <summary>What was last written in the log as heard, in a Debug build.</summary>
+    private string heardLogged = "";
+#endif
+
+    /// <summary>A dictation starting, or starting afresh: no command of its own heard or done yet, and no words of its own written.</summary>
+    private void ForgetCommands()
+    {
+        spokenShown = false;
+        understoodSaid = "";
+        understoodCount = 0;
+        commandsHandler.RemoveCallbacksAndMessages(null);
+        commandsHeard = [];
+        commandsDone = 0;
+        commandsWaited = 0;
+    }
+
+    /// <summary>
+    /// The commands for the keyboard in the words heard so far: a new one is
+    /// done once, when it has stood as heard for <see cref="CommandStandsMs"/>;
+    /// the words are read again whole each time, so those done before are
+    /// still there and are not done again.
+    /// </summary>
+    private void CommandsSaid(Spoken said, string locale)
+    {
+        commandsHeard = said.Actions;
+        if (said.Actions.Count == commandsWaited)
+        {
+            return;
+        }
+
+        commandsWaited = said.Actions.Count;
+        commandsHandler.RemoveCallbacksAndMessages(null);
+        if (commandsWaited > commandsDone)
+        {
+            commandsHandler.PostDelayed(() => DoCommands(locale), CommandStandsMs);
+        }
+    }
+
+    private void DoCommands(string locale)
+    {
+        if (dictation is not { Recording: true } || transcribing)
+        {
+            return;
+        }
+
+        var asked = commandsHeard.Skip(commandsDone).ToArray();
+        commandsDone = commandsHeard.Count;
+        foreach (var action in asked)
+        {
+            Log.Write($"Voice typing: command {action}");
+            switch (action)
+            {
+                case VoiceAction.Send:
+                    // Enter starts the dictation afresh, its commands with it: those said after it are heard anew.
+                    PerformEnter();
+                    return;
+                case VoiceAction.Stop:
+                    EndDictation();
+                    return;
+                case VoiceAction.Help:
+                    panel?.ShowVoiceHelp(VoiceCommands.HelpTitle(locale), VoiceCommands.Help(locale));
+                    break;
+                case VoiceAction.DeleteWord:
+                    DeleteBefore(sentence: false);
+                    break;
+                case VoiceAction.DeleteSentence:
+                    DeleteBefore(sentence: true);
+                    break;
+                case VoiceAction.SelectAll:
+                    Select(paragraph: false);
+                    break;
+                case VoiceAction.SelectParagraph:
+                    Select(paragraph: true);
+                    break;
+                case VoiceAction.DeleteSelection:
+                    if (CurrentInputConnection is { } field && field.GetSelectedText(0) is { } chosen && chosen.Length > 0)
+                    {
+                        field.CommitText("", 1);
+                    }
+
+                    break;
+                case VoiceAction.Copy:
+                    CurrentInputConnection?.PerformContextMenuAction(Android.Resource.Id.Copy);
+                    break;
+                case VoiceAction.Cut:
+                    AfreshForCommand();
+                    CurrentInputConnection?.PerformContextMenuAction(Android.Resource.Id.Cut);
+                    break;
+                case VoiceAction.Paste:
+                    AfreshForCommand();
+                    CurrentInputConnection?.PerformContextMenuAction(Android.Resource.Id.Paste);
+                    break;
+                case VoiceAction.GoEnd:
+                    GoTo(end: true);
+                    break;
+                case VoiceAction.GoStart:
+                    GoTo(end: false);
+                    break;
+                case VoiceAction.Spelling:
+                    CorrectSelected();
+                    break;
+                case VoiceAction.Grammar:
+                    MarkGrammar();
+                    break;
+                case VoiceAction.SelectionCase:
+                    // Text selected: its case turned, as Shift tapped twice does, and the words after it written as before the command.
+                    if ((CurrentInputConnection?.GetSelectedText(0)?.Length ?? 0) > 0)
+                    {
+                        var before = spokenCase;
+                        AfreshForCommand();
+                        spokenCase = spokenCaseNow = before;
+                        TurnSelectionCase();
+                    }
+
+                    break;
+                case VoiceAction.Undo:
+                    AfreshForCommand();
+                    selectedByCommand = false;
+                    if (!TakeCorrectionBack())
+                    {
+                        PressKey(Keycode.Z, MetaKeyStates.CtrlOn | MetaKeyStates.CtrlLeftOn);
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A command that selects or changes the field's text by itself (select,
+    /// cut, paste): the dictation's words so far are written for good first
+    /// and it starts afresh, keeping what was said after the command, so its
+    /// next words neither move the caret off a selection nor write over what
+    /// the command did, nor the command's own again.
+    /// </summary>
+    private void AfreshForCommand()
+    {
+        CurrentInputConnection?.FinishComposingText();
+        dictation?.Forget(keepUnread: true);
+        ForgetCommands();
+        spokenCase = spokenCaseNow;
+        spokenLead = null;
+    }
+
+    /// <summary>A sentence as the language's Spelling models write it, away from the keyboard's thread: its context model where it is on (one loaded for another language is not used), else the accent model; none where neither is there.</summary>
+    private async Task<string?> CorrectedSentence(StandardLanguage language, string sentence) =>
+        ContextModelOf(language.Code) is { } name
+            ? await context.Async() is { } corrector && corrector.Name == name ? await Task.Run(() => corrector.Correct(sentence)) : null
+            : await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
+
+    /// <summary>A message of the dictation's, said in the keyboard's toolbar, where the words offered show (the owner, 2026-11-14); floating on the screen only where the toolbar is not there.</summary>
+    private void Notice(int text, bool lasting = false) => Notice(GetString(text), lasting);
+
+    private void Notice(string text, bool lasting = false)
+    {
+        if (panel?.Say(text, lasting) != true)
+        {
+            Toast.MakeText(this, text, lasting ? ToastLength.Long : ToastLength.Short)!.Show();
+        }
+    }
+
+    /// <summary>The last command said in the toolbar as understood, and how many the dictation going on had then: a new one, or the last heard otherwise, is said.</summary>
+    private string understoodSaid = "";
+    private int understoodCount;
+
+    /// <summary>What was heard after the keyword said in the toolbar as it is understood (the owner, 2026-11-14): the command it was taken for, or the words no command is near to, so it is seen why one is not done.</summary>
+    private void SayUnderstood(Spoken said)
+    {
+        if (said.Understood.Count == 0 || (said.Understood.Count == understoodCount && said.Understood[^1] == understoodSaid))
+        {
+            return;
+        }
+
+        understoodCount = said.Understood.Count;
+        understoodSaid = said.Understood[^1];
+        Notice(understoodSaid);
+    }
+
+    /// <summary>The Spelling command is reading a text: a second one waits for it.</summary>
+    private bool correcting;
+
+    /// <summary>What the Spelling command last wrote, where, and what was there before, while it has not been taken back: Undo puts it back as it was.</summary>
+    private (int At, string Written, string Before)? lastCorrection;
+
+    /// <summary>
+    /// The Spelling command's last correction taken back by Undo: the text as
+    /// it was before it, written again in its place, while what it wrote is
+    /// still there. The field's own undo does not know how: on the owner's
+    /// headset it deleted the whole paragraph (2026-11-14). False where there
+    /// is none to take back, or the text is no longer what it wrote.
+    /// </summary>
+    private bool TakeCorrectionBack()
+    {
+        if (lastCorrection is not { } last)
+        {
+            return false;
+        }
+
+        lastCorrection = null;
+        if (CurrentInputConnection is not { } field || field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
+        {
+            return false;
+        }
+
+        var at = last.At - extracted.StartOffset;
+        var text = held.ToString() ?? "";
+        if (at < 0 || at + last.Written.Length > text.Length || text.Substring(at, last.Written.Length) != last.Written)
+        {
+            Log.Write("Voice typing: the text is no longer what Spelling wrote, so Undo is the field's own");
+            return false;
+        }
+
+        field.SetSelection(last.At, last.At + last.Written.Length);
+        field.CommitText(last.Before, 1);
+        Log.Write("Voice typing: Spelling's correction taken back, the text as it was before it");
+        return true;
+    }
+
+    /// <summary>Android's own spell checker, asked by the Spelling command where the language has it chosen, and by the Grammar command.</summary>
+    private SystemSpelling? systemSpelling;
+
+    /// <summary>The text a command reads: where the field's text starts, the part of it chosen, and that part as it was read.</summary>
+    private sealed record Chosen(int Offset, int Start, int End, string Text);
+
+    /// <summary>
+    /// The text a command reads (Spelling, Grammar): what is selected, or all
+    /// the text where nothing is, the dictation's words so far written for
+    /// good first; none where the field's text cannot be read or is empty.
+    /// </summary>
+    private Chosen? ChosenForCommand(string command)
+    {
+        if (CurrentInputConnection is not { } field)
+        {
+            return null;
+        }
+
+        AfreshForCommand();
+        if ((field.GetSelectedText(0)?.Length ?? 0) == 0)
+        {
+            Select(paragraph: false);
+        }
+
+        if (field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
+        {
+            Log.Write($"Voice typing: the field's text could not be read, so {command} did nothing");
+            return null;
+        }
+
+        var whole = held.ToString() ?? "";
+        var start = Math.Clamp(Math.Min(extracted.SelectionStart, extracted.SelectionEnd), 0, whole.Length);
+        var end = Math.Clamp(Math.Max(extracted.SelectionStart, extracted.SelectionEnd), 0, whole.Length);
+        var text = whole[start..end];
+        return text.Trim().Length == 0 ? null : new(extracted.StartOffset, start, end, text);
+    }
+
+    /// <summary>
+    /// A command's text written in the place of what it read, found by where
+    /// it was, only while that part of the field is still what was read: what
+    /// was said or typed after it meanwhile stays. With what was there
+    /// before kept, where Undo is to put it back (<see cref="TakeCorrectionBack"/>).
+    /// False where the text changed meanwhile, which is left as it is.
+    /// </summary>
+    private bool WriteOverChosen(Chosen read, Java.Lang.ICharSequence written, bool undone)
+    {
+        if (CurrentInputConnection is { } now && now.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is { Text: { } after } found
+            && found.StartOffset == read.Offset && after.Length() >= read.End && (after.ToString() ?? "")[read.Start..read.End] == read.Text)
+        {
+            now.FinishComposingText();
+            now.SetSelection(read.Offset + read.Start, read.Offset + read.End);
+            now.CommitText(written, 1);
+            lastCorrection = undone ? (read.Offset + read.Start, written.ToString() ?? "", read.Text) : null;
+            selectedByCommand = false;
+            return true;
+        }
+
+        Log.Write("Voice typing: the text changed while it was read, so it was left as it is");
+        return false;
+    }
+
+    /// <summary>
+    /// The Spelling command: what is selected, or all the text where nothing
+    /// is, corrected by what the language's Spelling has chosen in the
+    /// settings (the owner, 2026-11-14), whether or not Spelling is turned
+    /// off from the toolbar: Android's own spell checker where it is chosen
+    /// (its misspellings written as its first suggestion); else the
+    /// language's context model alone where it is chosen, loaded for this
+    /// where the keyboard has it not loaded; else its words as Correct words
+    /// writes a misspelled one, then its accents by the accent model. It
+    /// says in the keyboard's line that it is reading, a model taking many
+    /// seconds for a long text, and how it ended.
+    /// </summary>
+    private async void CorrectSelected()
+    {
+        if (correcting)
+        {
+            Notice(Resource.String.voice_spelling_working);
+            return;
+        }
+
+        if (ChosenForCommand("Spelling") is not { } read)
+        {
+            return;
+        }
+
+        var language = KeyPlusPreferences.Language(this);
+        var bySystem = LanguageChoices.SystemSpellingIn(this, language.Code);
+        var set = LanguageChoices.SpellingIn(this, language.Code).ContextAlone();
+        Log.Write($"Voice typing: Spelling in {language.Code} as its language has it chosen: Android's spell checker {(bySystem ? "on" : "off")}, context model {set.Context ?? "off"}, Correct words {(set.Words ? "on" : "off")}, accents {(set.Accents ? "on" : "off")}");
+        if (!bySystem && set.Context is null && !set.Words && !set.Accents)
+        {
+            Notice(Resource.String.voice_spelling_nothing);
+            return;
+        }
+
+        correcting = true;
+        Notice(Resource.String.voice_spelling_working, lasting: true);
+        ContextCorrector? own = null;
+        try
+        {
+            string written;
+            int changed;
+            if (bySystem)
+            {
+                if (await (systemSpelling ??= new(this, Log.Write)).Check(read.Text, language.Locale) is not { } marked)
+                {
+                    Notice(Resource.String.voice_spelling_no_system);
+                    return;
+                }
+
+                (written, changed) = SystemSpelling.Corrected(read.Text, marked);
+                Log.Write($"Voice typing: Android's spell checker marked {marked.Count(place => place.Misspelled)} misspellings and {marked.Count(place => place.Grammar)} grammar errors in {read.Text.Length} characters; {changed} were corrected");
+            }
+            else
+            {
+                ContextCorrector? corrector = null;
+                if (set.Context is { } name)
+                {
+                    // The keyboard's own where it is the one loaded; else, Spelling being off from the toolbar, loaded for this reading alone.
+                    corrector = await context.Async() is { } loaded && loaded.Name == name
+                        ? loaded
+                        : own = await Task.Run(() => ContextCorrector.Load(System.IO.Path.Combine(KeyPlusPreferences.CorrectorsFolder(this), name)));
+                    if (corrector is null)
+                    {
+                        Log.Write($"Voice typing: the context model chosen for {language.Code} is not there, so nothing was corrected");
+                        Notice(Resource.String.voice_spelling_no_model);
+                        return;
+                    }
+                }
+                else if (set.Words && spelling.DictionaryFor(language) is { } dictionary && await dictionary.Async() is null)
+                {
+                    Log.Write($"Voice typing: {language.Code}'s dictionary is not downloaded, so its words are not corrected");
+                }
+
+                var accents = corrector is null && set.Accents ? await spelling.Accents.Async() : null;
+                var parts = VoiceCommands.SentencesOf(read.Text);
+                changed = 0;
+                for (var at = 0; at < parts.Length; at += 2)
+                {
+                    var sentence = parts[at];
+                    if (sentence.Trim().Length == 0)
+                    {
+                        continue;
+                    }
+
+                    string corrected;
+                    if (corrector is not null)
+                    {
+                        corrected = await Task.Run(() => corrector.Correct(sentence));
+                    }
+                    else
+                    {
+                        var words = set.Words
+                            ? VoiceCommands.WordsCorrected(sentence, word => spelling.FixAsChosen(language, word) is { Misspelled: true, Words: [var first, ..] } ? first : null)
+                            : sentence;
+                        corrected = accents is null ? words : await Task.Run(() => accents.Restore(words));
+                    }
+
+                    changed += corrected == sentence ? 0 : 1;
+                    parts[at] = corrected;
+                }
+
+                written = string.Concat(parts);
+                Log.Write($"Voice typing: Spelling read {(parts.Length + 1) / 2} sentences and changed {changed}");
+            }
+
+            if (changed == 0)
+            {
+                Notice(Resource.String.voice_spelling_none);
+                return;
+            }
+
+            Notice(WriteOverChosen(read, new Java.Lang.String(written), undone: true) ? Resource.String.voice_spelling_done : Resource.String.voice_spelling_moved);
+        }
+        finally
+        {
+            own?.Dispose();
+            correcting = false;
+        }
+    }
+
+    /// <summary>
+    /// The Grammar command: what is selected, or all the text where nothing
+    /// is, asked of Android's own spell checker, and what it marks as a
+    /// grammar error left marked in the field (the owner, 2026-11-14: "que lo
+    /// deje marcado"), as Android marks them, with the words suggested for
+    /// each, to be taken with a tap; nothing is rewritten. Said in the
+    /// keyboard's line: how many were marked, or that none were.
+    /// </summary>
+    private async void MarkGrammar()
+    {
+        if (correcting)
+        {
+            Notice(Resource.String.voice_spelling_working);
+            return;
+        }
+
+        if (ChosenForCommand("Grammar") is not { } read)
+        {
+            return;
+        }
+
+        var language = KeyPlusPreferences.Language(this);
+        correcting = true;
+        Notice(Resource.String.voice_spelling_working, lasting: true);
+        try
+        {
+            if (await (systemSpelling ??= new(this, Log.Write)).Check(read.Text, language.Locale) is not { } marked)
+            {
+                Notice(Resource.String.voice_spelling_no_system);
+                return;
+            }
+
+            var grammar = marked.Where(place => place.Grammar && place.At + place.Length <= read.Text.Length).ToList();
+            Log.Write($"Voice typing: Android's spell checker marked {marked.Count(place => place.Misspelled)} misspellings and {grammar.Count} grammar errors in {read.Text.Length} characters of {language.Code}");
+            if (grammar.Count == 0)
+            {
+                Notice(Resource.String.voice_grammar_none);
+                return;
+            }
+
+            var text = new Android.Text.SpannableString(read.Text);
+            var locale = Java.Util.Locale.ForLanguageTag(language.Locale);
+            foreach (var place in grammar)
+            {
+                text.SetSpan(
+                    new Android.Text.Style.SuggestionSpan(this, locale, [.. place.Suggestions], Android.Text.Style.SuggestionSpanFlags.GrammarError, null),
+                    place.At,
+                    place.At + place.Length,
+                    Android.Text.SpanTypes.ExclusiveExclusive);
+            }
+
+            Notice(WriteOverChosen(read, text, undone: false) ? GetString(Resource.String.voice_grammar_marked, grammar.Count) : GetString(Resource.String.voice_spelling_moved));
+        }
+        finally
+        {
+            correcting = false;
+        }
+    }
+
+    /// <summary>A command's move of the caret to the text's end or its start, nothing left selected.</summary>
+    private void GoTo(bool end)
+    {
+        if (CurrentInputConnection is not { } field)
+        {
+            return;
+        }
+
+        AfreshForCommand();
+        if (field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
+        {
+            Log.Write("Voice typing: the field's text could not be read, so the caret was not moved");
+            return;
+        }
+
+        var at = extracted.StartOffset + (end ? held.Length() : 0);
+        field.SetSelection(at, at);
+        selectedByCommand = false;
+    }
+
+    /// <summary>
+    /// A command's selection: all the field's text, or the paragraph the
+    /// caret is in, between its new lines; words said then take the
+    /// selection's place, as typed ones do.
+    /// </summary>
+    private void Select(bool paragraph)
+    {
+        if (CurrentInputConnection is not { } field)
+        {
+            return;
+        }
+
+        AfreshForCommand();
+        if (field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
+        {
+            Log.Write("Voice typing: the field's text could not be read, so nothing was selected");
+            return;
+        }
+
+        var text = held.ToString() ?? "";
+        var start = 0;
+        var end = text.Length;
+        if (paragraph)
+        {
+            var caret = Math.Clamp(extracted.SelectionStart, 0, text.Length);
+
+            // On an empty line (after a new paragraph, the text's end), the paragraph before it: an empty one selects nothing.
+            while (caret > 0 && (caret == text.Length || text[caret] == '\n') && char.IsWhiteSpace(text[caret - 1]))
+            {
+                caret--;
+            }
+
+            start = caret == 0 ? 0 : text.LastIndexOf('\n', caret - 1) + 1;
+            end = text.IndexOf('\n', caret) is >= 0 and var line ? line : text.Length;
+        }
+
+        var taken = field.SetSelection(extracted.StartOffset + start, extracted.StartOffset + end);
+        selectedByCommand = end > start;
+
+        // Only numbers, never the text: where the caret was and what was asked to be selected, to tell why nothing shows as selected.
+        Log.Write($"Voice typing: {(paragraph ? "the paragraph" : "all")} selected: the field holds {text.Length} characters from {extracted.StartOffset}, the caret was at {extracted.SelectionStart} to {extracted.SelectionEnd}, asked {start} to {end}, the field {(taken ? "took it" : "refused it")} and now has {field.GetSelectedText(0)?.Length ?? 0} selected");
+    }
+
+    /// <summary>The field's last word before the caret deleted, or its last sentence, back to the end of the one before it: a command's, where the dictation has no words of its own to delete.</summary>
+    private void DeleteBefore(bool sentence)
+    {
+        if (CurrentInputConnection is not { } field || field.GetTextBeforeCursor(DeleteReach, 0)?.ToString() is not { Length: > 0 } before)
+        {
+            return;
+        }
+
+        var kept = before.TrimEnd();
+        if (sentence)
+        {
+            kept = kept.TrimEnd('.', '?', '!');
+            kept = kept[..(kept.LastIndexOfAny(['.', '?', '!', '\n']) + 1)];
+        }
+        else
+        {
+            kept = kept[..(kept.LastIndexOfAny([' ', '\n']) + 1)];
+        }
+
+        field.DeleteSurroundingText(before.Length - kept.Length, 0);
+    }
+
     /// <summary>The dictation stopped: all its words written for good in its composing text's place.</summary>
     private async void EndDictation()
     {
@@ -535,33 +1157,40 @@ public sealed class KeyPlusKeyboard : InputMethodService
         panel?.ShowListening(false, 0);
         try
         {
-            var text = await going.Stop();
+            var heard = await going.Stop();
+            var text = VoiceCommands.Apply(heard, spokenLocale, open: false, spokenCase).Text;
+            ForgetCommands();
             if (sentWhileStopping)
             {
                 Log.Write("Voice typing: stopped; its words were sent as it stopped, so they are not written again");
             }
             else if (text.Length > 0)
             {
-                CurrentInputConnection?.CommitText(Lead() + text, 1);
+                CurrentInputConnection?.CommitText(WithLead(text), 1);
                 Log.Write($"Voice typing: stopped, {text.Length} characters written");
+            }
+            else if (heard.Length > 0)
+            {
+                // Only commands were said: nothing of them stays written.
+                CurrentInputConnection?.CommitText("", 1);
             }
             else
             {
                 CurrentInputConnection?.FinishComposingText();
-                Toast.MakeText(this, Resource.String.voice_nothing_heard, ToastLength.Short)!.Show();
+                Notice(Resource.String.voice_nothing_heard);
             }
         }
         catch (VoiceTyping.SignInRefused)
         {
             Log.Write("ia-voice's proxy did not take the user and password.");
             CurrentInputConnection?.FinishComposingText();
-            Toast.MakeText(this, Resource.String.voice_sign_in_refused, ToastLength.Long)!.Show();
+            Notice(Resource.String.voice_sign_in_refused);
         }
         catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
             Log.Write($"ia-voice did not answer: {failure.Message}");
             CurrentInputConnection?.FinishComposingText();
-            Toast.MakeText(this, Resource.String.voice_unavailable, ToastLength.Short)!.Show();
+            Notice(Resource.String.voice_unavailable);
         }
         finally
         {
@@ -598,6 +1227,8 @@ public sealed class KeyPlusKeyboard : InputMethodService
         CurrentInputConnection?.FinishComposingText();
         var keepUnread = VoicePreferences.KeepAfterSend(this);
         going.Forget(keepUnread);
+        ForgetCommands();
+        spokenCase = spokenCaseNow;
         spokenLead = null;
         Log.Write($"Voice typing: {why} while listening, so it starts afresh, still listening; what was said and not written yet {(keepUnread ? "is still written" : "is dropped")}");
     }
@@ -612,6 +1243,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         going.Dispose();
         dictation = null;
+        ForgetCommands();
         CurrentInputConnection?.FinishComposingText();
         panel?.ShowListening(false, 0);
     }
@@ -812,10 +1444,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.SpellingIn = language => LanguageChoices.Applied(this, language.Code);
             // A language's context model reads its sentences where it is on, the accent model where its accents are:
             // never both, its settings let only one. A corrector loaded for another language is not used for this one.
-            panel.CorrectSentence = async (language, sentence) =>
-                ContextModelOf(language.Code) is { } name
-                    ? await context.Async() is { } corrector && corrector.Name == name ? await Task.Run(() => corrector.Correct(sentence)) : null
-                    : await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
+            panel.CorrectSentence = CorrectedSentence;
             panel.CorrectSentenceNow = (language, sentence) =>
                 ContextModelOf(language.Code) is { } name
                     ? context.InUse() is { } corrector && corrector.Name == name ? corrector.Correct(sentence) : null
@@ -1912,6 +2541,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         LearnAddress();
         panel?.StopRepeat();
         panel?.HideModelWindow();
+        panel?.HideVoiceHelp();
         DropDictation();
         base.OnFinishInputView(finishingInput);
     }
@@ -1987,19 +2617,48 @@ public sealed class KeyPlusKeyboard : InputMethodService
         CurrentInputConnection?.PerformEditorAction(action);
     }
 
+    /// <summary>A key of the keyboard's: Enter while dictating starts the dictation afresh, still listening; any other stops the microphone first.</summary>
     private void SendKey(Keycode code, MetaKeyStates meta)
     {
         if (code == Keycode.Enter)
         {
             ForgetSpoken("Enter");
         }
+        else
+        {
+            StopForKey();
+        }
 
+        PressKey(code, meta);
+    }
 
+    /// <summary>A key sent to the field, the dictation left as it is: the keyboard's own keys after <see cref="SendKey"/>, and a spoken command's.</summary>
+    private void PressKey(Keycode code, MetaKeyStates meta)
+    {
         if (CurrentInputConnection is { } connection)
         {
             KeySender.Send(key => connection.SendKeyEvent(key), code, meta);
         }
     }
 
-    private void TypeText(string text) => CurrentInputConnection?.CommitText(text, 1);
+    private void TypeText(string text)
+    {
+        StopForKey();
+        CurrentInputConnection?.CommitText(text, 1);
+    }
+
+    /// <summary>
+    /// A key or a text typed on the keyboard while dictating, any but Enter:
+    /// the microphone stops at once, as most keyboards' does (the owner,
+    /// 2026-11-14), the words written so far left as they are and what was
+    /// heard after them not read.
+    /// </summary>
+    private void StopForKey()
+    {
+        if (dictation is { Recording: true })
+        {
+            Log.Write("Voice typing: a key was typed, so the microphone stops; what it wrote stays");
+            DropDictation();
+        }
+    }
 }

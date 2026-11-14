@@ -423,6 +423,8 @@ public sealed class MainActivity : Activity
         [
             new(GetString(Resource.String.voice_keep_after_send), GetString(Resource.String.voice_keep_after_send_summary), On: VoicePreferences.KeepAfterSend(this), Switched: turned =>
                 KeyPlusPreferences.Global(this).Edit()!.PutBoolean(VoicePreferences.KeepAfterSendKey, turned)!.Apply()),
+            new(GetString(Resource.String.voice_sounds), GetString(Resource.String.voice_sounds_summary), On: VoicePreferences.Sounds(this), Switched: turned =>
+                KeyPlusPreferences.Global(this).Edit()!.PutBoolean(VoicePreferences.SoundsKey, turned)!.Apply()),
         ]);
         groups.Add(
         [
@@ -838,6 +840,12 @@ public sealed class MainActivity : Activity
                 ]));
                 // The word list, the suggestions' and Glide typing's: fetched here, only said on Glide typing's page.
                 spelling.Add(FetchRow(LanguageOptions.WordListOf(language), Again));
+                // Android's own spell checker, for the Spelling command, in place of the keyboard's own.
+                spelling.Add(new(GetString(Resource.String.spelling_system), GetString(Resource.String.spelling_system_summary), On: LanguageChoices.SystemSpellingIn(this, code), Switched: on =>
+                {
+                    LanguageChoices.SetSystemSpelling(this, code, on);
+                    Log.Write($"Spelling: {code}'s Spelling command {(on ? "asks Android's spell checker" : "corrects with the keyboard's own")}");
+                }));
                 spelling.AddRange(ContextModelRows(code, now, Again));
                 // Under it, the model's words offered as a word is typed too, the word list's where it offers none: faded while it is off.
                 spelling.Add(new(GetString(Resource.String.context_model_suggests), GetString(Resource.String.context_model_suggests_summary),

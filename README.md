@@ -203,6 +203,7 @@ a window that does.
 | [SwipeWords.cs](SwipeWords.cs) | The words FUTO Swipe reads against, on Android and Windows: each language's word list by its letters alone, and the letters read spelled back |
 | [WordSuggestions.cs](WordSuggestions.cs) | The words offered as a word is typed letter by letter, on Android and Windows, found without the sentence: those starting as typed, accents aside, those that sound so in Spanish ("hiva": iba), and those with a key beside one typed ("quw": que); in the centre one at most a letter longer than typed |
 | [VoiceTyping.cs](VoiceTyping.cs) | Voice typing by ia-voice, on Android and Windows: what a microphone hears read again every second, the silence that stops it, the proxy's sign-in |
+| [VoiceCommands.cs](VoiceCommands.cs) | A dictation's commands, on Android and Windows: "comando" or "command" and what is wanted, applied to the words heard each time they are read; the marks, capitals, lines and deletions they write, and what they ask of the keyboard (send, stop, help) |
 | [PersonalWords.cs](PersonalWords.cs) | The personal dictionary and the words chosen for swipes, on Android and Windows: kept by language in `personal-words.json`, the e-mail addresses every language's, a word no list has learnt with a tap, a swipe's choice put first |
 | [SpanishMarks.cs](SpanishMarks.cs) | Spelling's opening marks, on Android and Windows: a sentence closed with ? or ! given its "¿" or "¡" at its start |
 | [Updates.cs](Updates.cs) | Whether a newer release is out, on Android and Windows: GitHub's latest release, its version against the one running, its file downloaded |
@@ -407,10 +408,28 @@ a window that does.
   space after it.
 - **The microphone** writes what you say, the words in the field as they are heard,
   until it is tapped again or, if Voice typing says so, after a
-  silence; Enter, or a chat's send button, while it listens leaves it listening
+  silence, or at once when a key is typed, its circle red while it waits for a
+  voice and blue while you speak, Local's beeps silenced unless Voice typing's
+  Sound effects is on; Enter, or a chat's send button, while it listens leaves it listening
   and starts afresh, what was said before it never written again; what you
   had said and was not written yet is dropped, or still written after where
-  Voice typing's Keep transcribing after sending is on. Local is Android's own recognizer; Local network is ia-voice
+  Voice typing's Keep transcribing after sending is on. **Voice commands**:
+  say "comando" ("command") and what you want, in either language: coma,
+  punto, punto y coma, dos puntos, interrogación, exclamación, comillas,
+  paréntesis, guion, arroba, barra write their mark; bloqueo mayúsculas is the Caps lock key, all you say after it in capitals
+  until it is said again; mayúsculas and minúsculas write the next word so,
+  or, with text selected, turn its case as Shift tapped twice does; espacio, nueva línea, nuevo párrafo; borra
+  palabra, borra frase, deshacer; seleccionar todo, seleccionar párrafo and
+  borrar, which deletes what is selected, copiar, cortar and pegar, fin and inicio, which take the caret to the text's
+  end and start, and ortografía, which corrects what is selected, or all the text, as the
+  language's Spelling is set: by Android's own spell checker (Google's) where
+  the language has it chosen, else by its context model where it is on, else
+  its misspelled words and its accents; gramática asks Android's spell
+  checker and leaves what it marks marked; enviar (as Enter), parar (the microphone
+  off) and ayuda, which lists them by parts, in columns, in a window over the keyboard with a
+  ✕ to close it; the command nearest to what was heard is taken ("frases" for frase), one
+  not understood writes nothing, and "comando
+  comando" writes the word itself. Local is Android's own recognizer; Local network is ia-voice
   (NVIDIA Nemotron 3.5 ASR) on a computer at home, by its IP; Remote is a
   published one, with the user and password its proxy asks for, kept
   sealed on the device.
@@ -647,8 +666,11 @@ first; Windows draws no flags, so they are left out; Search finds them by their 
 ia-voice (NVIDIA Nemotron 3.5 ASR, the model of VS Code's dictation),
 on this computer or published, heard: the words are written as they
 are spoken, only the last three typed again when heard otherwise, and it
-stops when tapped again or, if asked, after a silence; a key, a click
-elsewhere or Enter stops it too, what it typed staying as it is. ⚙ opens
+stops when tapped again or, if asked, after a silence; a key or a click
+elsewhere stops it too, what it typed staying as it is, while Enter, the
+keyboard's or the computer's, leaves it listening and starts afresh, as on
+Android, with the same Keep transcribing after sending and the same voice
+commands. ⚙ opens
 the settings, an app of their own as on Android: Languages, Preferences,
 Theme (Colours: System, Light, Dark, or Custom with the keyboard's and the accent's colour picked; by language, a PC's keys differing between them: the keyboard each
 language shows, copied under a new name with Save as or deleted, drawn

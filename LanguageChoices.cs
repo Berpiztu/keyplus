@@ -39,6 +39,13 @@ public static class LanguageChoices
         KeyPlusPreferences.Global(context).GetString(Key("spellingContextModel", language), "") is { Length: > 0 } name ? name : null;
 
     /// <summary>Whether a language's context model gives the words offered as a word is typed too (Use it for suggestions too); on until turned off, and turned on with the model.</summary>
+    /// <summary>Whether a language's Spelling command corrects with Android's own spell checker (the one chosen in the system's settings, Google's on the owner's devices) instead of the keyboard's own; off until turned on.</summary>
+    public static bool SystemSpellingIn(Context context, string language) =>
+        KeyPlusPreferences.Global(context).GetBoolean(Key("spellingSystem", language), false);
+
+    public static void SetSystemSpelling(Context context, string language, bool on) =>
+        KeyPlusPreferences.Global(context).Edit()!.PutBoolean(Key("spellingSystem", language), on)!.Apply();
+
     public static bool ContextSuggestsIn(Context context, string language) =>
         KeyPlusPreferences.Global(context).GetBoolean(Key("spellingContextSuggests", language), true);
 

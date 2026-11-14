@@ -664,6 +664,127 @@ public sealed class KeyPanel
         }
     }
 
+    private PopupWindow? voiceHelp;
+    private TextView? voiceHelpTitle;
+    private TextView[] voiceHelpColumns = [];
+    private (int X, int Y) voiceHelpAt = (8, 8);
+
+    /// <summary>The commands' window's size, set once whatever it lists: as many columns of one width as the screen has room for, three at most, so all is seen at once where it can be, and its list scrolling inside it where it cannot.</summary>
+    private const int VoiceHelpColumnDp = 230;
+    private const int VoiceHelpHeightDp = 380;
+    private const int VoiceHelpMostColumns = 3;
+
+    /// <summary>
+    /// The dictation's commands listed in a window over the keyboard, asked
+    /// for by voice ("comando ayuda"), part by part in columns, each part's
+    /// name in bold: of one size; it never takes the focus nor writes in the
+    /// field, is moved with a finger by its top line and closed by its ✕.
+    /// </summary>
+    public void ShowVoiceHelp(string title, IReadOnlyList<VoiceHelpSection> sections)
+    {
+        if (voiceHelp is null)
+        {
+            var close = new TextView(context) { Text = "✕", Gravity = GravityFlags.Center };
+            close.SetTextColor(Color.White);
+            close.SetTextSize(ComplexUnitType.Sp, 18);
+            close.Click += (_, _) => HideVoiceHelp();
+            voiceHelpTitle = new TextView(context) { Gravity = GravityFlags.CenterVertical };
+            voiceHelpTitle.SetTextColor(Color.White);
+            voiceHelpTitle.SetTextSize(ComplexUnitType.Sp, 14);
+            voiceHelpTitle.SetTypeface(null, TypefaceStyle.Bold);
+            voiceHelpTitle.SetSingleLine(true);
+            voiceHelpTitle.SetPadding(Dp(8), 0, 0, 0);
+            var top = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+            top.AddView(voiceHelpTitle, new LinearLayout.LayoutParams(0, Dp(40), 1));
+            top.AddView(close, new LinearLayout.LayoutParams(Dp(40), Dp(40)));
+            var metrics = context.Resources!.DisplayMetrics!;
+            var count = Math.Clamp((int)(metrics.WidthPixels / metrics.Density) / VoiceHelpColumnDp, 1, VoiceHelpMostColumns);
+            var columns = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+            voiceHelpColumns = new TextView[count];
+            for (var at = 0; at < count; at++)
+            {
+                var column = new TextView(context);
+                column.SetTextColor(Color.White);
+                column.SetTextSize(ComplexUnitType.Sp, 13);
+                column.SetPadding(Dp(8), 0, 0, Dp(8));
+                column.SetHorizontallyScrolling(true);
+                voiceHelpColumns[at] = column;
+                columns.AddView(column, new LinearLayout.LayoutParams(Dp(VoiceHelpColumnDp), ViewGroup.LayoutParams.WrapContent));
+            }
+
+            var list = new ScrollView(context);
+            list.AddView(columns);
+            var box = new LinearLayout(context) { Orientation = Orientation.Vertical, Background = new ColorDrawable(Color.Argb(235, 20, 20, 20)) };
+            box.AddView(top);
+            box.AddView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, 0, 1));
+            voiceHelp = new PopupWindow(box, Dp(VoiceHelpColumnDp * count), Dp(VoiceHelpHeightDp), false)
+            {
+                OutsideTouchable = false,
+                Touchable = true,
+                ClippingEnabled = false,
+                Elevation = Dp(8),
+            };
+            voiceHelp.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
+            (float X, float Y, int FromX, int FromY) grabbed = default;
+            voiceHelpTitle.Touch += (_, touch) =>
+            {
+                if (touch.Event is not { } moved)
+                {
+                    return;
+                }
+
+                if (moved.ActionMasked == MotionEventActions.Down)
+                {
+                    grabbed = (moved.RawX, moved.RawY, voiceHelpAt.X, voiceHelpAt.Y);
+                }
+                else if (moved.ActionMasked == MotionEventActions.Move)
+                {
+                    voiceHelpAt = (grabbed.FromX + (int)(moved.RawX - grabbed.X), grabbed.FromY + (int)(moved.RawY - grabbed.Y));
+                    voiceHelp?.Update(voiceHelpAt.X, voiceHelpAt.Y, -1, -1);
+                }
+            };
+        }
+
+        voiceHelpTitle!.Text = title;
+        var laid = VoiceCommands.InColumns(sections, voiceHelpColumns.Length);
+        for (var at = 0; at < voiceHelpColumns.Length; at++)
+        {
+            var listed = new Android.Text.SpannableStringBuilder();
+            foreach (var section in at < laid.Count ? laid[at] : [])
+            {
+                if (listed.Length() > 0)
+                {
+                    listed.Append("\n\n");
+                }
+
+                var from = listed.Length();
+                listed.Append(section.Title);
+                listed.SetSpan(new Android.Text.Style.StyleSpan(TypefaceStyle.Bold), from, listed.Length(), Android.Text.SpanTypes.ExclusiveExclusive);
+                foreach (var line in section.Lines)
+                {
+                    listed.Append("\n");
+                    listed.Append(line);
+                }
+            }
+
+            voiceHelpColumns[at].SetText(listed, TextView.BufferType.Spannable);
+        }
+
+        if (!voiceHelp.IsShowing && root.WindowToken is not null)
+        {
+            voiceHelp.ShowAtLocation(root, GravityFlags.NoGravity, voiceHelpAt.X, voiceHelpAt.Y);
+        }
+    }
+
+    /// <summary>The commands' window gone: its ✕, or no keyboard shown.</summary>
+    public void HideVoiceHelp()
+    {
+        if (voiceHelp?.IsShowing == true)
+        {
+            voiceHelp.Dismiss();
+        }
+    }
+
     /// <summary>The word the one typed surely meant, of those offered (the keyboard's SpellingEngine.Sure); none where it is not clear.</summary>
     public Func<StandardLanguage, string, IReadOnlyList<string>, string?>? Sure { get; set; }
 
@@ -1677,6 +1798,7 @@ public sealed class KeyPanel
     private ImageView? micSign;
     private bool listening;
     private double listeningLevel;
+    private bool listeningSpeaking;
 
     /// <summary>🎤's sign while it listens: the voice coming in (<see cref="VoiceBars"/>).</summary>
     private BarsSign? bars;
@@ -1697,7 +1819,7 @@ public sealed class KeyPanel
         place.AddView(halo, 0, new FrameLayout.LayoutParams(ToolCircle, ToolCircle, GravityFlags.Center));
         micHalo = halo;
         micSign = (ImageView)place.GetChildAt(1)!;
-        ShowListening(listening, listeningLevel);
+        ShowListening(listening, listeningLevel, listeningSpeaking);
         return place;
     }
 
@@ -1705,24 +1827,27 @@ public sealed class KeyPanel
     private const float QuietHalo = 0.36f / 0.42f;
     private const float LoudHalo = 0.5f / 0.42f;
 
-    /// <summary>Whether a dictation is listening, and its level, 0 to 1: 🎤 lit and beating, or as it was.</summary>
-    public void ShowListening(bool on, double level)
+    /// <summary>Whether a dictation is listening, its level, 0 to 1, and whether a voice is being heard: 🎤 lit and beating, its circle red while it waits for a voice and blue while one speaks (<see cref="VoiceBars.ListeningRed"/>), or as it was.</summary>
+    public void ShowListening(bool on, double level, bool speaking = false)
     {
         listening = on;
         listeningLevel = level;
+        listeningSpeaking = speaking;
         if (micHalo is null || micSign is null || standardColors is null)
         {
             return;
         }
 
         micHalo.Visibility = on ? ViewStates.Visible : ViewStates.Invisible;
+        (micHalo.Background as GradientDrawable)?.SetColor(new Color(unchecked((int)(speaking ? VoiceBars.SpeakingBlue : VoiceBars.ListeningRed))));
+        var onCircle = new Color(unchecked((int)VoiceBars.OnCircle));
         var scale = QuietHalo + ((LoudHalo - QuietHalo) * (float)level);
         micHalo.ScaleX = micHalo.ScaleY = scale;
-        micSign.ImageTintList = ColorStateList.ValueOf(on ? standardColors.OnPrimary : standardColors.Glyph);
+        micSign.ImageTintList = ColorStateList.ValueOf(on ? onCircle : standardColors.Glyph);
         if (on)
         {
             bars ??= new BarsSign();
-            bars.Show(standardColors.OnPrimary, level);
+            bars.Show(onCircle, level);
             if (micSign.Drawable != bars)
             {
                 micSign.SetImageDrawable(bars);
@@ -2105,6 +2230,14 @@ public sealed class KeyPanel
         if (emojiSearch is not null)
         {
             AddSearchField(emojiRowItems, wide: true);
+            return;
+        }
+
+        // A message of the keyboard's, while it lasts: here, so the toolbar keeps its buttons.
+        if (notice is { } said && offer != said)
+        {
+            (said.Parent as ViewGroup)?.RemoveView(said);
+            emojiRowItems.AddView(said, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
             return;
         }
 
@@ -5200,6 +5333,78 @@ public sealed class KeyPanel
     {
         offer = shown;
         ShowBars();
+    }
+
+    /// <summary>How long a message of the keyboard's stays, unless it is to last until the next one.</summary>
+    private const int NoticeMs = 2500;
+
+    /// <summary>The message the keyboard shows now, if any: gone by itself only while it is still the one shown.</summary>
+    private View? notice;
+
+    /// <summary>
+    /// A message of the keyboard's, said in the line over the toolbar, where
+    /// the words offered and the emoji typed lately show, so the toolbar
+    /// keeps its buttons; in the toolbar's middle only where that line is not
+    /// shown (the owner, 2026-11-14: never a message floating on the screen,
+    /// nor one hiding the buttons while the line is there). In one line, its
+    /// letters smaller where it does not fit, gone after a moment or,
+    /// lasting, with the next one, and at a tap. False where neither is there
+    /// to say it.
+    /// </summary>
+    public bool Say(string text, bool lasting = false)
+    {
+        if (standardColors is null)
+        {
+            return false;
+        }
+
+        LinearLayout? row = null;
+        var said = ToolButton(text, text, SuggestionSp, () => EndNotice(row!));
+        said.SetAutoSizeTextTypeUniformWithConfiguration(4, (int)Math.Round(SuggestionSp), 1, (int)ComplexUnitType.Sp);
+        said.SetTextColor(standardColors.Glyph);
+        row = new LinearLayout(context) { Orientation = Orientation.Horizontal };
+        row.SetGravity(GravityFlags.CenterVertical);
+        row.AddView(said, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MatchParent, 1f));
+        if (notice is { } before && offer == before)
+        {
+            offer = null;
+        }
+
+        notice = row;
+        if (EmojiRowShown)
+        {
+            ShowBars();
+        }
+        else
+        {
+            ShowOffer(row);
+        }
+
+        if (!lasting)
+        {
+            handler.PostDelayed(() => EndNotice(row), NoticeMs);
+        }
+
+        return true;
+    }
+
+    /// <summary>A message gone, while it is still the one shown: the line over the toolbar, or the toolbar's middle, as it was.</summary>
+    private void EndNotice(View said)
+    {
+        if (notice != said)
+        {
+            return;
+        }
+
+        notice = null;
+        if (offer == said)
+        {
+            ShowOffer(null);
+        }
+        else
+        {
+            ShowBars();
+        }
     }
 
     /// <summary>Something else typed: what was offered gone from the toolbar.</summary>

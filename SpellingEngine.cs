@@ -259,6 +259,22 @@ public sealed class SpellingEngine
     }
 
     /// <summary>
+    /// As <see cref="Fix"/>, whatever Spelling's switch and the language's Correct words say: the Spelling command's,
+    /// which corrects by what the language has chosen even while Spelling is turned off from the toolbar. None for a word
+    /// left as it is, or where the language's dictionary is not loaded.
+    /// </summary>
+    public WordFixes? FixAsChosen(StandardLanguage language, string word)
+    {
+        if (Checking(language, word, whateverChosen: true) is not { } checking)
+        {
+            return null;
+        }
+
+        var found = Found(word, checking);
+        return found.Words.Count == 0 ? null : found with { Words = [.. found.Words.Take(WordSuggestions.Offered)] };
+    }
+
+    /// <summary>
     /// What a word no list nor dictionary has may have meant, as <see cref="Fix"/> finds it, with the context model on
     /// too (which turns Correct words off): offered in the toolbar's centre where nothing else is ("henorme": enorme), as
     /// Gboard's. None for a word known, or where the language's dictionary is not downloaded.

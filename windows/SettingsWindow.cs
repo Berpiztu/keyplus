@@ -1783,6 +1783,7 @@ public sealed class SettingsWindow : Window
         var settings = VoiceSettings.Read();
         var microphone = new ComboBox();
         var autoStop = new CheckBox { Content = Texts.Get(Resource.String.voice_auto_stop), IsChecked = settings.AutoStop };
+        var keepAfterSend = new CheckBox { Content = Texts.Get(Resource.String.voice_keep_after_send), IsChecked = settings.KeepAfterSend };
         var silence = Stepped(VoiceSettings.LeastSilence, VoiceSettings.MostSilence, settings.SilenceSeconds);
         var gain = Stepped(1, VoiceSettings.MostGain, settings.Gain);
         var local = new RadioButton { Content = Texts.Get(Resource.String.voice_local), IsChecked = settings.Choice == VoiceTyping.OnDevice };
@@ -1803,7 +1804,7 @@ public sealed class SettingsWindow : Window
 
         void Keep() => new VoiceSettings(microphone.SelectedIndex <= 0 ? "" : (string)microphone.SelectedItem, autoStop.IsChecked == true, silence.Value, gain.Value,
             lan.IsChecked == true ? VoiceTyping.OnLan : remote.IsChecked == true ? VoiceTyping.Remote : VoiceTyping.OnDevice,
-            lanAddress.Text, address.Text, user.Text, password.Password).Keep();
+            lanAddress.Text, address.Text, user.Text, password.Password, keepAfterSend.IsChecked == true).Keep();
         microphone.SelectionChanged += (_, _) => Keep();
         silence.ValueChanged += (_, _) => Keep();
         autoStop.Click += (_, _) =>
@@ -1812,6 +1813,7 @@ public sealed class SettingsWindow : Window
             Keep();
         };
         silence.IsEnabled = settings.AutoStop;
+        keepAfterSend.Click += (_, _) => Keep();
         gain.ValueChanged += (_, _) => Keep();
         local.Checked += (_, _) => Keep();
         lan.Checked += (_, _) => Keep();
@@ -1849,6 +1851,7 @@ public sealed class SettingsWindow : Window
         form.Children.Add(Field(Resource.String.voice_microphone, microphone, null));
         form.Children.Add(Field(null, autoStop, Resource.String.voice_auto_stop_summary));
         form.Children.Add(Field(Resource.String.voice_silence, Valued(silence, value => $"{value.ToString("0.#", CultureInfo.CurrentCulture)} s"), Resource.String.voice_silence_hint));
+        form.Children.Add(Field(null, keepAfterSend, Resource.String.voice_keep_after_send_summary));
         form.Children.Add(Field(Resource.String.voice_gain, Valued(gain, value => $"×{value.ToString("0.#", CultureInfo.CurrentCulture)}"), Resource.String.voice_gain_hint));
         form.Children.Add(Field(Resource.String.voice_service, service, Resource.String.voice_service_hint));
         return form;

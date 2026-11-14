@@ -297,6 +297,7 @@ public sealed class KeyboardWindow : Window
         keys.SelectionCase = TurnSelectionCase;
         keys.PressedAt = () => input.PressedAt;
         keys.KeyedAt = () => input.KeyedAt;
+        keys.EnteredAt = () => input.EnteredAt;
         keys.InDocument = () => focus.Document;
         keys.KeyPressed += LogFieldSoon;
         spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
@@ -474,9 +475,11 @@ public sealed class KeyboardWindow : Window
         mic.Clicked += Listen;
         voice = new VoiceTyping(microphone, Log.Write);
         voice.Level += Heard;
-        voice.Partial += keys.TypeSpokenSoFar;
+        voice.Partial += TypeHeard;
         voice.Silence += EndListening;
         keys.SpokenLetGo += StopListening;
+        keys.SpokenAfresh += ListenAfresh;
+        commandsTimer.Tick += (_, _) => DoCommands();
         var settings = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_settings, ToolTip = Texts.Get(Resource.String.keyboard_settings) };
         settings.Clicked += SettingsWindow.Start;
         focus.CaretMoved += AvoidText;
@@ -683,6 +686,8 @@ public sealed class KeyboardWindow : Window
         {
             Log.Detail("Keyboard: closed, letting its watches go");
             voice.Dispose();
+            commandsTimer.Stop();
+            voiceHelp?.Close();
             focus.Dispose();
             input.Dispose();
             preferencesWatch.Dispose();
@@ -1736,6 +1741,9 @@ public sealed class KeyboardWindow : Window
         {
             microphone.Name = settings.Microphone;
             keys.BeginSpoken();
+            spokenLocale = options.Language;
+            spokenCaseNow = VoiceCase.AsHeard;
+            ForgetCommands();
             voice.Start(options);
         }
         catch (Exception none)
@@ -1757,6 +1765,7 @@ public sealed class KeyboardWindow : Window
     /// <summary>The voice's level on 🎤; the first sound heard, Windows' question answered and the window on top again.</summary>
     private void Heard(double level)
     {
+        mic.Speaking = voice.Speaking;
         mic.Level = level;
         if (level > 0)
         {
@@ -1929,7 +1938,391 @@ public sealed class KeyboardWindow : Window
         mic.Level = 0;
         Topmost = true;
         Notice("");
+        ForgetCommands();
         await voice.Cancel();
+    }
+
+    /// <summary>The language the dictation going on is heard in, by its locale: its commands' marks and Help's list.</summary>
+    private string spokenLocale = StandardKeys.Spanish.Locale;
+
+    /// <summary>How long a dictation's commands for the keyboard (send, stop, help) must stand as heard before they are done: the model changes its last words while they are being said.</summary>
+    private static readonly TimeSpan CommandStands = TimeSpan.FromMilliseconds(700);
+
+    private readonly DispatcherTimer commandsTimer = new() { Interval = CommandStands };
+
+    /// <summary>The commands for the keyboard the dictation going on holds, as last heard, how many of them were done already, and how many were waited on.</summary>
+    private IReadOnlyList<VoiceAction> commandsHeard = [];
+    private int commandsDone;
+    private int commandsWaited;
+
+    /// <summary>How the dictation going on writes its words from its start, or from where it last started afresh (capitals or small letters asked for before then), and how it is writing them now.</summary>
+    private VoiceCase spokenCase;
+    private VoiceCase spokenCaseNow;
+
+    /// <summary>The last command said in the toolbar as understood, and how many the dictation going on had then.</summary>
+    private string understoodSaid = "";
+    private int understoodCount;
+
+    /// <summary>A dictation starting, starting afresh or ending: no command of its own heard or done yet; its words go on in the capitals or small letters they were in.</summary>
+    private void ForgetCommands()
+    {
+        spokenCase = spokenCaseNow;
+        understoodSaid = "";
+        understoodCount = 0;
+        commandsTimer.Stop();
+        commandsHeard = [];
+        commandsDone = 0;
+        commandsWaited = 0;
+    }
+
+    /// <summary>
+    /// A dictation's words so far, typed with its commands applied
+    /// (<see cref="VoiceCommands"/>); a command for the keyboard is done once,
+    /// when it has stood as heard for <see cref="CommandStands"/>: the words
+    /// are read again whole each time, so those done before are still there.
+    /// </summary>
+    private void TypeHeard(string text)
+    {
+        var said = VoiceCommands.Apply(text, spokenLocale, open: true, spokenCase);
+        spokenCaseNow = said.Case;
+        keys.TypeSpokenSoFar(said.Text);
+        if (!voice.Recording)
+        {
+            return;
+        }
+
+        // What was heard after the keyword, said as it is understood: the command taken, or the words no command is near to.
+        if (said.Understood.Count > 0 && (said.Understood.Count != understoodCount || said.Understood[^1] != understoodSaid))
+        {
+            understoodCount = said.Understood.Count;
+            understoodSaid = said.Understood[^1];
+            Notice(understoodSaid);
+        }
+
+        commandsHeard = said.Actions;
+        if (said.Actions.Count == commandsWaited)
+        {
+            return;
+        }
+
+        commandsWaited = said.Actions.Count;
+        commandsTimer.Stop();
+        if (commandsWaited > commandsDone)
+        {
+            commandsTimer.Start();
+        }
+    }
+
+    private void DoCommands()
+    {
+        commandsTimer.Stop();
+        if (!voice.Recording || transcribing)
+        {
+            return;
+        }
+
+        var asked = commandsHeard.Skip(commandsDone).ToArray();
+        commandsDone = commandsHeard.Count;
+        foreach (var action in asked)
+        {
+            Log.Write($"Voice typing: command {action}");
+            switch (action)
+            {
+                case VoiceAction.Send:
+                    // Enter starts the dictation afresh, its commands with it: those said after it are heard anew.
+                    keys.EnterSpoken();
+                    return;
+                case VoiceAction.Stop:
+                    EndListening();
+                    return;
+                case VoiceAction.Help:
+                    ShowVoiceHelp(VoiceCommands.HelpTitle(spokenLocale), VoiceCommands.Help(spokenLocale));
+                    break;
+                case VoiceAction.DeleteWord:
+                    keys.DeleteWordSpoken();
+                    break;
+                case VoiceAction.DeleteSentence:
+                    DeleteSentenceBefore();
+                    break;
+                case VoiceAction.SelectAll:
+                case VoiceAction.SelectParagraph:
+                    // The dictation starts afresh, keeping what was said after the command: its next words must not
+                    // delete back over what it typed, which would take the selection away.
+                    voice.Forget(keepUnread: true);
+                    ForgetCommands();
+                    keys.SelectSpoken(paragraph: action == VoiceAction.SelectParagraph);
+                    break;
+                case VoiceAction.DeleteSelection:
+                    keys.DeleteSelectionSpoken();
+                    break;
+                case VoiceAction.Copy:
+                    keys.EditSpoken('c');
+                    break;
+                case VoiceAction.GoEnd:
+                case VoiceAction.GoStart:
+                    voice.Forget(keepUnread: true);
+                    ForgetCommands();
+                    keys.GoSpoken(end: action == VoiceAction.GoEnd);
+                    break;
+                case VoiceAction.Spelling:
+                    voice.Forget(keepUnread: true);
+                    ForgetCommands();
+                    CorrectSelected();
+                    break;
+                case VoiceAction.Undo:
+                    voice.Forget(keepUnread: true);
+                    ForgetCommands();
+                    keys.EditSpoken('z');
+                    break;
+                case VoiceAction.Grammar:
+                    // Android's own spell checker's: Windows has none to ask.
+                    Notice(Texts.Get(Resource.String.voice_grammar_not_here));
+                    break;
+                case VoiceAction.SelectionCase:
+                    // Text selected on one line: its case turned, as Shift tapped twice does; none, nothing.
+                    TurnSelectionCase();
+                    break;
+                case VoiceAction.Cut:
+                case VoiceAction.Paste:
+                    voice.Forget(keepUnread: true);
+                    ForgetCommands();
+                    keys.EditSpoken(action == VoiceAction.Cut ? 'x' : 'v');
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The Spelling command: what is selected, as UI Automation reads it, or
+    /// all the text where nothing is, read sentence by sentence as the
+    /// language's Spelling is set and typed again corrected, over the
+    /// selection; left as it is where the selection cannot be read, the
+    /// context model chosen is not there, or the selection changed while it
+    /// was read.
+    /// </summary>
+    private async void CorrectSelected()
+    {
+        if (correcting)
+        {
+            Notice(Texts.Get(Resource.String.voice_spelling_working));
+            return;
+        }
+
+        correcting = true;
+        ContextCorrector? own = null;
+        try
+        {
+            own = await CorrectSelectedBy();
+        }
+        finally
+        {
+            own?.Dispose();
+            correcting = false;
+        }
+    }
+
+    /// <summary>The Spelling command is reading a text: a second one waits for it.</summary>
+    private bool correcting;
+
+    /// <summary>The Spelling command's reading and typing; with the context model it loaded for it alone, if any, for the caller to let go.</summary>
+    private async Task<ContextCorrector?> CorrectSelectedBy()
+    {
+        ContextCorrector? own = null;
+        keys.SelectSpoken(paragraph: null);
+        var chosen = await focus.ReadSelection();
+        if (string.IsNullOrEmpty(chosen))
+        {
+            keys.SelectSpoken(paragraph: false);
+            await Task.Delay(FieldSettles);
+            chosen = await focus.ReadSelection();
+        }
+
+        if (string.IsNullOrWhiteSpace(chosen))
+        {
+            Log.Write("Voice typing: the selection could not be read, so Spelling corrected nothing");
+            return own;
+        }
+
+        // By what the language's Spelling has chosen in the settings (the owner, 2026-11-14): its context model alone where
+        // it is on; else its words as Correct words writes a misspelled one (which corrects nothing while it is off), then
+        // its punctuation and accent models where they are on.
+        var language = keys.KeyLanguage;
+        var spelling = preferences.SpellingIn(language.Code).ContextAlone();
+        Log.Write($"Voice typing: Spelling in {language.Code} as its language has it chosen: context model {spelling.Context ?? "off"}, Correct words {(spelling.Words ? "on" : "off")}, accents {(spelling.Accents ? "on" : "off")}, punctuation {(spelling.Punctuation ? "on" : "off")}");
+        if (spelling.Context is null && !spelling.Words && !spelling.Accents && !spelling.Punctuation)
+        {
+            Notice(Texts.Get(Resource.String.voice_spelling_nothing));
+            return own;
+        }
+
+        Notice(Texts.Get(Resource.String.voice_spelling_working), lasting: true);
+
+        // The dictionary Correct words checks with, loaded before the words are read: it is read the first time it is asked for.
+        if (spelling.Context is null && spelling.Words && spellingEngine.DictionaryFor(language) is { } dictionary && await dictionary.Async() is null)
+        {
+            Log.Write($"Voice typing: {language.Code}'s dictionary is not downloaded, so its words are not corrected");
+        }
+
+        var models = await ModelsAsync(spelling);
+        if (spelling.Context is { } name && models.Context is null)
+        {
+            // Spelling being off from the toolbar, the keyboard has it not loaded: loaded for this reading alone.
+            own = await Task.Run(() => ContextCorrector.Load(System.IO.Path.Combine(ContextCorrector.Folder, name)));
+            if (own is null)
+            {
+                Log.Write($"Voice typing: the context model chosen for {language.Code} is not there, so nothing was corrected");
+                Notice(Texts.Get(Resource.String.voice_spelling_no_model));
+                return own;
+            }
+
+            models = models with { Context = own };
+        }
+
+        var parts = VoiceCommands.SentencesOf(chosen);
+        var changed = 0;
+        for (var at = 0; at < parts.Length; at += 2)
+        {
+            if (parts[at].Trim().Length == 0)
+            {
+                continue;
+            }
+
+            var read = models.Context is null
+                ? VoiceCommands.WordsCorrected(parts[at], word => spelling.Words && spellingEngine.FixAsChosen(language, word) is { Misspelled: true, Words: [var first, ..] } ? first : null)
+                : parts[at];
+            var corrected = models.None ? read : await Task.Run(() => models.Correct(read, opens: true));
+            changed += corrected == parts[at] ? 0 : 1;
+            parts[at] = corrected;
+        }
+
+        Log.Write($"Voice typing: Spelling read {(parts.Length + 1) / 2} sentences and changed {changed}");
+        if (changed == 0)
+        {
+            Notice(Texts.Get(Resource.String.voice_spelling_none));
+        }
+        else if (await focus.ReadSelection() == chosen)
+        {
+            keys.TypeOverSelection(string.Concat(parts));
+            Notice(Texts.Get(Resource.String.voice_spelling_done));
+        }
+        else
+        {
+            Log.Write("Voice typing: the selection changed while Spelling read it, so it was left as it is");
+            Notice(Texts.Get(Resource.String.voice_spelling_moved));
+        }
+
+        return own;
+    }
+
+    /// <summary>The field's last sentence before the caret deleted, back to the end of the one before it: a command's, where the dictation has no words of its own to delete; nothing where the field cannot be read.</summary>
+    private async void DeleteSentenceBefore()
+    {
+        if (await focus.ReadField(SentenceReach) is not { Before: { Length: > 0 } before })
+        {
+            Log.Write("Voice typing: the field could not be read, so no sentence was deleted");
+            return;
+        }
+
+        var kept = before.TrimEnd().TrimEnd('.', '?', '!');
+        kept = kept[..(kept.LastIndexOfAny(['.', '?', '!', '\n', '\r']) + 1)];
+        keys.DeleteSpoken(new System.Globalization.StringInfo(before[kept.Length..]).LengthInTextElements);
+    }
+
+    /// <summary>Enter while dictating: the dictation forgets what it heard and goes on listening; what was said and not typed yet is still typed after where Voice typing's Keep transcribing after sending is on, else dropped.</summary>
+    private void ListenAfresh(string why)
+    {
+        if (!voice.Recording || transcribing)
+        {
+            return;
+        }
+
+        var keepUnread = VoiceSettings.Read().KeepAfterSend;
+        voice.Forget(keepUnread);
+        ForgetCommands();
+        Log.Write($"Voice typing: {why} while listening, so it starts afresh, still listening; what was said and not typed yet {(keepUnread ? "is still typed" : "is dropped")}");
+    }
+
+    private Window? voiceHelp;
+    private TextBlock? voiceHelpTitle;
+    private TextBlock[] voiceHelpColumns = [];
+
+    /// <summary>The commands' window's size, set once whatever it lists: three columns of one width, so all is seen at once, its list scrolling inside it should it ever not fit.</summary>
+    private const double VoiceHelpColumnDp = 240;
+    private const int VoiceHelpColumnCount = 3;
+    private const double VoiceHelpHeightDp = 400;
+
+    /// <summary>The dictation's commands listed in a window, asked for by voice ("comando ayuda"), part by part in columns, each part's name in bold: of one size; it never takes the focus nor types in the field, is dragged by its top line and closed by its ✕.</summary>
+    private void ShowVoiceHelp(string title, IReadOnlyList<VoiceHelpSection> sections)
+    {
+        if (voiceHelp is null)
+        {
+            voiceHelpTitle = new TextBlock { Foreground = System.Windows.Media.Brushes.White, Margin = new Thickness(8, 0, 0, 0), FontSize = 14, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center };
+            var close = new TextBlock
+            {
+                Text = "✕", Foreground = System.Windows.Media.Brushes.White, FontSize = 16, Width = 32, Height = 32, TextAlignment = TextAlignment.Center,
+                Padding = new Thickness(0, 6, 0, 0), Background = System.Windows.Media.Brushes.Transparent,
+            };
+            var top = new DockPanel { Height = 32, Background = System.Windows.Media.Brushes.Transparent };
+            DockPanel.SetDock(close, Dock.Right);
+            top.Children.Add(close);
+            top.Children.Add(voiceHelpTitle);
+            var columns = new StackPanel { Orientation = Orientation.Horizontal };
+            voiceHelpColumns = new TextBlock[VoiceHelpColumnCount];
+            for (var at = 0; at < VoiceHelpColumnCount; at++)
+            {
+                voiceHelpColumns[at] = new TextBlock { Foreground = System.Windows.Media.Brushes.White, Width = VoiceHelpColumnDp - 8, Margin = new Thickness(8, 0, 0, 8), FontSize = 13, VerticalAlignment = VerticalAlignment.Top };
+                columns.Children.Add(voiceHelpColumns[at]);
+            }
+
+            var box = new DockPanel();
+            DockPanel.SetDock(top, Dock.Top);
+            box.Children.Add(top);
+            box.Children.Add(new ScrollViewer { Content = columns, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+            var made = new Window
+            {
+                Content = box, WindowStyle = WindowStyle.None, ResizeMode = ResizeMode.NoResize, Width = VoiceHelpColumnDp * VoiceHelpColumnCount, Height = VoiceHelpHeightDp,
+                Topmost = true, ShowInTaskbar = false, ShowActivated = false, Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(235, 20, 20, 20)),
+                Left = 24, Top = 120, Title = Texts.Get(Resource.String.voice_commands),
+            };
+            made.SourceInitialized += (_, _) => NeverActivated.Apply(made, taskbar: false);
+            top.MouseLeftButtonDown += (_, pressed) =>
+            {
+                if (pressed.OriginalSource != close)
+                {
+                    made.DragMove();
+                }
+            };
+            close.MouseLeftButtonUp += (_, _) => made.Hide();
+            voiceHelp = made;
+        }
+
+        voiceHelpTitle!.Text = title;
+        var laid = VoiceCommands.InColumns(sections, voiceHelpColumns.Length);
+        for (var at = 0; at < voiceHelpColumns.Length; at++)
+        {
+            var listed = voiceHelpColumns[at].Inlines;
+            listed.Clear();
+            foreach (var section in at < laid.Count ? laid[at] : [])
+            {
+                if (listed.Count > 0)
+                {
+                    listed.Add(new System.Windows.Documents.LineBreak());
+                    listed.Add(new System.Windows.Documents.LineBreak());
+                }
+
+                listed.Add(new System.Windows.Documents.Run(section.Title) { FontWeight = FontWeights.Bold });
+                foreach (var line in section.Lines)
+                {
+                    listed.Add(new System.Windows.Documents.LineBreak());
+                    listed.Add(new System.Windows.Documents.Run(line));
+                }
+            }
+        }
+
+        if (!voiceHelp.IsVisible)
+        {
+            voiceHelp.Show();
+        }
     }
 
     private async void EndListening()
@@ -1951,9 +2344,10 @@ public sealed class KeyboardWindow : Window
 
         try
         {
-            var text = await voice.Stop();
-            keys.TypeSpoken(text);
-            Notice(text.Length > 0 ? "" : Texts.Get(Resource.String.voice_nothing_heard));
+            var heard = await voice.Stop();
+            ForgetCommands();
+            keys.TypeSpoken(VoiceCommands.Apply(heard, spokenLocale, open: false, spokenCase).Text);
+            Notice(heard.Length > 0 ? "" : Texts.Get(Resource.String.voice_nothing_heard));
         }
         catch (VoiceTyping.SignInRefused)
         {
@@ -2974,6 +3368,11 @@ public sealed class SignButton(Palette colors) : FrameworkElement
         }
     }
 
+    /// <summary>Whether a voice is being heard while it listens: its circle blue, where it is red while it waits for one (<see cref="VoiceBars.ListeningRed"/>).</summary>
+    public bool Speaking { get; set; }
+
+    private static Color Tone(uint argb) => Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
+
     /// <summary>The level heard (0 to 1) while it is lit: its circle the wider, the louder, and its bars, while hearing, the taller.</summary>
     public double Level
     {
@@ -3005,7 +3404,7 @@ public sealed class SignButton(Palette colors) : FrameworkElement
         if (down || lit)
         {
             var radius = RenderSize.Height * (lit ? QuietShare + ((LoudShare - QuietShare) * level) : PressedShare);
-            context.DrawEllipse(new SolidColorBrush(lit ? colors.On : colors.Function), null, new Point(RenderSize.Width / 2, RenderSize.Height / 2), radius, radius);
+            context.DrawEllipse(new SolidColorBrush(lit && hearing ? Tone(Speaking ? VoiceBars.SpeakingBlue : VoiceBars.ListeningRed) : lit ? colors.On : colors.Function), null, new Point(RenderSize.Width / 2, RenderSize.Height / 2), radius, radius);
         }
 
         if (hearing)
@@ -3020,7 +3419,7 @@ public sealed class SignButton(Palette colors) : FrameworkElement
     /// <summary>The voice coming in, as Gboard's: the bars rounded, in the sign's colour, each as tall as the level and its beat make it.</summary>
     private void DrawBars(DrawingContext context)
     {
-        var brush = new SolidColorBrush(colors.Glyph);
+        var brush = new SolidColorBrush(Tone(VoiceBars.OnCircle));
         var (left, top) = ((RenderSize.Width - Size) / 2, RenderSize.Height / 2);
         var width = VoiceBars.WidthShare * Size;
         var seconds = Environment.TickCount64 / 1000.0;

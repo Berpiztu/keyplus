@@ -21,6 +21,7 @@ public sealed class InputWatch : IDisposable
     private const int KeyDown = 0x0100;
     private const int SystemKeyDown = 0x0104;
     private const uint Injected = 0x10;
+    private const uint EnterKey = 0x0D;
 
     private static readonly uint Own = (uint)Environment.ProcessId;
 
@@ -31,6 +32,7 @@ public sealed class InputWatch : IDisposable
     /// <summary>Environment.TickCount64 at the last press outside the keyboard's windows, and at the last of the computer's keys; 0 before one.</summary>
     private long pressedAt;
     private long keyedAt;
+    private long enteredAt;
 
     public InputWatch()
     {
@@ -61,6 +63,9 @@ public sealed class InputWatch : IDisposable
     /// <summary>Environment.TickCount64 at the last key of the computer's own keyboard: the text may hold what the keyboard did not type.</summary>
     public long KeyedAt => Interlocked.Read(ref keyedAt);
 
+    /// <summary>Environment.TickCount64 at the last Enter of the computer's own keyboard: equal to <see cref="KeyedAt"/> while Enter is the last key that went down.</summary>
+    public long EnteredAt => Interlocked.Read(ref enteredAt);
+
     /// <summary>Never waiting: the watch's thread lets go of its hooks once it stops.</summary>
     public void Dispose() => watching.BeginInvokeShutdown(DispatcherPriority.Send);
 
@@ -85,7 +90,12 @@ public sealed class InputWatch : IDisposable
     {
         if (code >= 0 && (int)message is KeyDown or SystemKeyDown && (Marshal.PtrToStructure<KeyData>(data).Flags & Injected) == 0)
         {
-            Interlocked.Exchange(ref keyedAt, Environment.TickCount64);
+            var now = Environment.TickCount64;
+            Interlocked.Exchange(ref keyedAt, now);
+            if (Marshal.PtrToStructure<KeyData>(data).VirtualKey == EnterKey)
+            {
+                Interlocked.Exchange(ref enteredAt, now);
+            }
         }
 
         return CallNextHookEx(IntPtr.Zero, code, message, data);

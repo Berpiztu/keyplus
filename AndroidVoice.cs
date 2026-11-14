@@ -27,6 +27,10 @@ public static class VoicePreferences
 {
     public const string AutoStopKey = "voiceAutoStop";
     public const string KeepAfterSendKey = "voiceKeepAfterSend";
+    public const string SoundsKey = "voiceSounds";
+
+    /// <summary>The sounds a dictation silenced, kept until it gives them back: the streams' numbers, so a keyboard that ended meanwhile gives them back as it starts.</summary>
+    private const string SilencedKey = "voiceSilenced";
     public const string SilenceKey = "voiceSilence";
     public const string GainKey = "voiceGain";
     public const string ServiceKey = "voiceService";
@@ -53,6 +57,82 @@ public static class VoicePreferences
 
     /// <summary>Keep transcribing after sending: whether what was said but not written yet when the text is sent (Enter, a chat's send button) is still written after; off, it is dropped. The microphone stays on either way.</summary>
     public static bool KeepAfterSend(Context context) => KeyPlusPreferences.Global(context).GetBoolean(KeepAfterSendKey, false);
+
+    /// <summary>Sound effects: whether Android's recognizer is left to beep as it starts and stops listening, which it does at every pause; off (the default), the device's sounds are silenced while it listens.</summary>
+    public static bool Sounds(Context context) => KeyPlusPreferences.Global(context).GetBoolean(SoundsKey, false);
+
+    /// <summary>The streams Android's recognizer may beep on, by device: the media's, the notifications' and the system's.</summary>
+    private static readonly Android.Media.Stream[] Beeping = [Android.Media.Stream.Music, Android.Media.Stream.Notification, Android.Media.Stream.System];
+
+    /// <summary>Each silencing's number: a giving back asked for later (after the recognizer's last beep) is left undone once another dictation has silenced them again.</summary>
+    private static int silencing;
+
+    /// <summary>
+    /// The device's sounds silenced while a dictation by Android's recognizer
+    /// listens, where Sound effects is off: only the streams that were not
+    /// silent already, noted so they are given back, by this keyboard or the
+    /// next one started. One the device does not let be silenced (Do not
+    /// disturb's) is left as it is.
+    /// </summary>
+    public static void SilenceSounds(Context context)
+    {
+        silencing++;
+        var audio = (AudioManager)context.GetSystemService(Context.AudioService)!;
+        var kept = KeyPlusPreferences.Global(context);
+        var silenced = (kept.GetString(SilencedKey, "") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+        foreach (var stream in Beeping)
+        {
+            try
+            {
+                if (!audio.IsStreamMute(stream))
+                {
+                    audio.AdjustStreamVolume(stream, Adjust.Mute, 0);
+                    silenced.Add(((int)stream).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+            catch (Java.Lang.SecurityException refused)
+            {
+                Log.Write($"Voice typing: the device does not let {stream} be silenced: {refused.Message}");
+            }
+        }
+
+        kept.Edit()!.PutString(SilencedKey, string.Join(',', silenced.Distinct()))!.Apply();
+    }
+
+    /// <summary>The sounds a dictation silenced given back, a moment later where asked, so the recognizer's last beep is not heard; nothing where another dictation silenced them again meanwhile.</summary>
+    public static void GiveSoundsBack(Context context, int afterMs = 0)
+    {
+        var asked = silencing;
+        if (afterMs > 0)
+        {
+            new Handler(Looper.MainLooper!).PostDelayed(
+                () =>
+                {
+                    if (asked == silencing)
+                    {
+                        GiveSoundsBack(context);
+                    }
+                },
+                afterMs);
+            return;
+        }
+
+        var kept = KeyPlusPreferences.Global(context);
+        var audio = (AudioManager)context.GetSystemService(Context.AudioService)!;
+        foreach (var number in (kept.GetString(SilencedKey, "") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            try
+            {
+                audio.AdjustStreamVolume((Android.Media.Stream)int.Parse(number, System.Globalization.CultureInfo.InvariantCulture), Adjust.Unmute, 0);
+            }
+            catch (Exception refused) when (refused is Java.Lang.SecurityException or FormatException)
+            {
+                Log.Write($"Voice typing: a sound silenced could not be given back: {refused.Message}");
+            }
+        }
+
+        kept.Edit()!.Remove(SilencedKey)!.Apply();
+    }
 
     public static float Silence(Context context) => KeyPlusPreferences.Global(context).GetFloat(SilenceKey, SilenceDefault);
 
@@ -297,6 +377,17 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
     public bool Recording { get; private set; }
 
+    /// <summary>A voice being heard now, as the recognizer tells it: from speech beginning to its end.</summary>
+    public bool Speaking => Recording && voiced;
+
+    private bool voiced;
+
+    /// <summary>How long after it stops the device's sounds are given back: the recognizer's last beep comes as it is let go.</summary>
+    private const int SoundsBackAfterMs = 700;
+
+    /// <summary>Whether this dictation silenced the device's sounds (Sound effects off).</summary>
+    private bool silenced;
+
     public event Action<double>? Level;
 
     public event Action<string>? Partial;
@@ -323,6 +414,12 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
         recognizer ??= SpeechRecognizer.CreateSpeechRecognizer(context)!;
         recognizer.SetRecognitionListener(listener);
         Recording = true;
+        if (!VoicePreferences.Sounds(context))
+        {
+            VoicePreferences.SilenceSounds(context);
+            silenced = true;
+        }
+
         Listen();
     }
 
@@ -343,7 +440,9 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
         // Between two utterances (the silence that stops it by itself) there are no last words to wait for.
         listening = false;
+        voiced = false;
         recognizer?.Cancel();
+        SoundsBack();
         return Joined();
     }
 
@@ -366,10 +465,25 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
     public void Dispose()
     {
         Recording = false;
+
+        // Cancelled before it is let go: let go while listening (a key typed stops the microphone at once), the next
+        // dictations heard nothing for a minute on the owner's headset, 2026-11-14.
+        voiced = false;
+        recognizer?.Cancel();
         recognizer?.Destroy();
+        SoundsBack();
         recognizer = null;
         listener?.Dispose();
         listener = null;
+    }
+
+    private void SoundsBack()
+    {
+        if (silenced)
+        {
+            silenced = false;
+            VoicePreferences.GiveSoundsBack(context, SoundsBackAfterMs);
+        }
     }
 
     private void Listen()
@@ -388,10 +502,12 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
         listening = true;
         speaking = false;
+        voiced = false;
         recognizer?.StartListening(asked);
     }
 
-    private string Joined() => string.Join(' ', heard.Append(utterance).Where(words => words.Length > 0));
+    /// <summary>All heard, each utterance after the word that tells them apart (<see cref="VoiceCommands.UtteranceBreak"/>), the first too, so the commands know they are told apart; they read that word and nothing writes it.</summary>
+    private string Joined() => string.Concat(heard.Append(utterance).Where(words => words.Length > 0).Select(words => $"{VoiceCommands.UtteranceBreak} {words} ")).TrimEnd();
 
     private static string? Words(Bundle? results) => results?.GetStringArrayList(SpeechRecognizer.ResultsRecognition)?.FirstOrDefault();
 
@@ -410,6 +526,7 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
         dropping = false;
         speaking = false;
+        voiced = false;
         forgotten = 0;
         utterance = "";
         listening = false;
@@ -430,18 +547,27 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
     private sealed class Listener(AndroidSpeech speech) : Java.Lang.Object, IRecognitionListener
     {
-        public void OnBeginningOfSpeech() => speech.speaking = true;
+        public void OnBeginningOfSpeech()
+        {
+            speech.speaking = true;
+            speech.voiced = true;
+        }
 
         public void OnBufferReceived(byte[]? buffer)
         {
         }
 
-        public void OnEndOfSpeech()
-        {
-        }
+        public void OnEndOfSpeech() => speech.voiced = false;
 
         public void OnError(SpeechRecognizerError error)
         {
+#if DEBUG
+            if (error is SpeechRecognizerError.NoMatch or SpeechRecognizerError.SpeechTimeout)
+            {
+                // A Debug build alone: every time the recognizer hears nothing, to tell a microphone that gives it none.
+                speech.log($"Android's recognizer heard nothing (Debug build only): {error}");
+            }
+#endif
             if (error is not (SpeechRecognizerError.NoMatch or SpeechRecognizerError.SpeechTimeout))
             {
                 speech.log($"Android's recognizer stopped: {error}");

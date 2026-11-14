@@ -127,6 +127,24 @@ internal sealed class AutomationFocus : IDisposable
         }
     }
 
+    /// <summary>The text selected in what has the focus, as its text pattern tells it; none where nothing is selected or it cannot be read. On a multithreaded apartment's thread, never the keyboard's.</summary>
+    public string? ReadSelection()
+    {
+        try
+        {
+            if (automation.GetFocusedElement().GetCurrentPattern(TextPatternId) is IUIAutomationTextPattern text && text.GetSelection() is { } selection && selection.Length() > 0)
+            {
+                return selection.GetElement(0).GetText(-1);
+            }
+
+            return null;
+        }
+        catch (Exception failed) when (failed is COMException or InvalidCastException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>What comes before a range's start, at most <paramref name="most"/> characters.</summary>
     private static string Before(IUIAutomationTextRange range, int most)
     {

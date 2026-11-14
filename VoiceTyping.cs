@@ -25,6 +25,9 @@ public interface IDictation : IDisposable
 {
     bool Recording { get; }
 
+    /// <summary>Whether a voice is being heard now, not the silence around it.</summary>
+    bool Speaking { get; }
+
     /// <summary>The level heard, 0 to 1.</summary>
     event Action<double>? Level;
 
@@ -154,6 +157,9 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
     private long shownBytes;
 
     public bool Recording => recording;
+
+    /// <summary>A voice heard within the last half second.</summary>
+    public bool Speaking => recording && spoke && quietBytes < BytesPerSecond / 2;
 
     /// <summary>The level heard, 0 to 1, as each piece comes.</summary>
     public event Action<double>? Level;
@@ -322,8 +328,14 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
                     break;
                 }
 
-                shownBytes = wav.Length - WavHeaderBytes;
                 Partial?.Invoke(text);
+                if (current != session)
+                {
+                    // Told to forget what it heard as these words were taken: they are the last of that listening.
+                    break;
+                }
+
+                shownBytes = wav.Length - WavHeaderBytes;
                 var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
                 if (words > mostWords)
                 {

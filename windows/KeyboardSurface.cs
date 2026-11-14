@@ -146,6 +146,9 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>The dictation let go of the text (<see cref="LetSpokenGo"/>): nothing more of it is typed until the next begins.</summary>
     private bool spokenLetGo;
 
+    /// <summary>A dictation is listening, from its beginning until its last words are typed or it lets go of the text.</summary>
+    private bool spokenGoing;
+
     /// <summary>A dictation's last words typed that are typed again when heard otherwise; those before stay as typed.</summary>
     private const int SpokenOpenWords = 3;
 
@@ -215,16 +218,160 @@ public sealed class KeyboardSurface : FrameworkElement
     {
         spokenText = null;
         spokenLetGo = false;
+        spokenGoing = true;
     }
 
     /// <summary>The text let go of by the dictation listening, told so it stops: what it typed stays and nothing more of it is typed.</summary>
     public event Action? SpokenLetGo;
+
+    /// <summary>Enter while a dictation types, told with which Enter: what it typed stays as sent, and it goes on listening, its next words typed as a dictation's first.</summary>
+    public event Action<string>? SpokenAfresh;
+
+    /// <summary>
+    /// Enter while a dictation types (the keyboard's, the computer's, or a
+    /// spoken command's): a chat sends what was typed and empties its field,
+    /// so the dictation starts afresh, still listening, where any other key
+    /// lets go of the text and stops it.
+    /// </summary>
+    public void StartSpokenAfresh(string why)
+    {
+        if (!spokenGoing || spokenLetGo)
+        {
+            return;
+        }
+
+        spokenText = null;
+        SpokenAfresh?.Invoke(why);
+    }
 
     /// <summary>Words spoken (🎤), typed as a swiped word is: a space before them unless after a space or nothing.</summary>
     public void TypeSpoken(string text)
     {
         TypeSpokenSoFar(text);
         spokenText = null;
+        spokenGoing = false;
+    }
+
+    /// <summary>A spoken command's Enter: pressed as the computer's, the dictation starting afresh after it.</summary>
+    public void EnterSpoken()
+    {
+        StartSpokenAfresh("the command to send");
+        Press(Keycode.Enter);
+        lastTyped = null;
+    }
+
+    /// <summary>A spoken command's deletion of the word before the caret, as Ctrl and ⌫ delete it.</summary>
+    public void DeleteWordSpoken()
+    {
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        KeySender.Press(Keycode.Del, KeySender.Held.Ctrl);
+    }
+
+    /// <summary>
+    /// A spoken command's selection, the dictation's typed words let go of
+    /// first: all the text as Ctrl and A select it, or the paragraph the
+    /// caret is in as Ctrl and ↑, then Ctrl, Shift and ↓ do where the
+    /// application moves by paragraphs with them (Word, a browser's fields).
+    /// </summary>
+    public void SelectSpoken(bool? paragraph)
+    {
+        spokenText = null;
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        if (paragraph is null)
+        {
+            // Only the dictation's typed words let go of: what is selected stays so.
+            return;
+        }
+
+        if (paragraph.Value)
+        {
+            KeySender.Press(Keycode.DpadUp, KeySender.Held.Ctrl);
+            KeySender.Press(Keycode.DpadDown, KeySender.Held.Ctrl | KeySender.Held.Shift);
+        }
+        else
+        {
+            KeySender.PressCharacter('a', language.Locale, KeySender.Held.Ctrl);
+        }
+    }
+
+    /// <summary>A spoken command's move of the caret to the text's end or its start, as Ctrl and End or Home, the dictation's typed words let go of first.</summary>
+    public void GoSpoken(bool end)
+    {
+        spokenText = null;
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        lastTyped = null;
+        KeySender.Press(end ? Keycode.MoveEnd : Keycode.MoveHome, KeySender.Held.Ctrl);
+    }
+
+    /// <summary>A text typed over what is selected, as typing replaces it: the Spelling command's corrected text, its new lines as Shift and Enter.</summary>
+    public void TypeOverSelection(string text)
+    {
+        spokenText = null;
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        TypeLines(text.Replace("\r\n", "\n").Replace('\r', '\n'));
+        lastTyped = text.Length > 0 ? text[^1] : lastTyped;
+    }
+
+    /// <summary>A text typed, a new line in it as Shift and Enter, which every field takes as a new line and no chat as its message sent.</summary>
+    private static void TypeLines(string text)
+    {
+        var lines = text.Split('\n');
+        for (var line = 0; line < lines.Length; line++)
+        {
+            if (line > 0)
+            {
+                KeySender.Press(Keycode.Enter, KeySender.Held.Shift);
+            }
+
+            KeySender.Type(lines[line]);
+        }
+    }
+
+    /// <summary>A spoken command's copy, cut, paste or undo, as Ctrl and its letter (c, x, v, z) in the keyboard language's layout, the dictation's typed words let go of first.</summary>
+    public void EditSpoken(char letter)
+    {
+        spokenText = null;
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        KeySender.PressCharacter(letter, language.Locale, KeySender.Held.Ctrl);
+    }
+
+    /// <summary>A spoken command's deletion of what is selected, as the Delete key: Windows tells a keyboard nothing of the field, so with nothing selected it deletes the character after the caret, none at a text's end.</summary>
+    public void DeleteSelectionSpoken()
+    {
+        spokenText = null;
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        KeySender.Press(Keycode.ForwardDel, KeySender.Held.None);
+    }
+
+    /// <summary>A spoken command's deletion of what is before the caret, so many characters.</summary>
+    public void DeleteSpoken(int characters)
+    {
+        ForgetTyping();
+        sentence = null;
+        wordFix = null;
+        boundaryAt = 0;
+        for (var gone = characters; gone > 0; gone--)
+        {
+            KeySender.Press(Keycode.Del, KeySender.Held.None);
+        }
     }
 
     /// <summary>
@@ -257,12 +404,19 @@ public sealed class KeyboardSurface : FrameworkElement
         }
         else if (spokenText.Length > 0 && ((KeyedAt?.Invoke() ?? 0) >= spokenAt || (PressedAt?.Invoke() ?? 0) >= spokenAt))
         {
+            // The computer's Enter the last key since, and no click: a chat's message sent.
+            if ((PressedAt?.Invoke() ?? 0) < spokenAt && EnteredAt?.Invoke() == KeyedAt?.Invoke())
+            {
+                StartSpokenAfresh("the computer's Enter");
+                return;
+            }
+
             LetSpokenGo("a key or a click outside the keyboard came");
             return;
         }
 
         var settled = Settled(text);
-        var wanted = settled.Length == 0 ? "" : spokenLead + settled;
+        var wanted = settled.Length == 0 || VoiceCommands.StartsAttached(settled) ? settled : spokenLead + settled;
         var same = 0;
         while (same < spokenText.Length && same < wanted.Length && spokenText[same] == wanted[same])
         {
@@ -286,7 +440,8 @@ public sealed class KeyboardSurface : FrameworkElement
             KeySender.Press(Keycode.Del, KeySender.Held.None);
         }
 
-        KeySender.Type(wanted[same..]);
+        TypeLines(wanted[same..]);
+
         sentence = null;
         wordFix = null;
         boundaryAt = 0;
@@ -302,12 +457,19 @@ public sealed class KeyboardSurface : FrameworkElement
     /// The words heard, those the dictation typed kept but its last
     /// <see cref="SpokenOpenWords"/>: all it heard is read again each time, and
     /// the model may change a comma or a capital far back (ahora → Ahora,),
-    /// which would delete the whole sentence and type it again.
+    /// which would delete the whole sentence and type it again. Heard with
+    /// fewer words than those kept, a command deleted them (a word, a
+    /// sentence): it is taken as heard.
     /// </summary>
     private string Settled(string heard)
     {
-        var typed = Words(spokenText is { Length: > 0 } text ? text[spokenLead.Length..] : "");
+        var typed = Words(spokenText ?? "");
         var kept = Math.Max(0, typed.Length - SpokenOpenWords);
+        if (Words(heard).Length < kept)
+        {
+            return heard;
+        }
+
         return string.Join(' ', typed.Take(kept).Concat(Words(heard).Skip(kept)));
 
         static string[] Words(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -324,6 +486,7 @@ public sealed class KeyboardSurface : FrameworkElement
         Log.Write($"Voice typing: stopped typing, {why}; what it typed stays");
         spokenText = null;
         spokenLetGo = true;
+        spokenGoing = false;
         SpokenLetGo?.Invoke();
     }
 
@@ -397,6 +560,9 @@ public sealed class KeyboardSurface : FrameworkElement
     public Func<long>? PressedAt { get; set; }
 
     public Func<long>? KeyedAt { get; set; }
+
+    /// <summary>When the computer's Enter last went down (<see cref="InputWatch.EnteredAt"/>).</summary>
+    public Func<long>? EnteredAt { get; set; }
 
     /// <summary>
     /// What these keys typed of the sentence being written, since it began
@@ -1816,7 +1982,15 @@ public sealed class KeyboardSurface : FrameworkElement
 
     private void Act(StandardKey key)
     {
-        LetSpokenGo("a key of the keyboard's was pressed");
+        if (key.Action == StandardAction.Enter && !Combining)
+        {
+            StartSpokenAfresh("the keyboard's Enter");
+        }
+        else
+        {
+            LetSpokenGo("a key of the keyboard's was pressed");
+        }
+
         keyActedAt = Environment.TickCount64;
         KeyPressed?.Invoke();
 

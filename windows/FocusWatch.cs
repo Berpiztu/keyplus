@@ -178,6 +178,10 @@ public sealed class FocusWatch : IDisposable
     internal Task<AutomationFocus.FieldText?> ReadField(int most) =>
         Automation is { } reader ? Task.Run(() => (AutomationFocus.FieldText?)reader.ReadField(most)) : Task.FromResult<AutomationFocus.FieldText?>(null);
 
+    /// <summary>The text selected in what has the focus (<see cref="AutomationFocus.ReadSelection"/>), read on a thread of the pool's; none where nothing is selected or UI Automation cannot be had.</summary>
+    internal Task<string?> ReadSelection() =>
+        Automation is { } reader ? Task.Run(reader.ReadSelection) : Task.FromResult<string?>(null);
+
     /// <summary>The focus went somewhere no text is typed.</summary>
     public event Action? TextLeft;
 
