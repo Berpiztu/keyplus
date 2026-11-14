@@ -344,6 +344,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     public override void OnStartInputView(Android.Views.InputMethods.EditorInfo? info, bool restarting)
     {
         base.OnStartInputView(info, restarting);
+        ForgetSpoken("the field started again");
         // Once a day at most: the keyboard's process lives for days.
         AndroidUpdates.CheckInBackground(this);
         // The app's Dictionary may have changed the words: swiping reads them again.
@@ -409,7 +410,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
     private bool transcribing;
 
     /// <summary>The space a dictation's words need before them: none after a space or nothing.</summary>
-    private string spokenLead = "";
+    private string? spokenLead;
+
+    /// <summary>The field's text was sent while a dictation was stopping: its last words are not written again.</summary>
+    private bool sentWhileStopping;
 
     /// <summary>The chosen service being asked whether it answers, before listening: 🎤 again waits for it.</summary>
     private bool asking;
@@ -485,10 +489,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 panel?.ShowListening(true, level);
             }
         };
-        made.Partial += text => CurrentInputConnection?.SetComposingText(text.Length == 0 ? "" : spokenLead + text, 1);
+        made.Partial += text => CurrentInputConnection?.SetComposingText(text.Length == 0 ? "" : Lead() + text, 1);
         made.Silence += EndDictation;
-        var before = CurrentInputConnection?.GetTextBeforeCursor(1, 0)?.ToString();
-        spokenLead = string.IsNullOrEmpty(before) || char.IsWhiteSpace(before[^1]) ? "" : " ";
+        spokenLead = null;
+        Lead();
         try
         {
             made.Start(options);
@@ -502,7 +506,20 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
 
         dictation = made;
+        Log.Write($"Voice typing: listening by {(local ? "Android's recognizer" : VoicePreferences.Choice(this))}, {(options.AutoStop ? $"stopping after {options.SilenceSeconds} s of silence" : "until the microphone is tapped")}");
         panel?.ShowListening(true, 0);
+    }
+
+    /// <summary>The space the words heard need before them, read from the field the first time it is asked after a dictation starts or starts afresh.</summary>
+    private string Lead()
+    {
+        if (spokenLead is null)
+        {
+            var before = CurrentInputConnection?.GetTextBeforeCursor(1, 0)?.ToString();
+            spokenLead = string.IsNullOrEmpty(before) || char.IsWhiteSpace(before[^1]) ? "" : " ";
+        }
+
+        return spokenLead;
     }
 
     /// <summary>The dictation stopped: all its words written for good in its composing text's place.</summary>
@@ -514,13 +531,19 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
 
         transcribing = true;
+        sentWhileStopping = false;
         panel?.ShowListening(false, 0);
         try
         {
             var text = await going.Stop();
-            if (text.Length > 0)
+            if (sentWhileStopping)
             {
-                CurrentInputConnection?.CommitText(spokenLead + text, 1);
+                Log.Write("Voice typing: stopped; its words were sent as it stopped, so they are not written again");
+            }
+            else if (text.Length > 0)
+            {
+                CurrentInputConnection?.CommitText(Lead() + text, 1);
+                Log.Write($"Voice typing: stopped, {text.Length} characters written");
             }
             else
             {
@@ -547,20 +570,36 @@ public sealed class KeyPlusKeyboard : InputMethodService
     }
 
     /// <summary>
-    /// Enter while dictating: the words so far written for good and forgotten,
-    /// the microphone left listening, so a chat that sends on Enter and empties
-    /// its field does not get them written again with the next ones heard.
+    /// Enter, or the field started again (a chat's send button empties it and
+    /// restarts it), while dictating: the words so far written for good and
+    /// forgotten, the microphone left listening, so the field does not get
+    /// them written again with the next ones heard. While a dictation is
+    /// stopping, its last words are not written either: they went as they were.
     /// </summary>
-    private void ForgetSpoken()
+    private void ForgetSpoken(string why)
     {
-        if (dictation is not { Recording: true } going || transcribing)
+        if (transcribing)
+        {
+            if (!sentWhileStopping)
+            {
+                sentWhileStopping = true;
+                CurrentInputConnection?.FinishComposingText();
+                Log.Write($"Voice typing: {why} while it was stopping");
+            }
+
+            return;
+        }
+
+        if (dictation is not { Recording: true } going)
         {
             return;
         }
 
         CurrentInputConnection?.FinishComposingText();
-        going.Forget();
-        spokenLead = "";
+        var keepUnread = VoicePreferences.KeepAfterSend(this);
+        going.Forget(keepUnread);
+        spokenLead = null;
+        Log.Write($"Voice typing: {why} while listening, so it starts afresh, still listening; what was said and not written yet {(keepUnread ? "is still written" : "is dropped")}");
     }
 
     /// <summary>The field let the keyboard go while dictating: the dictation dropped, the words so far left as written.</summary>
@@ -1944,7 +1983,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             return;
         }
 
-        ForgetSpoken();
+        ForgetSpoken("Enter");
         CurrentInputConnection?.PerformEditorAction(action);
     }
 
@@ -1952,7 +1991,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
     {
         if (code == Keycode.Enter)
         {
-            ForgetSpoken();
+            ForgetSpoken("Enter");
         }
 
 

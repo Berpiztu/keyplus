@@ -26,6 +26,7 @@ namespace Berpiztu.KeyPlus;
 public static class VoicePreferences
 {
     public const string AutoStopKey = "voiceAutoStop";
+    public const string KeepAfterSendKey = "voiceKeepAfterSend";
     public const string SilenceKey = "voiceSilence";
     public const string GainKey = "voiceGain";
     public const string ServiceKey = "voiceService";
@@ -49,6 +50,9 @@ public static class VoicePreferences
     private const int TagBits = 128;
 
     public static bool AutoStop(Context context) => KeyPlusPreferences.Global(context).GetBoolean(AutoStopKey, false);
+
+    /// <summary>Keep transcribing after sending: whether what was said but not written yet when the text is sent (Enter, a chat's send button) is still written after; off, it is dropped. The microphone stays on either way.</summary>
+    public static bool KeepAfterSend(Context context) => KeyPlusPreferences.Global(context).GetBoolean(KeepAfterSendKey, false);
 
     public static float Silence(Context context) => KeyPlusPreferences.Global(context).GetFloat(SilenceKey, SilenceDefault);
 
@@ -280,6 +284,15 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
     /// <summary>The first words of the utterance going on that were forgotten (<see cref="Forget"/>): the recognizer says them again with each result until it ends.</summary>
     private int forgotten;
 
+    /// <summary>The utterance going on is left unsaid until it ends (<see cref="Forget"/> without keeping what was not read yet).</summary>
+    private bool dropping;
+
+    /// <summary>Whether the recognizer has heard speech begin in the utterance going on: silence waited in has nothing to leave unsaid.</summary>
+    private bool speaking;
+
+    /// <summary>Whether the recognizer is hearing an utterance, from asked to listen until it ends it.</summary>
+    private bool listening;
+
     private TaskCompletionSource? lastWords;
 
     public bool Recording { get; private set; }
@@ -304,6 +317,7 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
         heard.Clear();
         utterance = "";
         forgotten = 0;
+        dropping = false;
         lastWords = null;
         listener ??= new Listener(this);
         recognizer ??= SpeechRecognizer.CreateSpeechRecognizer(context)!;
@@ -320,9 +334,15 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
         }
 
         Recording = false;
-        lastWords = new TaskCompletionSource();
-        recognizer?.StopListening();
-        await Task.WhenAny(lastWords.Task, Task.Delay(LastWords));
+        if (listening)
+        {
+            lastWords = new TaskCompletionSource();
+            recognizer?.StopListening();
+            await Task.WhenAny(lastWords.Task, Task.Delay(LastWords));
+        }
+
+        // Between two utterances (the silence that stops it by itself) there are no last words to wait for.
+        listening = false;
         recognizer?.Cancel();
         return Joined();
     }
@@ -330,12 +350,15 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
     /// <summary>
     /// All heard so far forgotten, the recognizer left listening as it is
     /// (stopped and started again it may answer busy, which ends the
-    /// dictation): the words of the utterance going on are counted, and left
-    /// out of what it still says of it.
+    /// dictation). Of the utterance going on, the words written so far are
+    /// counted and left out of what it still says of it, so only those not
+    /// read yet come; or, where they are not kept, all of it is left unsaid
+    /// until it ends, and the next utterance is the first to come.
     /// </summary>
-    public void Forget()
+    public void Forget(bool keepUnread)
     {
         forgotten += WordsOf(utterance).Length;
+        dropping = !keepUnread && speaking;
         heard.Clear();
         utterance = "";
     }
@@ -363,6 +386,8 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
             asked.PutExtra(RecognizerIntent.ExtraSpeechInputPossiblyCompleteSilenceLengthMillis, silence);
         }
 
+        listening = true;
+        speaking = false;
         recognizer?.StartListening(asked);
     }
 
@@ -378,13 +403,16 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
     /// <summary>An utterance ended with its words, or with none (silence, nothing understood): kept, then the dictation ends where it was asked to or the options stop it, else it listens on.</summary>
     private void Ended(string? words)
     {
-        if (words is not null && Kept(words) is { Length: > 0 } kept)
+        if (!dropping && words is not null && Kept(words) is { Length: > 0 } kept)
         {
             heard.Add(kept);
         }
 
+        dropping = false;
+        speaking = false;
         forgotten = 0;
         utterance = "";
+        listening = false;
         Partial?.Invoke(Joined());
         if (lastWords is { } waiting)
         {
@@ -402,9 +430,7 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
     private sealed class Listener(AndroidSpeech speech) : Java.Lang.Object, IRecognitionListener
     {
-        public void OnBeginningOfSpeech()
-        {
-        }
+        public void OnBeginningOfSpeech() => speech.speaking = true;
 
         public void OnBufferReceived(byte[]? buffer)
         {
@@ -435,7 +461,7 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
         public void OnPartialResults(Bundle? partialResults)
         {
-            if (Words(partialResults) is { } words)
+            if (!speech.dropping && Words(partialResults) is { } words)
             {
                 speech.utterance = speech.Kept(words);
                 speech.Partial?.Invoke(speech.Joined());

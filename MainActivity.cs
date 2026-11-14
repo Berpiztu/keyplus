@@ -421,6 +421,11 @@ public sealed class MainActivity : Activity
             : [VoiceSwitch()]);
         groups.Add(
         [
+            new(GetString(Resource.String.voice_keep_after_send), GetString(Resource.String.voice_keep_after_send_summary), On: VoicePreferences.KeepAfterSend(this), Switched: turned =>
+                KeyPlusPreferences.Global(this).Edit()!.PutBoolean(VoicePreferences.KeepAfterSendKey, turned)!.Apply()),
+        ]);
+        groups.Add(
+        [
             new(GetString(Resource.String.voice_service), GetString(Resource.String.voice_service_hint)),
             new(GetString(Resource.String.voice_local), Chosen: choice == VoiceTyping.OnDevice, Tapped: () => ChooseVoiceService(VoiceTyping.OnDevice)),
             new(GetString(Resource.String.voice_lan), Chosen: choice == VoiceTyping.OnLan, Tapped: () => ChooseVoiceService(VoiceTyping.OnLan)),

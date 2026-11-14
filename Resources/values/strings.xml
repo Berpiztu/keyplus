@@ -185,6 +185,8 @@
   <string name="voice_microphone_default">The system\'s default</string>
   <string name="voice_auto_stop">Stop by itself when you stop speaking</string>
   <string name="voice_auto_stop_summary">After speaking, the silence below writes it and stops; off, it stops when you tap 🎤</string>
+  <string name="voice_keep_after_send">Keep transcribing after sending</string>
+  <string name="voice_keep_after_send_summary">On, what you had said and was not written yet when you send is written after; off, it is dropped. The microphone stays on either way</string>
   <string name="voice_silence">Silence to transcribe (s)</string>
   <string name="voice_silence_hint">How long a silence it waits for before it stops.</string>
   <string name="voice_gain">Raise the volume (×)</string>

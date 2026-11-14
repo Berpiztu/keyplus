@@ -179,6 +179,8 @@
   <string name="voice_microphone_default">El predeterminado del sistema</string>
   <string name="voice_auto_stop">Parar solo al dejar de hablar</string>
   <string name="voice_auto_stop_summary">Tras hablar, el silencio de abajo lo escribe y para; desactivado, para cuando pulsas 🎤</string>
+  <string name="voice_keep_after_send">Seguir transcribiendo tras enviar</string>
+  <string name="voice_keep_after_send_summary">Activado, lo que habías dicho y aún no estaba escrito al enviar se escribe después; desactivado, se descarta. El micrófono sigue encendido en ambos casos</string>
   <string name="voice_silence">Silencio para transcribir (seg)</string>
   <string name="voice_silence_hint">Cuánto silencio espera antes de parar.</string>
   <string name="voice_gain">Subir volumen (×)</string>

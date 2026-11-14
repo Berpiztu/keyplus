@@ -407,8 +407,10 @@ a window that does.
   space after it.
 - **The microphone** writes what you say, the words in the field as they are heard,
   until it is tapped again or, if Voice typing says so, after a
-  silence; Enter while it listens leaves it listening and starts afresh, what
-  was said before it never written again. Local is Android's own recognizer; Local network is ia-voice
+  silence; Enter, or a chat's send button, while it listens leaves it listening
+  and starts afresh, what was said before it never written again; what you
+  had said and was not written yet is dropped, or still written after where
+  Voice typing's Keep transcribing after sending is on. Local is Android's own recognizer; Local network is ia-voice
   (NVIDIA Nemotron 3.5 ASR) on a computer at home, by its IP; Remote is a
   published one, with the user and password its proxy asks for, kept
   sealed on the device.

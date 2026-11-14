@@ -39,8 +39,12 @@ public interface IDictation : IDisposable
     /// <summary>Stopped, all its words; none where nothing was said.</summary>
     Task<string> Stop();
 
-    /// <summary>All heard so far forgotten, still listening: the words that come are only those said from now on (Enter sent what was written).</summary>
-    void Forget();
+    /// <summary>
+    /// All heard so far forgotten, still listening (the text written was
+    /// sent): what was said but not written yet still comes, where it is
+    /// kept; else only what is said from now on.
+    /// </summary>
+    void Forget(bool keepUnread);
 }
 
 /// <summary>
@@ -144,6 +148,11 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
     private bool spoke;
     private long quietBytes;
 
+    private const int WavHeaderBytes = 44;
+
+    /// <summary>How much of what was heard the last words shown were read from.</summary>
+    private long shownBytes;
+
     public bool Recording => recording;
 
     /// <summary>The level heard, 0 to 1, as each piece comes.</summary>
@@ -170,6 +179,7 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
         lock (guard)
         {
             pcm.SetLength(0);
+            shownBytes = 0;
         }
 
         microphone.Start(Heard);
@@ -191,8 +201,13 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
         return Recorded() is { } wav ? await Transcribe(wav) : "";
     }
 
-    /// <summary>What was heard so far dropped, the microphone still listening: a reading under way is left unsaid, and the next reads only what comes from now on.</summary>
-    public void Forget()
+    /// <summary>
+    /// What was heard so far dropped, the microphone still listening: a
+    /// reading under way is left unsaid, and the next reads only what comes
+    /// from now on, with what was heard since the last words shown where
+    /// that is kept.
+    /// </summary>
+    public void Forget(bool keepUnread)
     {
         if (!recording)
         {
@@ -203,7 +218,10 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
         quietBytes = 0;
         lock (guard)
         {
+            var unread = keepUnread && shownBytes < pcm.Length ? pcm.GetBuffer().AsSpan((int)shownBytes, (int)(pcm.Length - shownBytes)).ToArray() : [];
             pcm.SetLength(0);
+            pcm.Write(unread);
+            shownBytes = 0;
         }
 
         _ = Partials(++session);
@@ -304,6 +322,7 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
                     break;
                 }
 
+                shownBytes = wav.Length - WavHeaderBytes;
                 Partial?.Invoke(text);
                 var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
                 if (words > mostWords)
