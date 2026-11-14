@@ -546,6 +546,23 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
     }
 
+    /// <summary>
+    /// Enter while dictating: the words so far written for good and forgotten,
+    /// the microphone left listening, so a chat that sends on Enter and empties
+    /// its field does not get them written again with the next ones heard.
+    /// </summary>
+    private void ForgetSpoken()
+    {
+        if (dictation is not { Recording: true } going || transcribing)
+        {
+            return;
+        }
+
+        CurrentInputConnection?.FinishComposingText();
+        going.Forget();
+        spokenLead = "";
+    }
+
     /// <summary>The field let the keyboard go while dictating: the dictation dropped, the words so far left as written.</summary>
     private void DropDictation()
     {
@@ -1927,11 +1944,18 @@ public sealed class KeyPlusKeyboard : InputMethodService
             return;
         }
 
+        ForgetSpoken();
         CurrentInputConnection?.PerformEditorAction(action);
     }
 
     private void SendKey(Keycode code, MetaKeyStates meta)
     {
+        if (code == Keycode.Enter)
+        {
+            ForgetSpoken();
+        }
+
+
         if (CurrentInputConnection is { } connection)
         {
             KeySender.Send(key => connection.SendKeyEvent(key), code, meta);

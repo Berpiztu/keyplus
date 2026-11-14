@@ -276,6 +276,10 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
     private Listener? listener;
     private VoiceOptions options = new(false, VoicePreferences.SilenceDefault, 1, "", "", "", "es-ES");
     private string utterance = "";
+
+    /// <summary>The first words of the utterance going on that were forgotten (<see cref="Forget"/>): the recognizer says them again with each result until it ends.</summary>
+    private int forgotten;
+
     private TaskCompletionSource? lastWords;
 
     public bool Recording { get; private set; }
@@ -299,6 +303,7 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
         this.options = options;
         heard.Clear();
         utterance = "";
+        forgotten = 0;
         lastWords = null;
         listener ??= new Listener(this);
         recognizer ??= SpeechRecognizer.CreateSpeechRecognizer(context)!;
@@ -320,6 +325,19 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
         await Task.WhenAny(lastWords.Task, Task.Delay(LastWords));
         recognizer?.Cancel();
         return Joined();
+    }
+
+    /// <summary>
+    /// All heard so far forgotten, the recognizer left listening as it is
+    /// (stopped and started again it may answer busy, which ends the
+    /// dictation): the words of the utterance going on are counted, and left
+    /// out of what it still says of it.
+    /// </summary>
+    public void Forget()
+    {
+        forgotten += WordsOf(utterance).Length;
+        heard.Clear();
+        utterance = "";
     }
 
     public void Dispose()
@@ -352,14 +370,20 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
 
     private static string? Words(Bundle? results) => results?.GetStringArrayList(SpeechRecognizer.ResultsRecognition)?.FirstOrDefault();
 
+    private static string[] WordsOf(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>What the recognizer says of the utterance going on, without the words forgotten.</summary>
+    private string Kept(string words) => forgotten == 0 ? words : string.Join(' ', WordsOf(words).Skip(forgotten));
+
     /// <summary>An utterance ended with its words, or with none (silence, nothing understood): kept, then the dictation ends where it was asked to or the options stop it, else it listens on.</summary>
     private void Ended(string? words)
     {
-        if (words is { Length: > 0 })
+        if (words is not null && Kept(words) is { Length: > 0 } kept)
         {
-            heard.Add(words);
+            heard.Add(kept);
         }
 
+        forgotten = 0;
         utterance = "";
         Partial?.Invoke(Joined());
         if (lastWords is { } waiting)
@@ -413,7 +437,7 @@ public sealed class AndroidSpeech(Context context, Action<string> log) : IDictat
         {
             if (Words(partialResults) is { } words)
             {
-                speech.utterance = words;
+                speech.utterance = speech.Kept(words);
                 speech.Partial?.Invoke(speech.Joined());
             }
         }

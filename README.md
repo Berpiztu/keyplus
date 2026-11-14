@@ -407,7 +407,8 @@ a window that does.
   space after it.
 - **The microphone** writes what you say, the words in the field as they are heard,
   until it is tapped again or, if Voice typing says so, after a
-  silence. Local is Android's own recognizer; Local network is ia-voice
+  silence; Enter while it listens leaves it listening and starts afresh, what
+  was said before it never written again. Local is Android's own recognizer; Local network is ia-voice
   (NVIDIA Nemotron 3.5 ASR) on a computer at home, by its IP; Remote is a
   published one, with the user and password its proxy asks for, kept
   sealed on the device.

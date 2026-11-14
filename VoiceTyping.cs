@@ -38,6 +38,9 @@ public interface IDictation : IDisposable
 
     /// <summary>Stopped, all its words; none where nothing was said.</summary>
     Task<string> Stop();
+
+    /// <summary>All heard so far forgotten, still listening: the words that come are only those said from now on (Enter sent what was written).</summary>
+    void Forget();
 }
 
 /// <summary>
@@ -186,6 +189,24 @@ public sealed class VoiceTyping(IMicrophone microphone, Action<string> log) : ID
         recording = false;
         await microphone.Stop();
         return Recorded() is { } wav ? await Transcribe(wav) : "";
+    }
+
+    /// <summary>What was heard so far dropped, the microphone still listening: a reading under way is left unsaid, and the next reads only what comes from now on.</summary>
+    public void Forget()
+    {
+        if (!recording)
+        {
+            return;
+        }
+
+        spoke = false;
+        quietBytes = 0;
+        lock (guard)
+        {
+            pcm.SetLength(0);
+        }
+
+        _ = Partials(++session);
     }
 
     /// <summary>The microphone stopped and what it heard left unread: the words typed so far are all the dictation types.</summary>
