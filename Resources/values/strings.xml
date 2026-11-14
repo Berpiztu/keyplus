@@ -202,6 +202,8 @@
   <string name="voice_grammar_none">No grammar marked</string>
   <string name="voice_grammar_marked">Grammar marked: %1$d</string>
   <string name="voice_grammar_not_here">Grammar is not checked on Windows yet</string>
+  <string name="spelling_corrects_with">Corrects with</string>
+  <string name="spelling_corrects_with_summary">One of the three, as you type and for the Spelling command; the others are kept as chosen, under it</string>
   <string name="voice_silence">Silence to transcribe (s)</string>
   <string name="voice_silence_hint">How long a silence it waits for before it stops.</string>
   <string name="voice_gain">Raise the volume (×)</string>

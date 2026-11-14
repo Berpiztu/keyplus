@@ -105,8 +105,9 @@ public static class VoiceCommands
     /// recognizer loses or mishears an utterance's first word at times
     /// ("seleccionar todo", "cobalto seleccionar todo" for "comando
     /// seleccionar todo", the owner's headset, 2026-11-14), so an utterance
-    /// that is nothing but a command of several words, with at most one word
-    /// before it, is that command.
+    /// that is nothing but a command is that command: one of several words,
+    /// with at most one word before it, or a single word that is a command's
+    /// name.
     /// </summary>
     public const string UtteranceBreak = "\u241E";
 
@@ -590,15 +591,23 @@ public static class VoiceCommands
     /// The command an utterance starting at a word is by itself, with how
     /// many words it takes: all of the utterance a command of several words
     /// as said, or that with one word before it that is not the keyword (the
-    /// keyword misheard). None for an utterance with anything else in it, or
+    /// keyword misheard), or a single word that is a command of one word. None for an utterance with anything else in it, or
     /// with the keyword, which is read as ever.
     /// </summary>
     private static (Command Command, int Taken)? Alone(string[] words, int from)
     {
         var said = words.Skip(from).TakeWhile(word => word != UtteranceBreak).Select(Plain).ToArray();
-        if (said.Length < 2 || said.Any(IsKeyword))
+        if (said.Length == 0 || said.Any(IsKeyword))
         {
             return null;
+        }
+
+        // A single word said alone between two pauses that is a command's name is that command ("ortografía" for
+        // "comando ortografía", written as a word on the owner's headset, 2026-11-14): never with a word before it,
+        // which any two words ending so would be ("necesito ayuda").
+        if (said.Length == 1)
+        {
+            return Phrases.FirstOrDefault(phrase => phrase.Words.Length == 1 && phrase.Words[0] == said[0]) is { Command: { } single } ? (single, 1) : null;
         }
 
         foreach (var phrase in Phrases.Where(phrase => phrase.Words.Length > 1))

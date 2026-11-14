@@ -840,12 +840,19 @@ public sealed class MainActivity : Activity
                 ]));
                 // The word list, the suggestions' and Glide typing's: fetched here, only said on Glide typing's page.
                 spelling.Add(FetchRow(LanguageOptions.WordListOf(language), Again));
-                // Android's own spell checker, for the Spelling command, in place of the keyboard's own.
-                spelling.Add(new(GetString(Resource.String.spelling_system), GetString(Resource.String.spelling_system_summary), On: LanguageChoices.SystemSpellingIn(this, code), Switched: on =>
+                // What corrects the language, one of three: Android's own spell checker first, the one until another is chosen.
+                var by = LanguageChoices.CorrectsWith(this, code);
+                void Corrects(LanguageChoices.Corrector chosen)
                 {
-                    LanguageChoices.SetSystemSpelling(this, code, on);
-                    Log.Write($"Spelling: {code}'s Spelling command {(on ? "asks Android's spell checker" : "corrects with the keyboard's own")}");
-                }));
+                    LanguageChoices.SetCorrectsWith(this, code, chosen);
+                    Log.Write($"Spelling: {code} is corrected by {chosen}");
+                    settings!.Refresh(Again());
+                }
+
+                spelling.Add(new(GetString(Resource.String.spelling_corrects_with), GetString(Resource.String.spelling_corrects_with_summary)));
+                spelling.Add(new(GetString(Resource.String.spelling_system), Chosen: by == LanguageChoices.Corrector.System, Tapped: () => Corrects(LanguageChoices.Corrector.System)));
+                spelling.Add(new(GetString(Resource.String.context_model), Chosen: by == LanguageChoices.Corrector.Context, Tapped: () => Corrects(LanguageChoices.Corrector.Context)));
+                spelling.Add(new(GetString(Resource.String.spelling_words), Chosen: by == LanguageChoices.Corrector.Words, Tapped: () => Corrects(LanguageChoices.Corrector.Words)));
                 spelling.AddRange(ContextModelRows(code, now, Again));
                 // Under it, the model's words offered as a word is typed too, the word list's where it offers none: faded while it is off.
                 spelling.Add(new(GetString(Resource.String.context_model_suggests), GetString(Resource.String.context_model_suggests_summary),

@@ -37,7 +37,7 @@ public sealed class SystemSpelling(Context context, Action<string> log)
         }
 
         var answered = new TaskCompletionSource<IReadOnlyList<Marked>>();
-        using var listener = new Listener(answered);
+        using var listener = new Listener(answered, text, log);
         var asked = new SpellCheckerSession.SpellCheckerSessionParams.Builder()
             .SetLocale(Java.Util.Locale.ForLanguageTag(locale))
             .SetShouldReferToSpellCheckerLanguageSettings(false)
@@ -80,7 +80,7 @@ public sealed class SystemSpelling(Context context, Action<string> log)
         return (text, changed);
     }
 
-    private sealed class Listener(TaskCompletionSource<IReadOnlyList<Marked>> answered) : Java.Lang.Object, SpellCheckerSession.ISpellCheckerSessionListener
+    private sealed class Listener(TaskCompletionSource<IReadOnlyList<Marked>> answered, string asked, Action<string> log) : Java.Lang.Object, SpellCheckerSession.ISpellCheckerSessionListener
     {
         public void OnGetSuggestions(SuggestionsInfo[]? results)
         {
@@ -101,6 +101,13 @@ public sealed class SystemSpelling(Context context, Action<string> log)
                     var attributes = (int)info.SuggestionsAttributes;
                     var misspelled = (attributes & LooksMisspelled) != 0;
                     var grammar = (attributes & LooksLikeGrammar) != 0;
+#if DEBUG
+                    // A Debug build alone: every place the checker answered about, as it told it, to learn what it marks and what it does not.
+                    var (from, length) = (sentence.GetOffsetAt(at), sentence.GetLengthAt(at));
+                    var about = from >= 0 && from + length <= asked.Length ? asked.Substring(from, length) : "?";
+                    var offered = string.Join(", ", Enumerable.Range(0, Math.Max(0, info.SuggestionsCount)).Select(info.GetSuggestionAt));
+                    log($"Spelling (Debug build only): Android's spell checker on \"{about}\": attributes {attributes}, suggests [{offered}]");
+#endif
                     if (!misspelled && !grammar)
                     {
                         continue;
@@ -119,6 +126,9 @@ public sealed class SystemSpelling(Context context, Action<string> log)
                 }
             }
 
+#if DEBUG
+            log($"Spelling (Debug build only): Android's spell checker answered about {(results ?? []).Sum(sentence => sentence.SuggestionsCount)} places in {asked.Length} characters");
+#endif
             answered.TrySetResult(marked);
         }
     }

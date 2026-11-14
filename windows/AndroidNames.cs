@@ -245,6 +245,8 @@ namespace Berpiztu.KeyPlus
             public const int voice_spelling_no_model = 260;
             public const int voice_spelling_nothing = 261;
             public const int voice_sounds = 266;
+            public const int spelling_corrects_with = 274;
+            public const int spelling_corrects_with_summary = 275;
             public const int spelling_system = 268;
             public const int spelling_system_summary = 269;
             public const int voice_spelling_no_system = 270;

@@ -5301,7 +5301,7 @@ public sealed class KeyPanel
     public Func<StandardLanguage, string, Task<string?>>? CorrectSentence { get; set; }
 
     /// <summary>Whether a sentence closed is read by a model: the accent model, or the language's context model.</summary>
-    private static bool SentenceRead(LanguageSpelling spelling) => spelling.Accents || spelling.Context is not null;
+    private static bool SentenceRead(LanguageSpelling spelling) => spelling.Accents || spelling.ReadsSentences;
 
     /// <summary>The same at once, for Enter, which cannot wait; none while it is not loaded.</summary>
     public Func<StandardLanguage, string, string?>? CorrectSentenceNow { get; set; }
@@ -5619,19 +5619,26 @@ public sealed class KeyPanel
     private async void CorrectWordByModel()
     {
         var language = TypingLanguage;
-        if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { Context: not null } spelling
-            || !(spelling.Autocorrect && InDocument) && !spelling.Suggestions || swipedText is not null
-            || RecentText?.Invoke() is not { } recent || !recent.EndsWith(' ') || SentenceAt(recent).TrimEnd() is not { Length: > 0 } sentence
+        if (CorrectSentence is null || SpellingIn?.Invoke(language) is not { ReadsSentences: true } spelling
+            || !(spelling.Autocorrect && InDocument) && !spelling.Suggestions || swipedText is not null)
+        {
+            return;
+        }
+
+        if (RecentText?.Invoke() is not { } recent || !recent.EndsWith(' ') || SentenceAt(recent).TrimEnd() is not { Length: > 0 } sentence
             || InAddress(recent, 1))
         {
+            // Said once a word, with the detailed log on: an application that gives the keyboard no text (a remote desktop's) has nothing read.
+            Log.Detail($"Spelling: the word ended is not read in {language.Code}: the field gives {(RecentText?.Invoke() is { } given ? $"{given.Length} characters before the caret, not ending as typed, or an address" : "no text before the caret")}");
             return;
         }
 
         var typed = sentence.Split(' ');
         var word = typed[^1];
 
-        // Written by a space only where the centre is in bold; the sentence's close may still mend the word.
-        if (surely is not { Word: var sureFor } || sureFor != word)
+        // Written by a space only where the centre is in bold; the sentence's close may still mend the word. Android's
+        // own spell checker says itself which words are misspelled, so it is asked about every word.
+        if (!spelling.System && (surely is not { Word: var sureFor } || sureFor != word))
         {
             Log.Detail("Spelling: a word left at the space, nothing in bold for it");
             return;

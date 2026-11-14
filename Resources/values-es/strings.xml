@@ -196,6 +196,8 @@
   <string name="voice_grammar_none">Sin marcas de gramática</string>
   <string name="voice_grammar_marked">Gramática marcada: %1$d</string>
   <string name="voice_grammar_not_here">En Windows aún no se revisa la gramática</string>
+  <string name="spelling_corrects_with">Corrige con</string>
+  <string name="spelling_corrects_with_summary">Uno de los tres, al escribir y con el comando ortografía; los demás se guardan como estén, debajo</string>
   <string name="voice_silence">Silencio para transcribir (seg)</string>
   <string name="voice_silence_hint">Cuánto silencio espera antes de parar.</string>
   <string name="voice_gain">Subir volumen (×)</string>

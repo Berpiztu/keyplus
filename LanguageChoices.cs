@@ -31,21 +31,55 @@ public static class LanguageChoices
             spanish && kept.GetBoolean(Key("spellingOpenMark", language), kept.GetBoolean(KeyPlusPreferences.SpellingOpenMarkKey, false)),
             PunctuationModel.For(language) is not null && kept.GetBoolean(Key("spellingPunctuation", language), false),
             kept.GetBoolean(Key("spellingContext", language), false) ? ContextModelIn(context, language) : null,
-            kept.GetBoolean(Key("spellingSuggestions", language), true));
+            kept.GetBoolean(Key("spellingSuggestions", language), true),
+            SystemSpellingIn(context, language));
     }
 
     /// <summary>A language's context model chosen in its list, kept while the model is off too, so it is the one turned on again; none until one is chosen.</summary>
     public static string? ContextModelIn(Context context, string language) =>
         KeyPlusPreferences.Global(context).GetString(Key("spellingContextModel", language), "") is { Length: > 0 } name ? name : null;
 
+    /// <summary>What corrects a language, one of three (the owner, 2026-11-14): Android's own spell checker, the first and the one until another is chosen; its context model; or the keyboard's own words (Correct words, with its accents and marks).</summary>
+    public enum Corrector
+    {
+        System,
+        Context,
+        Words,
+    }
+
+    /// <summary>
+    /// What corrects a language, as chosen on its page; until one is chosen
+    /// there, what its Spelling had on before the choice was made (its
+    /// context model, else its Correct words), and with neither, Android's
+    /// own spell checker.
+    /// </summary>
+    public static Corrector CorrectsWith(Context context, string language)
+    {
+        var kept = KeyPlusPreferences.Global(context);
+        return kept.GetString(Key("spellingBy", language), null) is { } chosen && Enum.TryParse<Corrector>(chosen, out var by) ? by
+            : kept.GetBoolean(Key("spellingSystem", language), false) ? Corrector.System
+            : kept.GetBoolean(Key("spellingContext", language), false) ? Corrector.Context
+            : kept.GetBoolean(Key("spellingWords", language), false) ? Corrector.Words
+            : Corrector.System;
+    }
+
+    /// <summary>What corrects a language kept as chosen: the context model's switch goes with it, on for the model (where one is chosen in its list) and off for the others, and Correct words on for the words.</summary>
+    public static void SetCorrectsWith(Context context, string language, Corrector by)
+    {
+        var edit = KeyPlusPreferences.Global(context).Edit()!.PutString(Key("spellingBy", language), by.ToString())!
+            .PutBoolean(Key("spellingContext", language), by == Corrector.Context && ContextModelIn(context, language) is not null)!;
+        if (by == Corrector.Words)
+        {
+            edit.PutBoolean(Key("spellingWords", language), true);
+        }
+
+        edit.Apply();
+    }
+
+    /// <summary>Whether Android's own spell checker corrects a language.</summary>
+    public static bool SystemSpellingIn(Context context, string language) => CorrectsWith(context, language) == Corrector.System;
+
     /// <summary>Whether a language's context model gives the words offered as a word is typed too (Use it for suggestions too); on until turned off, and turned on with the model.</summary>
-    /// <summary>Whether a language's Spelling command corrects with Android's own spell checker (the one chosen in the system's settings, Google's on the owner's devices) instead of the keyboard's own; off until turned on.</summary>
-    public static bool SystemSpellingIn(Context context, string language) =>
-        KeyPlusPreferences.Global(context).GetBoolean(Key("spellingSystem", language), false);
-
-    public static void SetSystemSpelling(Context context, string language, bool on) =>
-        KeyPlusPreferences.Global(context).Edit()!.PutBoolean(Key("spellingSystem", language), on)!.Apply();
-
     public static bool ContextSuggestsIn(Context context, string language) =>
         KeyPlusPreferences.Global(context).GetBoolean(Key("spellingContextSuggests", language), true);
 
@@ -83,6 +117,17 @@ public static class LanguageChoices
             SetContextModel(context, language, model);
         }
 
+        // The context model, or Correct words, turned on from its own switch: it is what corrects from now on.
+        var before = SpellingIn(context, language);
+        if (spelling.Context is not null && before.Context is null)
+        {
+            KeyPlusPreferences.Global(context).Edit()!.PutString(Key("spellingBy", language), nameof(Corrector.Context))!.Apply();
+        }
+        else if (spelling.Words && !before.Words && CorrectsWith(context, language) != Corrector.Context)
+        {
+            KeyPlusPreferences.Global(context).Edit()!.PutString(Key("spellingBy", language), nameof(Corrector.Words))!.Apply();
+        }
+
         KeyPlusPreferences.Global(context).Edit()!
             .PutBoolean(Key("spellingWords", language), spelling.Words)!
             .PutBoolean(Key("spellingAutocorrect", language), spelling.Autocorrect)!
@@ -100,15 +145,15 @@ public static class LanguageChoices
 
     public static void SetSpellingOn(Context context, bool on) => KeyPlusPreferences.Global(context).Edit()!.PutBoolean(SpellingOnKey, on)!.Apply();
 
-    /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off; with its context model on, that alone (<see cref="LanguageSpelling.ContextAlone"/>).</summary>
-    public static LanguageSpelling Applied(Context context, string language) => SpellingOn(context) ? SpellingIn(context, language).ContextAlone() : LanguageSpelling.Off;
+    /// <summary>A language's Spelling as the keyboard applies it: nothing with Spelling off; what corrects it alone, Android's spell checker or its context model (<see cref="LanguageSpelling.Alone"/>).</summary>
+    public static LanguageSpelling Applied(Context context, string language) => SpellingOn(context) ? SpellingIn(context, language).Alone() : LanguageSpelling.Off;
 
     /// <summary>Whether a language has something Spelling corrects with: its dictionary downloaded with Correct words on, the accent model with its accents on, its punctuation model with punctuation on, a context model on, or ¿ and ¡ on, which need nothing.</summary>
     public static bool CanCorrect(Context context, string language)
     {
         var spelling = SpellingIn(context, language);
         return (spelling.Words && SpellingDictionary.DownloadedFor(language)) || (spelling.Accents && AccentModel.Downloaded)
-            || (spelling.Punctuation && PunctuationModel.For(language)?.Downloaded == true) || spelling.Context is not null || spelling.OpenMark;
+            || (spelling.Punctuation && PunctuationModel.For(language)?.Downloaded == true) || spelling.Context is not null || spelling.OpenMark || spelling.System;
     }
 
     /// <summary>Glide typing on and off for every language at once, the user's: the model is one for all.</summary>

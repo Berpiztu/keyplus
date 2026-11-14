@@ -20,8 +20,27 @@ namespace Berpiztu.KeyPlus;
 /// Autocorrect beside it says whether a correction is written. Both off,
 /// nothing is offered nor written. Android's for now.
 /// </param>
-public sealed record LanguageSpelling(bool Words = false, bool Autocorrect = true, bool Accents = false, bool Wikipedia = false, bool OpenMark = false, bool Punctuation = false, string? Context = null, bool Suggestions = true)
+/// <param name="System">
+/// Whether Android's own spell checker corrects the language (the one
+/// chosen in the system's settings, Google's on the owner's devices): on,
+/// it alone does (<see cref="Alone"/>). Android's; Windows has none.
+/// </param>
+public sealed record LanguageSpelling(bool Words = false, bool Autocorrect = true, bool Accents = false, bool Wikipedia = false, bool OpenMark = false, bool Punctuation = false, string? Context = null, bool Suggestions = true, bool System = false)
 {
+    /// <summary>Whether what corrects the language reads whole sentences away from the keys' thread, a word as it ends and a sentence as it closes: its context model, or Android's own spell checker.</summary>
+    public bool ReadsSentences => Context is not null || System;
+
+    /// <summary>
+    /// What corrects the language, alone (the owner, 2026-11-14: one of the
+    /// three, Android's spell checker, the context model or the keyboard's
+    /// own words): Android's spell checker where it is chosen, every other
+    /// correction off as the keyboard applies them and kept as chosen; else
+    /// the context model's rule (<see cref="ContextAlone"/>).
+    /// </summary>
+    public LanguageSpelling Alone() => System
+        ? this with { Context = null, Words = false, Wikipedia = false, Accents = false, Punctuation = false, OpenMark = false }
+        : ContextAlone();
+
     /// <summary>
     /// The rule of a context model, the user's: on, it alone corrects the
     /// language, its words too, so what changed is its doing (the words

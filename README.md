@@ -228,6 +228,7 @@ a window that does.
 | [CardOutline.cs](CardOutline.cs) | The floating standard keyboard's outline while it is resized: a thin edge, thick corners |
 | [StandardKeyboard.cs](StandardKeyboard.cs) | The standard keyboard: drawn in the device's own colours, typed, held, swiped |
 | [SwipeTyping.cs](SwipeTyping.cs) | The keyboard's swipe typing: FUTO Swipe's encoder, downloaded with Glide typing, and each language's word list, with its Suggestions ([SwipeData.cs](SwipeData.cs)), loaded once, a swipe read as words, accents put back |
+| [AndroidSpelling.cs](AndroidSpelling.cs) | Android's own spell checker (the system's, Google's on most devices), asked for a text's misspellings and grammar errors with their suggestions: what corrects a language where it is chosen, and the Grammar command's |
 | [ContextCorrector.cs](ContextCorrector.cs) | A language's context model, made with Berpiztu/llm-create: the sentence read whole and written again mended, its encoder and decoder on ONNX Runtime, on Android and Windows |
 | [SwipeDecoder.java](SwipeDecoder.java) | FUTO Swipe's Java side over its native library ([native/futo-swipe](native/futo-swipe)), GPL-3.0 |
 | [SwipeTrail.cs](SwipeTrail.cs) | The line a swiping finger draws over the keys, thinning behind it |
@@ -272,7 +273,11 @@ a window that does.
   correction is written, and whether the toolbar offers anything (both off,
   nothing is written or offered); under them the language's **word list**,
   with its own Download (the words offered as you type, and glide typing's);
-  then its **Context model**.
+  then, on Android, **Corrects with**, one of three: **Android's spell
+  checker** (the one chosen in the system's settings, Google's), the first
+  and the one until another is chosen, the **Context model**, or **Correct
+  words**; the one chosen alone corrects, a word as a space ends it and a
+  sentence as it closes; then its **Context model**.
   **Correct words** (Spanish and English), off until turned on, when
   LibreOffice's dictionary of that language is downloaded once (Hunspell,
   0.9 MB Spanish, 0.55 MB English, checked by its SHA-256): a word typed

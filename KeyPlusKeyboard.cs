@@ -503,10 +503,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
             spokenCaseNow = said.Case;
 #if DEBUG
             // A Debug build alone: what was heard with a command in it, to learn how the recognizer writes them.
-            if (text != heardLogged && text.Contains("comand", StringComparison.OrdinalIgnoreCase))
+            // The last utterance alone, whole: a command whose keyword the recognizer lost has no "comando" to tell it by.
+            var last = text[(text.LastIndexOf(VoiceCommands.UtteranceBreak, StringComparison.Ordinal) + 1)..].Trim();
+            if (last != heardLogged)
             {
-                heardLogged = text;
-                Log.Write($"Voice typing (Debug build only): heard \"{text}\"");
+                heardLogged = last;
+                Log.Write($"Voice typing (Debug build only): heard \"{last}\"");
             }
 #endif
 
@@ -744,9 +746,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
         spokenLead = null;
     }
 
-    /// <summary>A sentence as the language's Spelling models write it, away from the keyboard's thread: its context model where it is on (one loaded for another language is not used), else the accent model; none where neither is there.</summary>
+    /// <summary>A sentence as what corrects the language writes it, away from the keyboard's thread: Android's own spell checker where it is the one chosen (its misspellings as its first suggestion), else its context model where it is on (one loaded for another language is not used), else the accent model; none where none of them is there.</summary>
     private async Task<string?> CorrectedSentence(StandardLanguage language, string sentence) =>
-        ContextModelOf(language.Code) is { } name
+        LanguageChoices.Applied(this, language.Code).System ? await CorrectedBySystem(language, sentence)
+        : ContextModelOf(language.Code) is { } name
             ? await context.Async() is { } corrector && corrector.Name == name ? await Task.Run(() => corrector.Correct(sentence)) : null
             : await spelling.Accents.Async() is { } model ? await Task.Run(() => model.Restore(sentence)) : null;
 
@@ -776,6 +779,19 @@ public sealed class KeyPlusKeyboard : InputMethodService
         understoodCount = said.Understood.Count;
         understoodSaid = said.Understood[^1];
         Notice(understoodSaid);
+    }
+
+    /// <summary>A sentence typed as Android's own spell checker corrects it, its misspellings as its first suggestion; none where it does not answer. With the detailed log on, how much it was asked about and how much it marked, never the text.</summary>
+    private async Task<string?> CorrectedBySystem(StandardLanguage language, string sentence)
+    {
+        if (await (systemSpelling ??= new(this, Log.Write)).Check(sentence, language.Locale) is not { } marked)
+        {
+            return null;
+        }
+
+        var (text, changed) = SystemSpelling.Corrected(sentence, marked);
+        Log.Detail($"Spelling: Android's spell checker asked about {sentence.Length} characters typed in {language.Code}: {marked.Count(place => place.Misspelled)} misspellings marked, {changed} with a word to write");
+        return text;
     }
 
     /// <summary>The Spelling command is reading a text: a second one waits for it.</summary>
@@ -906,7 +922,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         var language = KeyPlusPreferences.Language(this);
         var bySystem = LanguageChoices.SystemSpellingIn(this, language.Code);
-        var set = LanguageChoices.SpellingIn(this, language.Code).ContextAlone();
+        var set = LanguageChoices.SpellingIn(this, language.Code).Alone();
         Log.Write($"Voice typing: Spelling in {language.Code} as its language has it chosen: Android's spell checker {(bySystem ? "on" : "off")}, context model {set.Context ?? "off"}, Correct words {(set.Words ? "on" : "off")}, accents {(set.Accents ? "on" : "off")}");
         if (!bySystem && set.Context is null && !set.Words && !set.Accents)
         {
@@ -1445,8 +1461,10 @@ public sealed class KeyPlusKeyboard : InputMethodService
             // A language's context model reads its sentences where it is on, the accent model where its accents are:
             // never both, its settings let only one. A corrector loaded for another language is not used for this one.
             panel.CorrectSentence = CorrectedSentence;
+            // Android's own spell checker answers a moment later, never at once: Enter does not wait for it.
             panel.CorrectSentenceNow = (language, sentence) =>
-                ContextModelOf(language.Code) is { } name
+                LanguageChoices.Applied(this, language.Code).System ? null
+                : ContextModelOf(language.Code) is { } name
                     ? context.InUse() is { } corrector && corrector.Name == name ? corrector.Correct(sentence) : null
                     : spelling.Accents.InUse()?.Restore(sentence);
             panel.TextAfterCaret = () => CurrentInputConnection?.GetTextAfterCursor(1, 0)?.ToString();
