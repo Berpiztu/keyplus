@@ -41,9 +41,14 @@ public static class Elevation
         catch (Win32Exception refused)
         {
             // 1223: the user said no to Windows' question.
-            Log.Write(refused.NativeErrorCode == 1223
-                ? "Warning: the keyboard was not started as administrator: Windows' question was answered no"
-                : $"Warning: the keyboard could not be started as administrator: {refused.Message}");
+            if (refused.NativeErrorCode == 1223)
+            {
+                Log.Warning("The keyboard was not started as administrator: Windows' question was answered no");
+            }
+            else
+            {
+                Log.Warning("The keyboard could not be started as administrator", refused);
+            }
             return false;
         }
     }

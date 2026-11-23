@@ -151,7 +151,7 @@ public sealed class SwipeTyping
         }
         catch (Exception failure)
         {
-            Log.Write($"FUTO Swipe could not be loaded: {failure}");
+            Log.Error($"FUTO Swipe could not be loaded", failure);
             return false;
         }
     }
@@ -190,7 +190,7 @@ public sealed class SwipeTyping
         }
         catch (Exception failure)
         {
-            Log.Write($"FUTO Swipe's {language.Code} words could not be made: {failure}");
+            Log.Error($"FUTO Swipe's {language.Code} words could not be made", failure);
             return null;
         }
     }

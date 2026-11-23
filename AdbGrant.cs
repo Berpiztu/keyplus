@@ -113,10 +113,12 @@ public sealed class AdbGrant : Service
         }
         catch (TimeoutException)
         {
+            Log.Warning("Wireless debugging: the pairing code did not come in time");
             Finish("The pairing code did not come in time. Try again.", done: false);
         }
         catch (Exception failure)
         {
+            Log.Error("Wireless debugging: the pairing failed", failure);
             Finish($"Pairing failed: {failure.Message}", done: false);
         }
     }

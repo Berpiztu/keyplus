@@ -125,7 +125,7 @@ public sealed class PunctuationModel : IDisposable
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or OnnxRuntimeException or ArgumentException)
         {
-            Log.Write($"Spelling: the {files.Language} punctuation model could not be loaded: {failure.Message}");
+            Log.Error($"Spelling: the {files.Language} punctuation model could not be loaded", failure);
             return null;
         }
     }

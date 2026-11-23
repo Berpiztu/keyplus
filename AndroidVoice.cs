@@ -92,7 +92,7 @@ public static class VoicePreferences
             }
             catch (Java.Lang.SecurityException refused)
             {
-                Log.Write($"Voice typing: the device does not let {stream} be silenced: {refused.Message}");
+                Log.Warning($"Voice typing: the device does not let {stream} be silenced", refused);
             }
         }
 
@@ -127,7 +127,7 @@ public static class VoicePreferences
             }
             catch (Exception refused) when (refused is Java.Lang.SecurityException or FormatException)
             {
-                Log.Write($"Voice typing: a sound silenced could not be given back: {refused.Message}");
+                Log.Warning($"Voice typing: a sound silenced could not be given back", refused);
             }
         }
 
@@ -171,7 +171,7 @@ public static class VoicePreferences
         }
         catch (Exception unreadable) when (unreadable is GeneralSecurityException or FormatException)
         {
-            Log.Write($"The voice password could not be read: {unreadable.Message}");
+            Log.Warning($"The voice password could not be read", unreadable);
             return "";
         }
     }

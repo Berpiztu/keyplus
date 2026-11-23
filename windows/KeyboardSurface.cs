@@ -1953,6 +1953,7 @@ public sealed class KeyboardSurface : FrameworkElement
 
         StopHolding();
         pressed = null;
+        using var step = Stall.Doing(now.Swiping ? "a swipe read" : $"the key {now.Key.Action}, the sentence {sentence?.Length.ToString() ?? "not known"} characters");
         if (now.Swiping)
         {
             ReadSwipe(now);
@@ -2221,7 +2222,13 @@ public sealed class KeyboardSurface : FrameworkElement
     /// <summary>Whether a sentence closed by its . ends in an address ("someone@example."), its accents then left as they are.</summary>
     private static bool EndsInAddress(string sentence)
     {
-        var closed = sentence.TrimEnd()[..^1];
+        // Nothing but spaces (a word ended where the keys' record of the sentence was empty): no address.
+        if (sentence.TrimEnd() is not { Length: > 0 } ended)
+        {
+            return false;
+        }
+
+        var closed = ended[..^1];
         return closed[(closed.LastIndexOfAny([' ', '\n', '\t']) + 1)..].IndexOfAny(['@', '.', '/', ':']) >= 0;
     }
 

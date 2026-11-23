@@ -185,7 +185,7 @@ public static class Keyboards
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"The keyboards saved could not be read: {unreadable.Message}");
+            Log.Warning($"The keyboards saved could not be read", unreadable);
             return [];
         }
     }

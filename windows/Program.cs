@@ -47,7 +47,8 @@ public static class Program
         Log.Detailed = KeyboardPreferences.Read().DetailedLog;
 
         // An error that ends the program written to the log first, for Windows' own report keeps no trace of it.
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"Ended by an error: {e.ExceptionObject}");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"Ended by an error: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) => Log.Error("An error no one waited for", e.Exception);
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
         if (settings)
         {
@@ -55,6 +56,8 @@ public static class Program
             return;
         }
 
+        // A key felt slow found in the log: the window's thread watched, at the priority of input.
+        Stall.Watch(answer => app.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, answer));
         UpdateCheck.Start();
         if (hidden)
         {
@@ -80,6 +83,7 @@ public static class Program
         }
         catch (AbandonedMutexException)
         {
+            Log.Warning("The keyboard before this one ended without letting go: it ended by an error or was stopped");
             return true;
         }
     }

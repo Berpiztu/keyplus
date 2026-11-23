@@ -543,7 +543,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             }
             catch (Exception failed) when (failed is Java.Lang.Exception or InvalidOperationException)
             {
-                Log.Write($"The windows could not be looked at: {failed.Message}");
+                Log.Warning($"The windows could not be looked at", failed);
                 seen = default;
             }
 
@@ -1230,7 +1230,7 @@ public sealed class KeyPlusService : AccessibilityService, Android.Content.IShar
             // The service's connection was being taken down as it came up
             // (turned off and on at once): no window now; the next windows
             // change, on the connection that stays, opens it.
-            Log.Write($"No window on display {displayId}: {refused.Message}");
+            Log.Warning($"No window on display {displayId}", refused);
             if (displayId != Display.DefaultDisplay)
             {
                 refusedDisplays[displayId] = SystemClock.ElapsedRealtime();

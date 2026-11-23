@@ -21,6 +21,12 @@ public static class KeyboardLooks
     /// <summary>The red of a ✕ that deletes (a word of the dictionary), on Android and Windows alike: Material's red 700.</summary>
     public const uint DeleteRed = 0xFFD32F2F;
 
+    /// <summary>The red of an error's lines in the log's viewer, on Android and Windows alike: Material's red 700.</summary>
+    public const uint LogErrorRed = 0xFFD32F2F;
+
+    /// <summary>The yellow of a warning's lines in the log's viewer, on Android and Windows alike: Material's amber 700, read on light and dark.</summary>
+    public const uint LogWarningYellow = 0xFFFFA000;
+
     /// <summary>Tema's choices, in their order.</summary>
     public static readonly KeyboardLook[] All = [KeyboardLook.System, KeyboardLook.Light, KeyboardLook.Dark, KeyboardLook.Custom];
 

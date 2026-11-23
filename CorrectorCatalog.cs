@@ -57,7 +57,7 @@ public static class CorrectorCatalog
         }
         catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            Log.Write($"Corrector: the correctors on Hugging Face could not be read: {failure.Message}");
+            Log.Warning($"Corrector: the correctors on Hugging Face could not be read", failure);
             return [];
         }
     }

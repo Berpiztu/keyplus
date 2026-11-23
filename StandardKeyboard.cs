@@ -1374,6 +1374,7 @@ public sealed class StandardKeyboard : View
         var swiping = now.Swiping;
         var longPressed = now.LongPressed;
         var repeated = now.Repeated;
+        using var step = Stall.Doing(swiping ? "a swipe read" : $"the key {now.Key.Action}");
         Forget();
         if (swiping)
         {

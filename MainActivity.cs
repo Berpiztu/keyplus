@@ -1253,7 +1253,7 @@ public sealed class MainActivity : Activity
         }
         catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or TaskCanceledException)
         {
-            Log.Write($"Downloads: {what.Named} could not be downloaded: {failure.Message}");
+            Log.Warning($"Downloads: {what.Named} could not be downloaded", failure);
             Told(Resource.String.spelling, Said(what.Failed, failure.Message));
         }
         finally
@@ -1317,7 +1317,7 @@ public sealed class MainActivity : Activity
         }
         catch (Exception failure) when (failure is IOException or System.Text.Json.JsonException or InvalidDataException or Java.Lang.Exception)
         {
-            Log.Write($"Dictionary: the file could not be read or written: {failure.Message}");
+            Log.Warning($"Dictionary: the file could not be read or written", failure);
             new AlertDialog.Builder(this)
                 .SetTitle(Resource.String.dictionary)!
                 .SetMessage(GetString(Resource.String.dictionary_file_failed, new Java.Lang.String(failure.Message)))!
@@ -1408,7 +1408,7 @@ public sealed class MainActivity : Activity
     /// </summary>
     private View LogViewer()
     {
-        var shown = new TextView(this) { Text = Log.Read(), Typeface = Android.Graphics.Typeface.Monospace };
+        var shown = new TextView(this) { TextFormatted = ColouredLog(), Typeface = Android.Graphics.Typeface.Monospace };
         shown.SetTextSize(Android.Util.ComplexUnitType.Sp, LogSp);
         shown.SetTextColor(settings!.Words);
         var across = new HorizontalScrollView(this);
@@ -1418,13 +1418,35 @@ public sealed class MainActivity : Activity
             LayoutParameters = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, (int)Math.Round(LogViewerDp * Resources!.DisplayMetrics!.Density)) { TopMargin = (int)Math.Round(8 * Resources.DisplayMetrics.Density) },
         };
         down.AddView(across);
-        down.Touch += (_, touched) =>
+
+        // The finger lands on the box across, which takes it, never on the box down, whose own listener was so never told:
+        // the page's list above it is kept from taking the drag there, and the box down still scrolls up and down.
+        across.Touch += (_, touched) =>
         {
             down.Parent?.RequestDisallowInterceptTouchEvent(true);
             touched.Handled = false;
         };
         down.Post(() => down.FullScroll(FocusSearchDirection.Down));
         return down;
+    }
+
+    /// <summary>The log as it is now, its errors in red and its warnings in yellow, as Windows' viewer shows them (<see cref="Log.Pieces"/>).</summary>
+    private static Android.Text.SpannableStringBuilder ColouredLog()
+    {
+        var coloured = new Android.Text.SpannableStringBuilder();
+        foreach (var (text, level) in Log.Pieces(Log.Read()))
+        {
+            var start = coloured.Length();
+            coloured.Append(text);
+            if (level != Log.Level.Event)
+            {
+                var colour = level == Log.Level.Error ? KeyboardLooks.LogErrorRed : KeyboardLooks.LogWarningYellow;
+                coloured.SetSpan(new Android.Text.Style.ForegroundColorSpan(new Android.Graphics.Color(unchecked((int)colour))),
+                    start, coloured.Length(), Android.Text.SpanTypes.ExclusiveExclusive);
+            }
+        }
+
+        return coloured;
     }
 
     /// <summary>A copy of the log written to the file chosen; what came of it told, a failure written to the log too.</summary>
@@ -1442,7 +1464,7 @@ public sealed class MainActivity : Activity
         }
         catch (Exception failure) when (failure is IOException or Java.Lang.Exception)
         {
-            Log.Write($"Troubleshooting: the copy of the log could not be written: {failure.Message}");
+            Log.Warning($"Troubleshooting: the copy of the log could not be written", failure);
             Told(Resource.String.troubleshooting, Said(Resource.String.troubleshooting_log_save_failed, failure.Message));
         }
     }
@@ -1587,7 +1609,7 @@ public sealed class MainActivity : Activity
         }
         catch (Exception failure)
         {
-            Log.Write($"Designs not {(exporting ? "exported" : "imported")}: {failure}");
+            Log.Error($"Designs not {(exporting ? "exported" : "imported")}", failure);
             Toast.MakeText(this, $"The designs could not be {(exporting ? "exported" : "imported")}: {failure.Message}", ToastLength.Long)!.Show();
         }
     }

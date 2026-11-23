@@ -193,7 +193,7 @@ public sealed record KeyboardPreferences(
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"The keyboard's preferences could not be read: {unreadable.Message}");
+            Log.Warning($"The keyboard's preferences could not be read", unreadable);
             return Default;
         }
     }

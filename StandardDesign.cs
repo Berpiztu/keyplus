@@ -40,7 +40,7 @@ public sealed class StandardDesign
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"A standard keyboard's design could not be read: {unreadable.Message}");
+            Log.Warning($"A standard keyboard's design could not be read", unreadable);
             return null;
         }
     }

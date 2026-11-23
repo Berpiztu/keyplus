@@ -7,8 +7,11 @@ namespace Berpiztu.KeyPlus;
 /// time: on Windows in %LOCALAPPDATA%\Berpiztu\Keyboard\keyboard.log, on
 /// Android in the app's own files (keyboard.log), each line also to logcat
 /// (tag KeyPlus); past a megabyte the log goes to keyboard.old.log and a new
-/// one starts. Always every warning and error and the main events
-/// (<see cref="Write"/>), never what is on the screen; what the keyboard
+/// one starts. Always the main events (<see cref="Write"/>), every warning
+/// (<see cref="Warning(string)"/>, the line marked WARN after the process) and every
+/// error (<see cref="Error(string, Exception)"/>, marked ERROR, with the exception's type, message
+/// and stack where there is one), which the viewers show in yellow and red
+/// (<see cref="LevelOf"/>), never what is on the screen; what the keyboard
 /// follows (the names of the windows, fields and menus focused, showing and
 /// hiding, moving out of the way, why Spelling did or did not correct) only
 /// with Troubleshooting's Detailed log on (<see cref="Detail"/>), for it
@@ -77,11 +80,106 @@ public static class Log
         }
     }
 
-    /// <summary>A warning, an error or a main event, always written; it never names what is on the screen.</summary>
-    public static void Write(string line)
+    /// <summary>The mark after the process of a warning's line.</summary>
+    public const string WarningMark = "WARN";
+
+    /// <summary>The mark after the process of an error's line.</summary>
+    public const string ErrorMark = "ERROR";
+
+    /// <summary>How much a line of the log weighs, for its colour in the viewers.</summary>
+    public enum Level
     {
+        Event,
+        Warning,
+        Error,
+    }
+
+    /// <summary>A main event, always written; it never names what is on the screen.</summary>
+    public static void Write(string line) => Put(Level.Event, line);
+
+    /// <summary>Something that went wrong and the keyboard goes on without (a file not read, a service not answering), always written.</summary>
+    public static void Warning(string line) => Put(Level.Warning, line);
+
+    /// <summary>Something that went wrong and should not have, always written.</summary>
+    public static void Error(string line) => Put(Level.Error, line);
+
+    /// <summary>A warning with the exception that caused it, its type and message (an expected failure: a file, the network).</summary>
+    public static void Warning(string line, Exception failure) => Put(Level.Warning, $"{line}: {failure.GetType().Name}: {failure.Message}");
+
+    /// <summary>An error with the exception that caused it whole, its stack included, to find where it went wrong.</summary>
+    public static void Error(string line, Exception failure) => Put(Level.Error, $"{line}: {failure}");
+
+    /// <summary>
+    /// A line's weight, as the viewers colour it: by its mark after the
+    /// process; a line with no time of its own (an exception's stack) weighs
+    /// what the line before it weighs (<paramref name="before"/>).
+    /// </summary>
+    public static Level LevelOf(string line, Level before)
+    {
+        if (line.Length < 24 || !char.IsDigit(line[0]) || line[4] != '-')
+        {
+            return line.Length == 0 ? Level.Event : before;
+        }
+
+        var process = line.IndexOf("] ", 24, StringComparison.Ordinal);
+        return process < 0 ? Level.Event
+            : string.CompareOrdinal(line, process + 2, ErrorMark + " ", 0, ErrorMark.Length + 1) == 0 ? Level.Error
+            : string.CompareOrdinal(line, process + 2, WarningMark + " ", 0, WarningMark.Length + 1) == 0 ? Level.Warning
+            : Level.Event;
+    }
+
+    /// <summary>
+    /// A log's text in pieces of one weight each, for a viewer to colour: the
+    /// lines of one weight that follow each other in one piece, each piece
+    /// ending with its line's end.
+    /// </summary>
+    public static IEnumerable<(string Text, Level Level)> Pieces(string text)
+    {
+        var level = Level.Event;
+        var start = 0;
+        var pieceLevel = Level.Event;
+        for (var at = 0; at < text.Length;)
+        {
+            var end = text.IndexOf('\n', at);
+            end = end < 0 ? text.Length : end + 1;
+            level = LevelOf(text[at..end].TrimEnd('\r', '\n'), level);
+            if (level != pieceLevel && at > start)
+            {
+                yield return (text[start..at], pieceLevel);
+                start = at;
+            }
+
+            pieceLevel = level;
+            at = end;
+        }
+
+        if (start < text.Length)
+        {
+            yield return (text[start..], pieceLevel);
+        }
+    }
+
+    private static void Put(Level level, string line)
+    {
+        var marked = level switch
+        {
+            Level.Error => $"{ErrorMark} {line}",
+            Level.Warning => $"{WarningMark} {line}",
+            _ => line,
+        };
 #if ANDROID
-        Android.Util.Log.Info("KeyPlus", line);
+        switch (level)
+        {
+            case Level.Error:
+                Android.Util.Log.Error("KeyPlus", line);
+                break;
+            case Level.Warning:
+                Android.Util.Log.Warn("KeyPlus", line);
+                break;
+            default:
+                Android.Util.Log.Info("KeyPlus", line);
+                break;
+        }
 #endif
         lock (Guard)
         {
@@ -93,7 +191,7 @@ public static class Log
                     System.IO.File.Move(File, Path.ChangeExtension(File, ".old.log"), overwrite: true);
                 }
 
-                System.IO.File.AppendAllText(File, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{Environment.ProcessId}] {line}{Environment.NewLine}");
+                System.IO.File.AppendAllText(File, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{Environment.ProcessId}] {marked}{Environment.NewLine}");
             }
             catch (IOException)
             {

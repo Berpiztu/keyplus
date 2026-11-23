@@ -121,7 +121,7 @@ public static class Keyboards
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"A file of keyboards could not be read: {unreadable.Message}");
+            Log.Warning($"A file of keyboards could not be read", unreadable);
             return (0, 0);
         }
 
@@ -149,7 +149,7 @@ public static class Keyboards
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"The keyboards saved could not be read: {unreadable.Message}");
+            Log.Warning($"The keyboards saved could not be read", unreadable);
             return [];
         }
     }

@@ -55,7 +55,7 @@ public sealed record VoiceSettings(string Microphone, bool AutoStop, double Sile
         }
         catch (Exception unreadable) when (unreadable is JsonException or CryptographicException or FormatException)
         {
-            Log.Write($"The voice settings could not be read: {unreadable.Message}");
+            Log.Warning($"The voice settings could not be read", unreadable);
             return Default;
         }
     }

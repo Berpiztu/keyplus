@@ -301,10 +301,14 @@ public sealed class KeyboardWindow : Window
         keys.InDocument = () => focus.Document;
         keys.KeyPressed += LogFieldSoon;
         spellingEngine = new SpellingEngine(personal, code => preferences.Applied(code), () => Wikipedia,
-            () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList)), Log.Write);
-        keys.Suggesting = (language, typed) => preferences.Applied(language.Code).Suggestions
-            ? personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered)
-            : [];
+            () => File.OpenRead(System.IO.Path.Combine(AppContext.BaseDirectory, CommonErrors.OwnList)), message => Log.Warning(message));
+        keys.Suggesting = (language, typed) =>
+        {
+            using var step = Stall.Doing($"the words offered for a word of {typed.Length} letters");
+            return preferences.Applied(language.Code).Suggestions
+                ? personal.WithAddresses(spellingEngine.Suggest(language, typed), typed, WordSuggestions.Offered)
+                : [];
+        };
         spellingEngine.FixesFound += (language, word) =>
         {
             if (keys.TypingWord == word)
@@ -317,6 +321,7 @@ public sealed class KeyboardWindow : Window
         // the space writes, as Gboard's and Android's; else the likeliest word it may have meant.
         keys.Fixing = (language, word) =>
         {
+            using var step = Stall.Doing($"a word of {word.Length} letters corrected");
             var fixes = spellingEngine.Fix(language, word);
             if (fixes is null || fixes.Words is [var only] && only.Equals(word, StringComparison.OrdinalIgnoreCase))
             {
@@ -342,6 +347,7 @@ public sealed class KeyboardWindow : Window
                 return false;
             }
 
+            using var step = Stall.Doing($"Enter: the sentence read in the field written again by the models, {sentence.Length} characters");
             var corrected = models.Correct(sentence, opens: true);
             return corrected == sentence || keys.ReplaceRead(sentence, corrected, readAt);
         };
@@ -385,10 +391,12 @@ public sealed class KeyboardWindow : Window
             var opens = false;
             if (models.Punctuation is not null)
             {
-                var reading = OpensSentence(sentence, byKeys);
-                opens = reading.Wait(FieldWait) ? reading.Result : byKeys;
+                using var reading = Stall.Doing("Enter: the field read for whether the sentence opens it");
+                var opening = OpensSentence(sentence, byKeys);
+                opens = opening.Wait(FieldWait) ? opening.Result : byKeys;
             }
 
+            using var step = Stall.Doing($"Enter: the sentence written again by the models, {sentence.Length} characters");
             return models.Correct(sentence, opens);
         };
         keys.SentenceClosed += async (sentence, byKeys) =>
@@ -473,7 +481,7 @@ public sealed class KeyboardWindow : Window
         glideButton = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_settings_gesture };
         mic = new SignButton(colors) { Width = BarDp, Height = BarDp, Size = SignDp, Sign = Resource.Drawable.ic_tool_mic, ToolTip = "ia-voice" };
         mic.Clicked += Listen;
-        voice = new VoiceTyping(microphone, Log.Write);
+        voice = new VoiceTyping(microphone, message => Log.Warning(message));
         voice.Level += Heard;
         voice.Partial += TypeHeard;
         voice.Silence += EndListening;
@@ -1113,7 +1121,7 @@ public sealed class KeyboardWindow : Window
             }
             catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or TaskCanceledException)
             {
-                Log.Write($"Downloads: {named} could not be downloaded from the toolbar: {failure.Message}");
+                Log.Warning($"Downloads: {named} could not be downloaded from the toolbar", failure);
                 ShowSuggestions([], null);
                 Notice(Texts.Get(failed, failure.Message));
             }
@@ -1731,7 +1739,7 @@ public sealed class KeyboardWindow : Window
             asking = false;
             if (!answers)
             {
-                Log.Write($"Voice typing: {settings.Choice} did not answer, so this computer's ia-voice listens");
+                Log.Warning($"Voice typing: {settings.Choice} did not answer, so this computer's ia-voice listens");
                 options = options with { Service = VoiceTyping.LocalService, User = "", Password = "" };
             }
         }
@@ -1749,7 +1757,7 @@ public sealed class KeyboardWindow : Window
         catch (Exception none)
         {
             Topmost = true;
-            Log.Write($"The microphone could not listen: {none.Message}");
+            Log.Warning($"The microphone could not listen", none);
             Notice(Texts.Get(Resource.String.voice_no_microphone));
             return;
         }
@@ -2139,7 +2147,7 @@ public sealed class KeyboardWindow : Window
 
         if (string.IsNullOrWhiteSpace(chosen))
         {
-            Log.Write("Voice typing: the selection could not be read, so Spelling corrected nothing");
+            Log.Warning("Voice typing: the selection could not be read, so Spelling corrected nothing");
             return own;
         }
 
@@ -2219,7 +2227,7 @@ public sealed class KeyboardWindow : Window
     {
         if (await focus.ReadField(SentenceReach) is not { Before: { Length: > 0 } before })
         {
-            Log.Write("Voice typing: the field could not be read, so no sentence was deleted");
+            Log.Warning("Voice typing: the field could not be read, so no sentence was deleted");
             return;
         }
 
@@ -2356,7 +2364,7 @@ public sealed class KeyboardWindow : Window
         }
         catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or JsonException)
         {
-            Log.Write($"ia-voice did not answer: {failure.Message}");
+            Log.Warning($"ia-voice did not answer", failure);
             Notice(Texts.Get(Resource.String.voice_unavailable));
         }
         finally
@@ -3171,7 +3179,7 @@ public sealed class KeyboardWindow : Window
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"The window's state could not be read: {unreadable.Message}");
+            Log.Warning($"The window's state could not be read", unreadable);
             return null;
         }
     }
@@ -3285,7 +3293,7 @@ public sealed class KeyboardWindow : Window
         }
         catch (ExternalException busy)
         {
-            Log.Write($"Selection's case: the clipboard could not be read: {busy.Message}");
+            Log.Warning($"Selection's case: the clipboard could not be read", busy);
             return null;
         }
     }
@@ -3298,7 +3306,7 @@ public sealed class KeyboardWindow : Window
         }
         catch (ExternalException busy)
         {
-            Log.Write($"Selection's case: the copy could not be read: {busy.Message}");
+            Log.Warning($"Selection's case: the copy could not be read", busy);
             return null;
         }
     }
@@ -3324,7 +3332,7 @@ public sealed class KeyboardWindow : Window
         }
         catch (ExternalException busy)
         {
-            Log.Write($"Selection's case: what the clipboard held could not be put back: {busy.Message}");
+            Log.Warning($"Selection's case: what the clipboard held could not be put back", busy);
         }
     }
 

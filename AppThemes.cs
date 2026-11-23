@@ -36,7 +36,7 @@ public static class AppThemes
         }
         catch (JsonException unreadable)
         {
-            Log.Write($"The applications' colours could not be read: {unreadable.Message}");
+            Log.Warning($"The applications' colours could not be read", unreadable);
             return [];
         }
     }
@@ -123,7 +123,7 @@ public static class AppThemes
         }
         catch (Exception unread) when (unread is PackageManager.NameNotFoundException or Java.Lang.SecurityException or Android.Content.Res.Resources.NotFoundException)
         {
-            Log.Write($"The theme of {app} could not be read: {unread.Message}");
+            Log.Warning($"The theme of {app} could not be read", unread);
             return null;
         }
     }

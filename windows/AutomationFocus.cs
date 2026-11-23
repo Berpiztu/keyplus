@@ -71,7 +71,7 @@ internal sealed class AutomationFocus : IDisposable
         }
         catch (Exception refused) when (refused is COMException or InvalidCastException or TypeLoadException)
         {
-            Log.Write($"Focus: UI Automation's focus could not be followed, so WinUI apps' fields are not seen: {refused.Message}");
+            Log.Warning($"Focus: UI Automation's focus could not be followed, so WinUI apps' fields are not seen", refused);
             return null;
         }
     }
@@ -193,7 +193,7 @@ internal sealed class AutomationFocus : IDisposable
             catch (Exception failed)
             {
                 // UI Automation's call: nothing thrown may go back to it.
-                Log.Write($"Focus: a UI Automation focus could not be followed: {failed}");
+                Log.Warning($"Focus: a UI Automation focus could not be followed", failed);
             }
         }
     }

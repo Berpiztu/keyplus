@@ -72,7 +72,7 @@ public static class AndroidUpdates
         }
         catch (Exception failed) when (Failed(failed))
         {
-            Log.Write($"Updates: {failed.Message}");
+            Log.Warning($"Updates", failed);
         }
         finally
         {
@@ -91,7 +91,7 @@ public static class AndroidUpdates
         }
         catch (Exception failed) when (Failed(failed))
         {
-            Log.Write($"Updates: {failed.Message}");
+            Log.Warning($"Updates", failed);
             return null;
         }
     }
@@ -132,7 +132,7 @@ public static class AndroidUpdates
         }
         catch (Exception failed) when (Failed(failed))
         {
-            Log.Write($"Updates: {failed.Message}");
+            Log.Warning($"Updates", failed);
             if (asked)
             {
                 Tell(activity, Say(activity, Resource.String.update_failed, failed.Message));
@@ -159,7 +159,7 @@ public static class AndroidUpdates
         else if (status != PackageInstallStatus.Success)
         {
             var message = intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? status.ToString();
-            Log.Write($"Updates: the install failed: {message}");
+            Log.Warning($"Updates: the install failed: {message}");
             Tell(activity, Say(activity, Resource.String.update_failed, message));
         }
     }
@@ -189,7 +189,7 @@ public static class AndroidUpdates
         }
         catch (Exception failed) when (Failed(failed) || failed is Java.Lang.Exception)
         {
-            Log.Write($"Updates: {failed.Message}");
+            Log.Warning($"Updates", failed);
             Tell(activity, Say(activity, Resource.String.update_failed, failed.Message));
         }
     }
@@ -204,7 +204,7 @@ public static class AndroidUpdates
         }
         catch (ActivityNotFoundException failed)
         {
-            Log.Write($"Updates: {failed.Message}");
+            Log.Warning($"Updates", failed);
             Tell(activity, Say(activity, Resource.String.update_failed, failed.Message ?? failed.GetType().Name));
         }
     }

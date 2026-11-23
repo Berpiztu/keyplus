@@ -295,9 +295,10 @@ public sealed class PersonalWords(string path)
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, JsonSerializer.Serialize(file));
         }
-        catch (IOException)
+        catch (IOException busy)
         {
             // Busy for a moment (the other side writing): the change stays in memory and goes with the next one.
+            Log.Warning("Dictionary: the words could not be written now, they go with the next change", busy);
         }
 
         kept = file;
@@ -311,6 +312,7 @@ public sealed class PersonalWords(string path)
         }
         catch (Exception unreadable) when (unreadable is JsonException or IOException)
         {
+            Log.Warning("Dictionary: the words could not be read, those read last are kept", unreadable);
             return kept;
         }
     }

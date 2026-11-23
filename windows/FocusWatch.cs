@@ -244,7 +244,7 @@ public sealed class FocusWatch : IDisposable
         }
         catch (Exception failed)
         {
-            Log.Write($"Focus: a UI Automation focus could not be followed: {failed}");
+            Log.Warning($"Focus: a UI Automation focus could not be followed", failed);
         }
     }
 
@@ -259,7 +259,7 @@ public sealed class FocusWatch : IDisposable
         }
         catch (Exception failed)
         {
-            Log.Write($"Focus: event 0x{kind:X4} in window 0x{window:X} could not be followed: {failed}");
+            Log.Warning($"Focus: event 0x{kind:X4} in window 0x{window:X} could not be followed", failed);
         }
     }
 

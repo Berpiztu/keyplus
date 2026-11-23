@@ -148,7 +148,7 @@ public sealed class SwipeEngine
         }
         catch (Exception failure)
         {
-            Log.Write($"FUTO Swipe could not be loaded: {failure}");
+            Log.Error($"FUTO Swipe could not be loaded", failure);
             return false;
         }
     }

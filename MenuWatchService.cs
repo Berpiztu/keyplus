@@ -94,7 +94,7 @@ public sealed class MenuWatchService : AccessibilityService
     {
         public void OnSuccess(ScreenshotResult screenshot) => taken(screenshot);
 
-        public void OnFailure(int errorCode) => Log.Write($"Screenshot refused: {errorCode}");
+        public void OnFailure(int errorCode) => Log.Warning($"Screenshot refused: {errorCode}");
     }
 #endif
 

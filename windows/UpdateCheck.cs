@@ -21,7 +21,7 @@ public sealed record UpdateSettings(bool Automatic = true, DateTime? Checked = n
         }
         catch (Exception unreadable) when (unreadable is JsonException or IOException)
         {
-            Log.Write($"Updates: updates.json could not be read: {unreadable.Message}");
+            Log.Warning($"Updates: updates.json could not be read", unreadable);
             return new();
         }
     }
@@ -104,7 +104,7 @@ public static class UpdateCheck
             or KeyNotFoundException or InvalidOperationException or FormatException or System.ComponentModel.Win32Exception)
         {
             // A check by itself that fails (no network) is only written down; one asked for, or a yes, is told.
-            Log.Write($"Updates: {failed.Message}");
+            Log.Warning($"Updates", failed);
             if (!asked && !answered)
             {
                 return;

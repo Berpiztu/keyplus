@@ -90,7 +90,7 @@ public sealed class CommonErrors
         // Whatever the platform's failure (Android's assets throw Java's), a list not read leaves the others in use.
         catch (Exception failure)
         {
-            Log.Write($"Spelling: a list of common misspellings could not be read: {failure.Message}");
+            Log.Warning($"Spelling: a list of common misspellings could not be read", failure);
         }
     }
 

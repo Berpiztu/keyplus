@@ -4963,7 +4963,7 @@ public sealed class KeyPanel
         }
         catch (Exception failure)
         {
-            Log.Write($"The swipe could not be read: {failure}");
+            Log.Error($"The swipe could not be read", failure);
         }
     }
 
@@ -5094,6 +5094,7 @@ public sealed class KeyPanel
     /// </summary>
     public void OfferWords()
     {
+        using var step = Stall.Doing("the words offered");
         var word = swipedText is null && Suggesting is not null && standard is not null ? WordBeforeCaret?.Invoke() ?? "" : "";
 
         // A piece of an address ("com" of someone@example.com) is no word: nothing offered for it, nor to learn.
@@ -5740,7 +5741,7 @@ public sealed class KeyPanel
             }
             catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or IOException or UnauthorizedAccessException or InvalidDataException or TaskCanceledException)
             {
-                Log.Write($"Downloads: {missing} could not be downloaded from the toolbar: {failure.Message}");
+                Log.Warning($"Downloads: {missing} could not be downloaded from the toolbar", failure);
                 said.Text = failed(failure);
             }
         });

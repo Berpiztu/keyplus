@@ -130,7 +130,7 @@ public sealed class AccentModel : IDisposable
         }
         catch (Exception failure) when (failure is IOException or JsonException or InvalidDataException or OnnxRuntimeException)
         {
-            Log.Write($"Spelling: the accent model could not be loaded: {failure.Message}");
+            Log.Error($"Spelling: the accent model could not be loaded", failure);
             return null;
         }
     }

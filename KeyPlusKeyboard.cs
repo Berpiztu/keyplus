@@ -66,9 +66,25 @@ public sealed class KeyPlusKeyboard : InputMethodService
     /// <summary>Brings each new screenshot into the copied list, once the user lets the keyboard read the photos.</summary>
     private ScreenshotWatcher? screenshots;
 
+    /// <summary>Whether this process writes its errors and its slow moments to the log already: once, for the keyboard may be made again.</summary>
+    private static bool logWatching;
+
     public override void OnCreate()
     {
         base.OnCreate();
+        if (!logWatching)
+        {
+            logWatching = true;
+
+            // An error that ends the keyboard written to the log first, for Android's own report is gone in minutes.
+            AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Log.Error("Ended by an error", e.Exception);
+            AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Error($"Ended by an error: {e.ExceptionObject}");
+            TaskScheduler.UnobservedTaskException += (_, e) => Log.Error("An error no one waited for", e.Exception);
+
+            // A key felt slow found in the log: the main thread watched.
+            var main = new Android.OS.Handler(Android.OS.Looper.MainLooper!);
+            Stall.Watch(answer => main.Post(answer));
+        }
 
         // Sounds a dictation silenced and a keyboard that ended before giving them back left so.
         VoicePreferences.GiveSoundsBack(this);
@@ -92,7 +108,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         swipeTyping = new SwipeTyping(this, language => personal.Words(language.Code));
         spelling = new SpellingEngine(personal, code => LanguageChoices.Applied(this, code),
             () => LanguageChoices.SpellingIn(this, StandardKeys.Spanish.Code).Wikipedia,
-            () => Assets!.Open(CommonErrors.OwnList), message => Log.Write(message));
+            () => Assets!.Open(CommonErrors.OwnList), message => Log.Warning(message));
         spelling.FixesFound += (_, _) => panel?.OfferWords();
         context = new(() => ContextModelOf(contextLanguage),
             () => ContextModelOf(contextLanguage) is { } name
@@ -458,7 +474,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             asking = false;
             if (!answers)
             {
-                Log.Write($"Voice typing: {VoicePreferences.Choice(this)} did not answer, so Android's recognizer listens");
+                Log.Warning($"Voice typing: {VoicePreferences.Choice(this)} did not answer, so Android's recognizer listens");
                 Notice(Resource.String.voice_fallback_local);
                 local = true;
             }
@@ -481,7 +497,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         else
         {
-            made = new VoiceTyping(new AndroidMicrophone(this), Log.Write);
+            made = new VoiceTyping(new AndroidMicrophone(this), message => Log.Warning(message));
             options = VoicePreferences.Options(this, locale);
         }
 
@@ -547,7 +563,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         catch (Exception none) when (none is InvalidOperationException or Java.Lang.Exception)
         {
-            Log.Write($"The microphone could not listen: {none.Message}");
+            Log.Warning($"The microphone could not listen", none);
             Notice(Resource.String.voice_no_microphone);
             made.Dispose();
             return;
@@ -860,7 +876,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
 
         if (field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
         {
-            Log.Write($"Voice typing: the field's text could not be read, so {command} did nothing");
+            Log.Warning($"Voice typing: the field's text could not be read, so {command} did nothing");
             return null;
         }
 
@@ -1086,7 +1102,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         AfreshForCommand();
         if (field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
         {
-            Log.Write("Voice typing: the field's text could not be read, so the caret was not moved");
+            Log.Warning("Voice typing: the field's text could not be read, so the caret was not moved");
             return;
         }
 
@@ -1110,7 +1126,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         AfreshForCommand();
         if (field.GetExtractedText(new Android.Views.InputMethods.ExtractedTextRequest(), 0) is not { Text: { } held } extracted)
         {
-            Log.Write("Voice typing: the field's text could not be read, so nothing was selected");
+            Log.Warning("Voice typing: the field's text could not be read, so nothing was selected");
             return;
         }
 
@@ -1204,7 +1220,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         }
         catch (Exception failure) when (failure is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
-            Log.Write($"ia-voice did not answer: {failure.Message}");
+            Log.Warning($"ia-voice did not answer", failure);
             CurrentInputConnection?.FinishComposingText();
             Notice(Resource.String.voice_unavailable);
         }
@@ -1288,7 +1304,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             }
             catch (Exception unreadable) when (unreadable is Java.Lang.SecurityException or Java.IO.IOException or IOException)
             {
-                Log.Write($"The image copied could not be read: {unreadable.Message}");
+                Log.Warning($"The image copied could not be read", unreadable);
             }
 
             return;
@@ -1373,7 +1389,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
         catch (Exception unreadable) when (unreadable is Java.Lang.SecurityException or Java.IO.IOException or IOException)
         {
             // Still being written: read again the next time the keyboard shows.
-            Log.Write($"Clipboard: the photo the editor saved ({id}) could not be read yet: {unreadable.Message}");
+            Log.Warning($"Clipboard: the photo the editor saved ({id}) could not be read yet", unreadable);
         }
     }
 
@@ -1463,10 +1479,13 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.CorrectSentence = CorrectedSentence;
             // Android's own spell checker answers a moment later, never at once: Enter does not wait for it.
             panel.CorrectSentenceNow = (language, sentence) =>
-                LanguageChoices.Applied(this, language.Code).System ? null
-                : ContextModelOf(language.Code) is { } name
-                    ? context.InUse() is { } corrector && corrector.Name == name ? corrector.Correct(sentence) : null
-                    : spelling.Accents.InUse()?.Restore(sentence);
+            {
+                using var step = Stall.Doing($"Enter: the sentence written again by its model, {sentence.Length} characters");
+                return LanguageChoices.Applied(this, language.Code).System ? null
+                    : ContextModelOf(language.Code) is { } name
+                        ? context.InUse() is { } corrector && corrector.Name == name ? corrector.Correct(sentence) : null
+                        : spelling.Accents.InUse()?.Restore(sentence);
+            };
             panel.TextAfterCaret = () => CurrentInputConnection?.GetTextAfterCursor(1, 0)?.ToString();
             panel.SelectionCase = TurnSelectionCase;
 
@@ -1491,8 +1510,12 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 panel!.GridTiles = GridTiles();
             };
             panel.VoiceTapped += Dictate;
-            panel.Suggesting = (language, typed) => accountField ? [.. Addresses(typed).Take(WordSuggestions.Offered)]
-                : WordsField ? personal.WithAddresses(spelling.Suggest(language, typed), typed, WordSuggestions.Offered) : [];
+            panel.Suggesting = (language, typed) =>
+            {
+                using var step = Stall.Doing($"the words offered for a word of {typed.Length} letters");
+                return accountField ? [.. Addresses(typed).Take(WordSuggestions.Offered)]
+                    : WordsField ? personal.WithAddresses(spelling.Suggest(language, typed), typed, WordSuggestions.Offered) : [];
+            };
             // While a word is typed, the words the language's context model offers for its sentence (llm-create taught
             // them), never mixed with the word list's nor filtered by it (WordSuggestions.OfModel); none where it has no
             // model on, or the field is not words'.
@@ -1532,6 +1555,7 @@ public sealed class KeyPlusKeyboard : InputMethodService
             panel.WordBeforeCaret = () =>
             {
                 // An account's field: the address being typed whole, up to the last space.
+                using var step = Stall.Doing("the field asked for the word before the caret");
                 var before = CurrentInputConnection?.GetTextBeforeCursor(accountField ? AddressReach : WordReach, 0)?.ToString() ?? "";
                 var start = before.Length;
                 while (start > 0 && (accountField ? !char.IsWhiteSpace(before[start - 1]) : char.IsLetter(before[start - 1])))
@@ -1542,7 +1566,11 @@ public sealed class KeyPlusKeyboard : InputMethodService
                 return before[start..];
             };
             panel.TextBeforeCaret = () => CurrentInputConnection?.GetTextBeforeCursorFormatted(1, 0)?.ToString();
-            panel.RecentText = () => CurrentInputConnection?.GetTextBeforeCursor(SentenceReach, 0)?.ToString();
+            panel.RecentText = () =>
+            {
+                using var step = Stall.Doing("the field asked for the sentence before the caret");
+                return CurrentInputConnection?.GetTextBeforeCursor(SentenceReach, 0)?.ToString();
+            };
             panel.ReplaceBeforeCaret = (length, text) =>
             {
                 if (CurrentInputConnection is not { } field)

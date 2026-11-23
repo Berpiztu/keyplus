@@ -632,7 +632,7 @@ public sealed class SettingsWindow : Window
             }
             catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
             {
-                Log.Write($"The keyboards could not be exported: {failure.Message}");
+                Log.Warning($"The keyboards could not be exported", failure);
                 MessageBox.Show(failure.Message, Texts.Get(Resource.String.export_designs), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         };
@@ -659,7 +659,7 @@ public sealed class SettingsWindow : Window
             }
             catch (Exception failure) when (failure is System.IO.IOException or UnauthorizedAccessException)
             {
-                Log.Write($"The keyboards could not be imported: {failure.Message}");
+                Log.Warning($"The keyboards could not be imported", failure);
                 MessageBox.Show(failure.Message, Texts.Get(Resource.String.import_designs), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         };
@@ -1332,7 +1332,7 @@ public sealed class SettingsWindow : Window
         }
         catch (Exception failure) when (failure is System.Net.Http.HttpRequestException or System.IO.IOException or UnauthorizedAccessException or System.IO.InvalidDataException or TaskCanceledException)
         {
-            Log.Write($"Spelling: {what.Named} could not be downloaded: {failure.Message}");
+            Log.Warning($"Spelling: {what.Named} could not be downloaded", failure);
             MessageBox.Show(Texts.Get(what.Failed, failure.Message), Texts.Get(Resource.String.spelling), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -1349,8 +1349,18 @@ public sealed class SettingsWindow : Window
     private const double WordLineDp = 24;
 
     /// <summary>The red of a word's ✕, the one that deletes it (<see cref="KeyboardLooks.DeleteRed"/>).</summary>
-    private static readonly SolidColorBrush DeleteRed = new(Color.FromArgb(
-        (byte)((KeyboardLooks.DeleteRed >> 24) & 0xFF), (byte)((KeyboardLooks.DeleteRed >> 16) & 0xFF), (byte)((KeyboardLooks.DeleteRed >> 8) & 0xFF), (byte)(KeyboardLooks.DeleteRed & 0xFF)));
+    private static readonly SolidColorBrush DeleteRed = BrushOf(KeyboardLooks.DeleteRed);
+
+    /// <summary>The red of an error's lines in the log's viewer (<see cref="KeyboardLooks.LogErrorRed"/>).</summary>
+    private static readonly SolidColorBrush LogErrorRed = BrushOf(KeyboardLooks.LogErrorRed);
+
+    /// <summary>The yellow of a warning's lines in the log's viewer (<see cref="KeyboardLooks.LogWarningYellow"/>).</summary>
+    private static readonly SolidColorBrush LogWarningYellow = BrushOf(KeyboardLooks.LogWarningYellow);
+
+    /// <summary>The log viewer's page as wide as a line can be, so no line is wrapped and the box scrolls across.</summary>
+    private const double LogPageWidth = 20000;
+
+    private static SolidColorBrush BrushOf(uint argb) => new(Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb));
 
     /// <summary>
     /// Dictionary (<see cref="PersonalWords"/>), what goes for every language:
@@ -1403,7 +1413,7 @@ public sealed class SettingsWindow : Window
     /// <summary>A dictionary's file that could not be read or written, or what it holds: told in a window and written to the log.</summary>
     private static void DictionaryFailed(Exception failure)
     {
-        Log.Write($"Dictionary: the file could not be read or written: {failure.Message}");
+        Log.Warning($"Dictionary: the file could not be read or written", failure);
         MessageBox.Show(Texts.Get(Resource.String.dictionary_file_failed, failure.Message), Texts.Get(Resource.String.dictionary), MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
@@ -1653,18 +1663,30 @@ public sealed class SettingsWindow : Window
         };
         form.Children.Add(Field(null, detailed, Resource.String.troubleshooting_detailed_log_summary));
 
-        // What the log keeps, word for word, in a box of one size: what would be sent is what is seen.
-        var viewer = new TextBox
+        // What the log keeps, word for word, in a box of one size: what would be sent is what is seen, its errors in red and
+        // its warnings in yellow (Log.Pieces). Its lines are never wrapped: the page as wide as a line can be.
+        var viewer = new RichTextBox
         {
             IsReadOnly = true,
             Height = LogViewerDp,
-            TextWrapping = TextWrapping.NoWrap,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         void ShowLog()
         {
-            viewer.Text = Log.Read();
+            var lines = new Paragraph { Margin = new Thickness(0) };
+            foreach (var (text, level) in Log.Pieces(Log.Read()))
+            {
+                var piece = new Run(text.Replace("\r\n", "\n"));
+                if (level != Log.Level.Event)
+                {
+                    piece.Foreground = level == Log.Level.Error ? LogErrorRed : LogWarningYellow;
+                }
+
+                lines.Inlines.Add(piece);
+            }
+
+            viewer.Document = new FlowDocument(lines) { PageWidth = LogPageWidth };
             viewer.ScrollToEnd();
         }
 

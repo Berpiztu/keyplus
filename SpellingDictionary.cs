@@ -81,7 +81,7 @@ public sealed class SpellingDictionary
         // Any failure of a file Hunspell cannot read leaves the keyboard without a dictionary, never ended.
         catch (Exception failure)
         {
-            Log.Write($"Spelling: the {language} dictionary could not be loaded: {failure.Message}");
+            Log.Error($"Spelling: the {language} dictionary could not be loaded", failure);
             return null;
         }
     }

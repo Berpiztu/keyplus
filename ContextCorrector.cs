@@ -72,7 +72,7 @@ public sealed class ContextCorrector : IDisposable
         }
         catch (Exception failure) when (failure is UnauthorizedAccessException or IOException)
         {
-            Log.Write($"Corrector: the correctors in {root} could not be read: {failure.Message}");
+            Log.Warning($"Corrector: the correctors in {root} could not be read", failure);
             return [];
         }
     }
@@ -86,7 +86,7 @@ public sealed class ContextCorrector : IDisposable
         var name = Path.GetFileName(folder);
         if (!Whole(folder))
         {
-            Log.Write($"Corrector: {name} is not whole in {folder}");
+            Log.Warning($"Corrector: {name} is not whole in {folder}");
             return null;
         }
 
@@ -116,7 +116,7 @@ public sealed class ContextCorrector : IDisposable
         // likes (IndexOutOfRangeException for a model without a start token), which took the keyboard down.
         catch (Exception failure)
         {
-            Log.Write($"Corrector: {name} could not be loaded: {failure.Message}");
+            Log.Error($"Corrector: {name} could not be loaded", failure);
             return null;
         }
     }

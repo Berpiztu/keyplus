@@ -24,7 +24,7 @@ public static class AppColors
         }
         catch (Exception unreadable) when (unreadable is JsonException or IOException)
         {
-            Log.Write($"The applications' colours could not be read: {unreadable.Message}");
+            Log.Warning($"The applications' colours could not be read", unreadable);
             return [];
         }
     }
